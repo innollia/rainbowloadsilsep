@@ -217,6 +217,7 @@
     fit();
     aiEnabled = !!args.ai_enabled; engineName = args.engine || '';
     fillChoices(args.choices);
+    account = args.account || null; showCredits();
     if (args.server_error && args.server_error !== lastServerError) say('error', args.server_error);
     lastServerError = args.server_error || '';
     const j = args.job;
@@ -231,7 +232,60 @@
     renderProgress();
     $('send').disabled = !aiEnabled;
   }
-  let aiEnabled = false, lastServerError = '', engineName = '', choicesKey = '';
+  let aiEnabled = false, lastServerError = '', engineName = '', choicesKey = '', account = null, welcomed = false;
+  const MODEL_COST = (id) => account?.prices.models[id] ?? 2;
+  // Most a request can cost: the first call, then one edit and one measurement per extra round.
+  const worstCost = () => {
+    if (!account) return 0;
+    const per = MODEL_COST($('modelPick').value) + (account.prices.efforts[$('effortPick').value] ?? 0);
+    return per * (1 + 2 * (db.autoRounds || 0) + (db.autoRounds ? 1 : 0));
+  };
+  function showCredits() {
+    $('creditBtn').hidden = !account;
+    if (!account) { $('costHint').textContent = ''; return; }
+    $('creditBtn').textContent = `크레딧 ${account.credits}`;
+    $('creditBtn').classList.toggle('low', account.credits < worstCost());
+    $('costHint').textContent = `최대 ${worstCost()} 크레딧`;
+    if (account.free && !welcomed) { welcomed = true; say('status', `무료 체험 크레딧 ${account.credits}개가 들어왔어. 쓴 만큼만 빠지고, 실패한 호출은 돌려줘.`); }
+    if ($('dialog').open && $('dialog').dataset.kind === 'credits') creditBody();
+  }
+  const KIND = { free: '무료 체험', buy: '충전', charge: '사용', refund: '돌려받음', reversal: '환불 취소' };
+  function creditBody() {
+    const box = $('dialog').querySelector('.creditBody'); if (!box) return;
+    box.textContent = '';
+    const big = document.createElement('p'); big.className = 'creditBig'; big.textContent = `${account.credits} 크레딧`;
+    const how = document.createElement('p'); how.className = 'note';
+    how.textContent = '요청 한 번에 AI를 1번 부르고, 자동 개선을 켜면 회차마다 고치기와 측정이 1번씩 더해져. 부른 만큼만 빠지고 실패한 호출은 돌려줘.';
+    const table = document.createElement('div'); table.className = 'creditTable';
+    for (const o of $('modelPick').options) table.append(Object.assign(document.createElement('span'), { textContent: o.textContent }), Object.assign(document.createElement('b'), { textContent: `${MODEL_COST(o.value)}` }));
+    table.append(Object.assign(document.createElement('span'), { textContent: '깊게 추론' }), Object.assign(document.createElement('b'), { textContent: `+${account.prices.efforts.high}` }));
+    const buy = document.createElement('div'); buy.className = 'creditBuy';
+    const text = document.createElement('p');
+    text.textContent = `Buy Me a Coffee에서 후원하면 1달러당 ${account.per_usd} 크레딧이 들어와. 메시지 칸에 아래 코드를 적거나, 이 계정 이메일(${account.email})로 결제해 줘.`;
+    const code = document.createElement('button'); code.className = 'ghost creditCode'; code.textContent = account.code; code.title = '복사';
+    code.onclick = () => navigator.clipboard?.writeText(account.code).then(() => { code.textContent = '복사했어'; setTimeout(() => (code.textContent = account.code), 1200); });
+    const go = document.createElement('a'); go.className = 'primaryLink'; go.href = account.buy_url; go.target = '_blank'; go.rel = 'noopener'; go.textContent = '충전하러 가기';
+    buy.append(text, code, go);
+    const list = document.createElement('div'); list.className = 'creditHistory';
+    const head = document.createElement('h3'); head.textContent = '내역';
+    list.append(head);
+    if (!account.history) list.append(Object.assign(document.createElement('p'), { className: 'note', textContent: '불러오는 중…' }));
+    else if (!account.history.length) list.append(Object.assign(document.createElement('p'), { className: 'note', textContent: '아직 없어.' }));
+    else for (const h of account.history.slice(0, 30)) {
+      const row = document.createElement('div'); row.className = 'lineItem';
+      row.append(Object.assign(document.createElement('span'), { className: 'grow', textContent: `${KIND[h.kind] || h.kind} · ${String(h.at).slice(0, 16).replace('T', ' ')}` }), Object.assign(document.createElement('b'), { textContent: `${h.amount > 0 ? '+' : ''}${h.amount}` }));
+      list.append(row);
+    }
+    const out = document.createElement('button'); out.className = 'ghost'; out.textContent = '로그아웃';
+    out.onclick = () => { $('dialog').close(); send('logout', {}); };
+    box.append(big, how, table, buy, list, out);
+  }
+  function creditDialog() {
+    openDialog('크레딧'); $('dialog').dataset.kind = 'credits';
+    const box = document.createElement('div'); box.className = 'creditBody'; $('dialog').append(box);
+    creditBody(); $('dialog').showModal();
+    send('account', {});
+  }
   function fillChoices(choices) {
     const key = JSON.stringify(choices || null);
     if (key === choicesKey) return;
@@ -457,7 +511,7 @@
   }
   function iconButton(name, label, fn) { const b = button('', fn); b.className = 'iconBtn'; iconLabel(b, name, label); return b; }
   function openDialog(title) {
-    dlg.textContent = '';
+    dlg.textContent = ''; dlg.dataset.kind = '';
     const x = iconButton('close', '닫기', () => dlg.close()); x.classList.add('ghost', 'dlgClose');
     dlg.append(x, heading('h2', title));
   }
@@ -635,6 +689,7 @@
   function submit() {
     const text = $('ask').value.trim(); const p = project();
     if (!text || !aiEnabled || job?.status === 'running') return;
+    if (account && account.credits < MODEL_COST($('modelPick').value) + (account.prices.efforts[$('effortPick').value] ?? 0)) { say('error', '크레딧이 모자라. 위쪽 크레딧 버튼에서 충전할 수 있어.'); creditDialog(); return; }
     const history = p.chat.filter((m) => ['user', 'reply', 'change', 'heard', 'measured'].includes(m.kind)).slice(-10)
       .map((m) => ({ role: m.kind === 'user' ? 'user' : 'assistant', text: m.detail ? m.text + ' ' + m.detail : m.text }));
     say('user', text); $('ask').value = '';
@@ -644,9 +699,10 @@
   $('ask').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); } };
   $('stopAi').onclick = () => send('cancel', {});
   $('play').onclick = () => (playing ? stop() : play());
-  $('modelPick').onchange = (e) => { db.model = e.target.value; touched(); };
-  $('effortPick').onchange = (e) => { db.effort = e.target.value; touched(); };
-  $('autoRounds').oninput = (e) => { db.autoRounds = +e.target.value; touched(); render(); };
+  $('modelPick').onchange = (e) => { db.model = e.target.value; touched(); showCredits(); };
+  $('effortPick').onchange = (e) => { db.effort = e.target.value; touched(); showCredits(); };
+  $('creditBtn').onclick = creditDialog;
+  $('autoRounds').oninput = (e) => { db.autoRounds = +e.target.value; touched(); render(); showCredits(); };
   $('projectBtn').onclick = projectDialog;
   $('settingsBtn').onclick = settingsDialog;
   $('codeBtn').onclick = () => toggleCode();

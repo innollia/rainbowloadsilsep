@@ -115,6 +115,9 @@ LISTEN_SCHEMA = {
 }
 
 
+from credits import LedgerError, call_cost  # noqa: E402
+
+
 class ModelError(Exception):
     """A model call failed. Never retried automatically: retries spend money."""
 
@@ -232,7 +235,9 @@ class Claude:
             if self.effort:
                 output["effort"] = self.effort
             response = self._sdk().messages.create(
-                model=self.model, max_tokens=16000, system=SYSTEM, thinking={"type": "adaptive"},
+                model=self.model, max_tokens=16000, thinking={"type": "adaptive"},
+                # The long system prompt is the same on every call, so later calls read it from cache.
+                system=[{"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}}],
                 output_config=output,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -550,8 +555,9 @@ class Stop(Exception):
 
 
 class Jobs:
-    def __init__(self, model=None, daily_limit: int = 200, feedback_timeout: int = FEEDBACK_TIMEOUT):
+    def __init__(self, model=None, daily_limit: int = 200, feedback_timeout: int = FEEDBACK_TIMEOUT, ledger=None):
         self.model = model
+        self.ledger = ledger
         self.daily_limit = daily_limit
         self.feedback_timeout = feedback_timeout
         self.jobs: dict[str, Job] = {}
@@ -571,6 +577,29 @@ class Jobs:
             if self.calls >= self.daily_limit:
                 raise Stop("limit", "오늘의 AI 호출 한도에 닿아 멈췄어.")
             self.calls += 1
+
+    def _ask(self, job: Job, call, *args):
+        """One model call. A signed-in user pays before it runs and gets it back if the model fails."""
+        email, ref, cost = job.request.get("account"), None, 0
+        if self.ledger and email:
+            cost = call_cost(job.request.get("model", ""), job.request.get("effort", ""))
+            ref = f"{job.id}:{job.view.get('calls', 0)}"
+            try:
+                ok, credits = self.ledger.charge(email, cost, ref)
+            except LedgerError as exc:
+                raise Stop("failed", str(exc)) from None
+            job.update(credits=credits, calls=job.view.get("calls", 0) + 1)
+            if not ok:
+                raise Stop("limit", "크레딧이 모자라 멈췄어. 위쪽 크레딧 버튼에서 충전할 수 있어.")
+        try:
+            return call(*args)
+        except ModelError:
+            if ref:
+                try:
+                    job.update(credits=self.ledger.refund(email, cost, ref))
+                except LedgerError:
+                    pass
+            raise
 
     def submit(self, owner: str, request: dict) -> str:
         if self.model is None:
@@ -660,7 +689,7 @@ class Jobs:
                 raise Stop("limit", f"코드 수정 호출 한도({max_edits}회)에 닿아 멈췄어.")
             self._spend(job)
             edits += 1
-            reply = model.edit(edit_prompt(state, instruction, error, req["target"], req.get("history", ()),
+            reply = self._ask(job, model.edit, edit_prompt(state, instruction, error, req["target"], req.get("history", ()),
                                                 goal=req["text"] if tried else "", tried=tried))
             if isinstance(reply, dict) and reply.get("intent") == "talk":
                 job.say("reply", str(reply.get("reply") or reply.get("summary") or "무슨 말인지 다시 알려 줘.")[:MAX_REPLY])
@@ -707,7 +736,7 @@ class Jobs:
                       + " Do not invent work to fill the rounds."
                       + " Put concrete fixes in next_instruction, following the measurement table in your instructions.")
             try:
-                verdict = model.listen(wav, prompt)
+                verdict = self._ask(job, model.listen, wav, prompt)
             except ModelError as exc:
                 raise Stop("failed", f"신호 검사만 완료, 분석 실패: {exc}") from None
             problems = [str(p)[:200] for p in verdict.get("problems", [])][:5]

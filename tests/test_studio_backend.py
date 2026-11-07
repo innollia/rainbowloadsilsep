@@ -381,3 +381,48 @@ def test_effort_reaches_claude():
     client = type("C", (), {"messages": Messages()})
     sb.Claude("k", "claude-opus-5-5", client, "high").edit("p")
     assert seen["model"] == "claude-opus-5-5" and seen["output_config"]["effort"] == "high"
+
+
+from credits import LocalLedger  # noqa: E402
+
+
+def _paid(fake, ledger, **kw):
+    jobs = sb.Jobs(fake, ledger=ledger)
+    req = sb.validate_request(request(**kw))
+    req["account"] = "a@example.com"
+    jobs.submit("o", req)
+    return drive(jobs)
+
+
+def test_each_call_is_charged_at_its_model_price():
+    ledger = LocalLedger()
+    snap = _paid(Fake(verdicts=[_round(90, problems=())]), ledger, auto=True, rounds=2, model="claude-opus-5-5", effort="high")
+    assert snap["status"] == "done" and snap["credits"] == 20 - 2 * 4 and ledger.account("a@example.com")["credits"] == 12
+
+
+def test_out_of_credits_stops_before_the_call():
+    ledger = LocalLedger(free=1)
+    fake = Fake()
+    snap = _paid(fake, ledger, model="claude-opus-5-5")
+    assert snap["status"] == "limit" and fake.edit_calls == 0
+
+
+def test_a_failed_call_costs_nothing():
+    ledger = LocalLedger()
+    fake = Fake(verdicts=[sb.ModelError("boom")])
+    snap = _paid(fake, ledger, auto=True, model="claude-sonnet-5-5")
+    assert snap["status"] == "failed"
+    assert ledger.account("a@example.com")["credits"] == 20 - 1
+    assert [h["kind"] for h in ledger.history("a@example.com")][:2] == ["refund", "charge"]
+
+
+def test_teacher_requests_are_not_charged():
+    ledger = LocalLedger()
+    jobs = sb.Jobs(Fake(), ledger=ledger)
+    jobs.submit("o", sb.validate_request(request()))
+    drive(jobs)
+    assert ledger.history("x@example.com") == []
+
+
+def test_browser_cannot_charge_someone_else():
+    assert "account" not in sb.validate_request(request(account="victim@example.com"))

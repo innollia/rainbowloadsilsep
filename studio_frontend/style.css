@@ -165,3 +165,15 @@ dialog input[type=text], dialog select { background:var(--raised); border:0; bor
 #shelfUse:not(:disabled) { background:var(--text); color:#111; }
 .shelfBar span { color:var(--text2); font-variant-numeric:tabular-nums; min-width:120px; text-align:right; }
 @media (prefers-reduced-motion:reduce) { .lp, .rackTrack { transition:none; animation:none; } .shelf { animation:none; } }
+#creditBtn { min-height:36px; padding:0 12px; font-size:.82rem; color:var(--text2); font-variant-numeric:tabular-nums; }
+#creditBtn.low { color:var(--warn); }
+#costHint { color:var(--text3); font-size:.75rem; }
+.creditBig { font-size:2rem; font-weight:600; margin:4px 0 8px; font-variant-numeric:tabular-nums; }
+.creditTable { display:grid; grid-template-columns:1fr auto; gap:4px 16px; margin:8px 0 16px; font-size:.9rem; color:var(--text2); }
+.creditBuy { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:12px; background:var(--raised); border-radius:14px; }
+.creditBuy p { flex:1 1 100%; margin:0 0 4px; font-size:.88rem; }
+.creditCode { font-family:ui-monospace,Consolas,monospace; letter-spacing:.06em; }
+.primaryLink { margin-left:auto; display:inline-flex; align-items:center; min-height:40px; padding:0 16px; border-radius:11px; background:var(--text); color:#111; text-decoration:none; font-weight:600; }
+.creditHistory { margin:16px 0; max-height:240px; overflow:auto; }
+.creditHistory .lineItem { display:flex; gap:8px; padding:6px 0; border-top:1px solid var(--divider); font-size:.85rem; }
+.creditHistory .grow { flex:1; color:var(--text2); }
