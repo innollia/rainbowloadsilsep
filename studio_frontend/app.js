@@ -392,7 +392,7 @@
     scale.value = db.scale || 100;
     scale.onchange = () => { db.scale = +scale.value; applyScale(); touched(); };
     dlg.append(row('글자 크기', scale));
-    dlg.append(row(aiEnabled ? `AI 연결됨 (${engineName})` : 'AI 연결 안 됨: 서버의 GEMINI_API_KEY와 STUDIO_PASSWORD를 확인해 줘.'));
+    dlg.append(row(aiEnabled ? `AI 연결됨 (${engineName})` : 'AI 연결 안 됨: 서버 설정을 확인해 줘.'));
     dlg.append(row('자동 개선 한도: 개선 3회, 재수정 2회, 호출 5회, 5분, 회당 최대 16초 듣기'));
     dlg.append(heading('h3', '고급 코드'));
     const pick = document.createElement('select'); pick.setAttribute('aria-label', '트랙 선택');
