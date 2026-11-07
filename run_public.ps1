@@ -16,5 +16,16 @@ Start-Process python -WindowStyle Hidden -WorkingDirectory $PSScriptRoot -Argume
 if ($ServerOnly) { return }
 $tunnel = (Get-Command cloudflared -ErrorAction SilentlyContinue).Source
 if (-not $tunnel) { $tunnel = "${env:ProgramFiles(x86)}\cloudflared\cloudflared.exe" }
-try { & $tunnel tunnel --config (Join-Path $HOME '.cloudflared\olmuse.yml') run olmuse }
+# cloudflared sometimes crashes; restart it (and the app if it died) instead of leaving olmuse.app down.
+$config = Join-Path $HOME '.cloudflared\olmuse.yml'
+try {
+  while ($true) {
+    if (-not (Get-NetTCPConnection -LocalPort 8501 -State Listen -ErrorAction SilentlyContinue)) {
+      Start-Process python -WindowStyle Hidden -WorkingDirectory $PSScriptRoot -ArgumentList '-m', 'streamlit', 'run', 'app.py', '--server.address', '127.0.0.1', '--server.port', '8501', '--server.headless', 'true'
+    }
+    & $tunnel tunnel --config $config run olmuse 2>&1 | Select-Object -Last 3
+    Write-Host "$(Get-Date -Format s) tunnel exited ($LASTEXITCODE), restarting in 5s"
+    Start-Sleep 5
+  }
+}
 finally { Stop-Server }
