@@ -157,3 +157,27 @@ def test_each_listener_gets_a_stable_order_of_their_own():
     first = [c["clip"] for c in listen_store.order_for("민지", task)]
     assert first == [c["clip"] for c in listen_store.order_for("민지", task)]
     assert any([c["clip"] for c in listen_store.order_for(name, task)] != first for name in ("준", "하나", "도윤"))
+
+
+def test_pairwise_queue_and_tally(tmp_path):
+    manifest = {"tasks": [{"id": "1", "genre": "하우스", "text": "t", "clips": [
+        {"clip": "a", "model": "M1", "file": "a.mp3"}, {"clip": "b", "model": "M2", "file": "b.mp3"},
+        {"clip": "c", "model": "M3", "file": "c.mp3"}, {"clip": "d", "model": "M2", "file": "d.mp3", "dup_of": "b"}]},
+        {"id": "2", "genre": "신스팝", "text": "t", "clips": [
+        {"clip": "e", "model": "M1", "file": "e.mp3"}, {"clip": "f", "model": "M2", "file": "f.mp3"},
+        {"clip": "g", "model": "M3", "file": "g.mp3"}, {"clip": "h", "model": "M1", "file": "h.mp3"}]}]}
+    queue = listen_store.pair_queue("민지", manifest)
+    assert queue == listen_store.pair_queue("민지", manifest)
+    firsts = [q for q in queue if not q["repeat"]]
+    assert len(firsts) == 3 + 6 and all("d" not in (q["left"], q["right"]) for q in queue)
+    repeats = [q for q in queue if q["repeat"]]
+    assert repeats and all({"task": r["task"], "left": r["right"], "right": r["left"], "repeat": 0} in firsts for r in repeats)
+    store = listen_store.Pairs(tmp_path / "p.sqlite")
+    for q in queue:
+        models = {c["clip"]: c["model"] for t in manifest["tasks"] for c in t["clips"]}
+        left_wins = models[q["left"]] == "M1" or (models[q["right"]] != "M1" and models[q["left"]] == "M2")
+        store.save("민지", q, "left" if left_wins else "right")
+    assert store.done("민지") == {(q["task"], q["left"], q["right"], q["repeat"]) for q in queue}
+    result = listen_store.tally_pairs(manifest, store.all())
+    assert [r["model"] for r in result["models"]] == ["M1", "M2", "M3"]
+    assert result["consistency"][0]["same"] == result["consistency"][0]["repeats"]

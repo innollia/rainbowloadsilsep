@@ -148,3 +148,92 @@ def tally(manifest: dict, votes: list[dict]) -> dict:
         if clip in dup_of and (voter, task, dup_of[clip]) in scores:
             consistency.append({"voter": voter, "task": task, "gap": abs(s - scores[(voter, task, dup_of[clip])])})
     return {"models": table, "consistency": consistency, "voters": len({k[0] for k in scores})}
+
+
+# ---------- pairwise listening (replaces 1-10 scores: listeners need no genre knowledge) ----------
+GENRE_HINT = {
+    "하우스": "클럽에서 나오는 춤곡. 쿵·쿵·쿵·쿵 일정한 킥 위에 신나는 리듬이 계속 반복돼요.",
+    "로파이 힙합": "공부할 때 틀어 두는 잔잔한 힙합. 느리고 살짝 뭉개진 따뜻한 소리.",
+    "신스팝": "80년대 전자 팝. 반짝이는 신시사이저와 따라 부르기 쉬운 멜로디.",
+    "편집(트랙 지정)": "이미 있던 곡에서 베이스만 더 그루비하게(몸이 들썩이게) 고친 결과예요.",
+}
+REPEAT_EVERY = 8  # every 8th pair repeats an earlier one with sides swapped, to see how consistent a listener is
+
+
+def pair_queue(voter: str, manifest: dict) -> list[dict]:
+    """All pairs of a task's clips (duplicates left out), in an order of the listener's own, tasks mixed."""
+    seed = int(hashlib.sha256(f"pairs|{voter}".encode()).hexdigest()[:12], 16)
+    rng = random.Random(seed)
+    base = []
+    for task in manifest["tasks"]:
+        clips = [c["clip"] for c in task["clips"] if not c.get("dup_of")]
+        for a, b in combinations(clips, 2):
+            left, right = (a, b) if rng.random() < 0.5 else (b, a)
+            base.append({"task": task["id"], "left": left, "right": right, "repeat": 0})
+    rng.shuffle(base)
+    out = []
+    for i, item in enumerate(base, 1):
+        out.append(item)
+        if i % REPEAT_EVERY == 0 and i > 4:
+            earlier = base[i - 5]
+            out.append({"task": earlier["task"], "left": earlier["right"], "right": earlier["left"], "repeat": 1})
+    return out
+
+
+class Pairs:
+    def __init__(self, path: Path = DB):
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        self.path = str(path)
+        with self._db() as db:
+            db.execute("CREATE TABLE IF NOT EXISTS pairs (voter TEXT NOT NULL, task TEXT NOT NULL, left_clip TEXT NOT NULL,"
+                       " right_clip TEXT NOT NULL, repeat INTEGER NOT NULL, winner TEXT NOT NULL, at REAL NOT NULL,"
+                       " PRIMARY KEY (voter, task, left_clip, right_clip, repeat))")
+
+    def _db(self):
+        return sqlite3.connect(self.path, timeout=10)
+
+    def save(self, voter: str, item: dict, winner: str):
+        voter = clean_name(voter)
+        if not voter or winner not in ("left", "right", "same"):
+            raise ValueError("name and a choice are required")
+        with self._db() as db:
+            db.execute("INSERT OR REPLACE INTO pairs VALUES (?, ?, ?, ?, ?, ?, ?)",
+                       (voter, item["task"], item["left"], item["right"], int(item["repeat"]), winner, time.time()))
+
+    def all(self) -> list[dict]:
+        with self._db() as db:
+            rows = db.execute("SELECT voter, task, left_clip, right_clip, repeat, winner FROM pairs").fetchall()
+        return [{"voter": v, "task": t, "left": a, "right": b, "repeat": r, "winner": w} for v, t, a, b, r, w in rows]
+
+    def done(self, voter: str) -> set:
+        return {(p["task"], p["left"], p["right"], p["repeat"]) for p in self.all() if p["voter"] == clean_name(voter)}
+
+
+def tally_pairs(manifest: dict, pairs: list[dict]) -> dict:
+    """Bradley-Terry strength per model from the first-time choices; repeats only measure consistency."""
+    clip_model = {c["clip"]: c["model"] for t in manifest["tasks"] for c in t["clips"]}
+    games, wins = [], {}
+    for p in pairs:
+        if p["repeat"] or p["left"] not in clip_model or p["right"] not in clip_model:
+            continue
+        a, b = clip_model[p["left"]], clip_model[p["right"]]
+        r = 1.0 if p["winner"] == "left" else 0.0 if p["winner"] == "right" else 0.5
+        games.append((a, b, r))
+        for m, s in ((a, r), (b, 1 - r)):
+            w = wins.setdefault(m, [0.0, 0])
+            w[0] += s
+            w[1] += 1
+    strength = bradley_terry(games)
+    models = sorted(({"model": m, "bt": strength.get(m), "win_rate": w / n, "n": n} for m, (w, n) in wins.items()),
+                    key=lambda r: -(r["bt"] or 0))
+    first = {(p["voter"], p["task"], p["left"], p["right"]): p["winner"] for p in pairs if not p["repeat"]}
+    flip = {"left": "right", "right": "left", "same": "same"}
+    agree, total = {}, {}
+    for p in pairs:
+        if p["repeat"]:
+            original = first.get((p["voter"], p["task"], p["right"], p["left"]))
+            if original:
+                total[p["voter"]] = total.get(p["voter"], 0) + 1
+                agree[p["voter"]] = agree.get(p["voter"], 0) + (flip[p["winner"]] == original)
+    consistency = [{"voter": v, "same": agree.get(v, 0), "repeats": n} for v, n in sorted(total.items())]
+    return {"models": models, "consistency": consistency, "voters": len({p["voter"] for p in pairs}), "choices": len(games)}
