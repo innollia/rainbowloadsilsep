@@ -157,7 +157,7 @@
         if (still) { el.removeAttribute('transform'); continue; }
         const cx = +(d.cx || 50), cy = +(d.cy || 50);
         const level = bands && d.band ? bands[+d.band] / 255 : 0;
-        const size = 1 + level * +(d.pulse || 0);
+        const size = 1 + level * +(d.pulse || 0) + (d.pulse ? Math.sin(cycles * Math.PI * 2) * 0.012 : 0);
         const shift = d.flow ? (cycles * +d.flow) % +d.period : 0;
         const turn = cycles * +(d.spin || 0);
         el.setAttribute('transform', `translate(${n(cx + shift)} ${cy}) rotate(${n(turn)}) scale(${n(size)}) translate(${-cx} ${-cy})`);

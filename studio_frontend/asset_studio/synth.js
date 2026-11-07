@@ -69,6 +69,16 @@
     });
     const mix = new Float32Array(length);
     for (const g of groups) for (let i = 0; i < length; i++) { g.data[i] *= level; mix[i] += g.data[i]; }
+    if (change.ceiling) {
+      for (let i = 0; i < length; i++) {
+        const v = Math.abs(mix[i]);
+        if (v > change.ceiling) { const g = change.ceiling / v; mix[i] *= g; for (const x of groups) x.data[i] *= g; }
+      }
+    }
+    if (change.dc) {
+      const mean = mix.reduce((sum, v) => sum + v, 0) / length;
+      for (let i = 0; i < length; i++) { mix[i] -= mean; groups[0].data[i] -= mean; }
+    }
     if (change.trim) {
       const from = Math.floor(change.trim[0] * RATE), to = length - Math.floor(change.trim[1] * RATE);
       for (const g of groups) g.data = g.data.slice(from, to);

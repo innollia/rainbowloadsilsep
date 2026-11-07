@@ -68,7 +68,7 @@
     { id: 'console', name: '콘솔', loud: [-26, -22] },
     { id: 'wide', name: '넓게', loud: [-26, -14] },
   ];
-  // Thresholds are user-editable. `applies` narrows a rule; `fix` marks what the tool can repair without AI.
+  // The AI's own checklist. Users never see or edit this; `applies` narrows a rule.
   const RULES = [
     { id: 'peak', name: '최대 소리', unit: 'dB', limit: -1, level: 'error', fix: true, read: (m) => m.peak, bad: (v, r) => v > r.limit, hint: 'true peak 상한' },
     { id: 'clip', name: '클리핑', unit: '개', limit: 0, level: 'error', fix: true, read: (m) => m.clips, bad: (v, r) => v > r.limit, hint: '찌그러진 샘플 수' },
