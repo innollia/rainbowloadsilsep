@@ -222,7 +222,7 @@
     job = j;
     if (j) {
       shownMsg[j.id] ??= 0;
-      for (const m of j.messages.slice(shownMsg[j.id])) say(m.kind, m.text);
+      for (const m of j.messages.slice(shownMsg[j.id])) say(m.kind, m.text, m.detail);
       shownMsg[j.id] = j.messages.length;
       const key = j.candidate && `${j.id}:${j.candidate.seq}`;
       if (key && key !== handledSeq && j.status === 'running') { handledSeq = key; handleCandidate(j); }
@@ -243,15 +243,20 @@
   /* ---------- rendering ---------- */
   let selected = null, autoMode = false;
 
-  function say(kind, text) {
+  function say(kind, text, detail) {
     const p = project();
-    p.chat.push({ kind, text, at: Date.now() });
+    p.chat.push({ kind, text, detail, at: Date.now() });
     if (p.chat.length > 500) p.chat.shift();
-    appendMsg({ kind, text }); touched();
+    appendMsg({ kind, text, detail }); touched();
   }
   function appendMsg(m) {
     const d = document.createElement('div');
-    d.className = 'msg ' + m.kind; d.textContent = m.text;
+    d.className = 'msg ' + m.kind;
+    if (m.detail) {
+      const box = document.createElement('details'), head = document.createElement('summary'), body = document.createElement('div');
+      head.textContent = m.text; body.textContent = m.detail;
+      box.append(head, body); d.append(box);
+    } else d.textContent = m.text;
     $('log').append(d); $('log').scrollTop = 1e9;
   }
   function seedOf(p) {
@@ -617,7 +622,7 @@
     const text = $('ask').value.trim(); const p = project();
     if (!text || !aiEnabled || job?.status === 'running') return;
     const history = p.chat.filter((m) => ['user', 'reply', 'change', 'heard', 'measured'].includes(m.kind)).slice(-10)
-      .map((m) => ({ role: m.kind === 'user' ? 'user' : 'assistant', text: m.text }));
+      .map((m) => ({ role: m.kind === 'user' ? 'user' : 'assistant', text: m.detail ? m.text + ' ' + m.detail : m.text }));
     say('user', text); $('ask').value = '';
     send('generate', { text, tracks: p.tracks, bpm: p.bpm, target: selected, auto: autoMode, base_version: p.versionId, history });
   }

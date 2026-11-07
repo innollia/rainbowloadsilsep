@@ -88,6 +88,8 @@ input[type=range] { accent-color:var(--text); height:32px; }
 .msg.signal, .msg.status { color:var(--text2); }
 .msg.heard, .msg.measured { color:var(--warn); }
 .msg.error { color:var(--err); }
+.msg summary { cursor:pointer; }
+.msg details div { margin-top:4px; color:var(--text2); font-size:.85rem; }
 #progress { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 16px; border-top:1px solid var(--divider); }
 #targetChip { margin:0 16px; color:var(--text2); }
 #askTools { display:flex; align-items:center; gap:8px; padding:8px 16px 0; min-width:0; }

@@ -461,9 +461,12 @@ class Job:
         with self.lock:
             self.view.update(fields)
 
-    def say(self, kind: str, text: str):
+    def say(self, kind: str, text: str, detail: str = ""):
         with self.lock:
-            self.view["messages"].append({"n": len(self.view["messages"]), "kind": kind, "text": text})
+            message = {"n": len(self.view["messages"]), "kind": kind, "text": text}
+            if detail:
+                message["detail"] = detail
+            self.view["messages"].append(message)
 
     def snapshot(self) -> dict:
         with self.lock:
@@ -632,8 +635,10 @@ class Jobs:
                 raise Stop("failed", f"신호 검사만 완료, 분석 실패: {exc}") from None
             problems = [str(p)[:200] for p in verdict.get("problems", [])][:5]
             hears = getattr(self.model, "hears", True)
+            label = "오디오 분석" if hears else "측정 분석"
             job.say("heard" if hears else "measured",
-                    f"{capture['span']} {'오디오 분석' if hears else '측정 분석'} (캡처 {capture['id']}): {str(verdict.get('heard', ''))[:300]}"
+                    f"{label}: {verdict.get('score', 0)}점, " + (f"문제 {len(problems)}개" if problems else "문제 없음"),
+                    f"{capture['span']} (캡처 {capture['id']}): {str(verdict.get('heard', ''))[:300]}"
                     + (" / 문제: " + "; ".join(problems) if problems else ""))
             if verdict.get("goal_met") and not report["silent"]:
                 job.update(status="done", stage="done")
