@@ -147,3 +147,7 @@ python -m pytest -q
 공식 문서:
 - Streamlit static file serving: https://docs.streamlit.io/develop/concepts/configuration/serving-static-files
 - Godot 4.5 Web export: https://docs.godotengine.org/en/4.5/tutorials/export/exporting_for_web.html
+
+## 내 PC에서 공개
+
+`run_public.ps1`은 `~/.all-tomorrow/key-pool.env`의 키와 `STUDIO_PASSWORD`로 서버를 띄우고 Cloudflare 임시 터널을 연다. 주소는 실행할 때마다 바뀌고, PC가 켜져 있고 이 터미널이 살아 있는 동안만 접속된다. 일일 호출 한도는 200회다.

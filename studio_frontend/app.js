@@ -476,7 +476,10 @@
   $('ask').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); } };
   $('stopAi').onclick = () => send('cancel', {});
   $('play').onclick = () => (playing ? stop() : play());
-  $('saveBtn').onclick = persist;
+  $('saveBtn').onclick = async () => { // autosave already ran, so the visible job is unapplied code and a fresh stamp
+    if (editorDirty) await applyCode();
+    if (persist()) $('saveState').textContent = `저장됨 · ${new Date().toLocaleTimeString('ko-KR')}`;
+  };
   $('autoBtn').onclick = () => { autoMode = !autoMode; render(); };
   $('projectBtn').onclick = projectDialog;
   $('settingsBtn').onclick = settingsDialog;
