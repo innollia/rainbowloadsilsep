@@ -73,6 +73,14 @@ def drive(jobs, owner="o", respond=None, timeout=10):
     raise AssertionError("job did not finish")
 
 
+def test_music_skill_reaches_system_and_its_absence_is_harmless(tmp_path, monkeypatch):
+    skill = sb.load_skill()
+    assert "## Mixing" in skill and sb.SYSTEM == f"{sb.BASE_SYSTEM}\n\n{skill}"
+    assert sb.with_skill(sb.BASE_SYSTEM, "") == sb.BASE_SYSTEM
+    monkeypatch.setattr(sb, "__file__", str(tmp_path / "studio_backend.py"))
+    assert sb.load_skill() == ""
+
+
 def test_named_track_change_leaves_others_identical():
     out = sb.merge_candidate({"tracks": request()["tracks"], "bpm": 120}, {"summary": "", "bpm": 120, "changes": [change()]}, None)
     assert out["tracks"][0]["code"] == TRACKS[0]["code"]

@@ -12,6 +12,30 @@
     { id: 'melody', name: '멜로디', role: 'melody', code: 'note("c4 eb4 g4 bb4 g4 eb4").s("triangle").gain(.3).delay(.3)' },
   ];
 
+  const ICONS = {
+    play: '<path d="M7 4.5v15l12-7.5z" fill="currentColor" stroke="none"/>',
+    stop: '<rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor" stroke="none"/>',
+    folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    code: '<path d="m8 8-4 4 4 4M16 8l4 4-4 4M14 5l-4 14"/>',
+    save: '<path d="M5 3h11l5 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M7 3v6h8V3M7 21v-7h10v7"/>',
+    auto: '<path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/>',
+    settings: '<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>',
+    sound: '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 9a4 4 0 0 1 0 6M19 6.5a8 8 0 0 1 0 11"/>',
+    muted: '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="m17 9.5 5 5M22 9.5l-5 5"/>',
+    restore: '<path d="M4 12a8 8 0 1 0 2.5-5.8L4 8.5"/><path d="M4 4v4.5h4.5"/>',
+    close: '<path d="M6 6l12 12M18 6 6 18"/>',
+    send: '<path d="M12 19V5M6 11l6-6 6 6"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    minus: '<path d="M5 12h14"/>',
+    download: '<path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>',
+    upload: '<path d="M12 20V9M7 13l5-5 5 5M5 4h14"/>',
+  };
+  const setIcon = (el, name) => { el.innerHTML = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`; };
+  const iconLabel = (el, name, label) => { setIcon(el, name); el.setAttribute('aria-label', label); el.title = label; };
+  document.querySelectorAll('[data-icon]').forEach((el) => setIcon(el, el.dataset.icon));
+  const NOTE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const noteName = (m) => NOTE[((Math.round(m) % 12) + 12) % 12] + (Math.floor(Math.round(m) / 12) - 1);
+
   /* ---------- pure model ---------- */
   const uid = () => Math.random().toString(36).slice(2, 10);
   const snapshot = (p) => ({ bpm: p.bpm, head: p.head || '', tracks: p.tracks.map((t) => ({ ...t })) });
@@ -241,10 +265,29 @@
     renderArt.seed = seed;
     $('art').innerHTML = albumArt.make(seed).svg;
   }
-  function renderPlay() {
-    $('play').textContent = playing ? '■' : '▶';
-    $('play').setAttribute('aria-label', playing ? '정지' : '재생');
+  function pickArt(p, seed) {
+    p.artHistory ||= [seedOf(p)];
+    p.artSeed = seed;
+    if (!p.artHistory.includes(seed)) p.artHistory.push(seed);
+    if (p.artHistory.length > 30) p.artHistory.shift();
+    touched(); render();
   }
+  function artDialog() {
+    const p = project(); openDialog('지난 그림');
+    const grid = document.createElement('div'); grid.className = 'artGrid';
+    const list = [...(p.artHistory || [seedOf(p)])].reverse();
+    list.forEach((seed, i) => {
+      const b = document.createElement('button');
+      b.innerHTML = `<svg viewBox="0 0 100 100" aria-hidden="true">${albumArt.make(seed).svg}</svg>`;
+      b.setAttribute('aria-label', `그림 ${list.length - i}`);
+      if (seed === seedOf(p)) b.setAttribute('aria-current', 'true');
+      b.style.animationDelay = `${Math.min(i, 24) * 35}ms`;
+      b.onclick = () => { pickArt(p, seed); dlg.close(); };
+      grid.append(b);
+    });
+    dlg.append(grid); dlg.showModal();
+  }
+  function renderPlay() { iconLabel($('play'), playing ? 'stop' : 'play', playing ? '정지' : '재생'); }
   function renderTracks(p) {
     const box = $('tracks'); box.textContent = '';
     for (const t of p.tracks) {
@@ -260,9 +303,8 @@
       pick.title = `${t.name} (${label})`;
       pick.setAttribute('aria-pressed', String(selected === t.id));
       pick.onclick = () => { selected = selected === t.id ? null : t.id; render(); };
-      mute.textContent = s.mute ? '켜기' : '끄기';
+      iconLabel(mute, s.mute ? 'muted' : 'sound', `${t.name} ${s.mute ? '켜기' : '끄기'}`);
       mute.setAttribute('aria-pressed', String(s.mute));
-      mute.setAttribute('aria-label', `${t.name} ${s.mute ? '음소거 해제' : '음소거'}`);
       mute.onclick = () => { p.mix[t.id] = { ...s, mute: !s.mute }; pushMix(); touched(); render(); };
       gain.value = s.gain; gain.setAttribute('aria-label', `${t.name} 음량`);
       gain.disabled = !!t.raw; mute.disabled = !!t.raw;
@@ -271,20 +313,29 @@
       row.dataset.track = t.id;
       box.append(row);
     }
+    const live = p.tracks.filter((t) => !t.raw), allOff = live.length > 0 && live.every((t) => mixOf(p, t.id).mute);
+    iconLabel($('allMute'), allOff ? 'muted' : 'sound', allOff ? '전체 켜기' : '전체 끄기');
+    $('allMute').setAttribute('aria-pressed', String(allOff));
+    $('allMute').disabled = !live.length;
   }
+  $('allMute').onclick = () => {
+    const p = project(), live = p.tracks.filter((t) => !t.raw), off = !live.every((t) => mixOf(p, t.id).mute);
+    for (const t of live) p.mix[t.id] = { ...mixOf(p, t.id), mute: off };
+    pushMix(); touched(); render();
+  };
   function render() {
     const p = project(); if (!p) return;
-    $('projectBtn').textContent = p.name + ' ▾';
-    $('songTitle').textContent = p.name; $('footTitle').textContent = p.name;
+    $('songTitle').textContent = p.name;
     const v = p.versions.find((x) => x.id === p.versionId);
-    $('songMeta').textContent = `${p.bpm} BPM · 마지막 변경: ${v ? v.summary : '-'}` + (samplesOk ? '' : ' · 샘플을 불러오지 못해 합성음만 나와');
+    $('songMeta').textContent = (v ? v.summary : '') + (samplesOk ? '' : ' · 샘플을 불러오지 못해 합성음만 나와');
     if (document.activeElement !== $('bpm')) $('bpm').value = p.bpm;
     renderArt(p); renderTracks(p); syncEditor();
     const t = selected && p.tracks.find((x) => x.id === selected);
     $('targetChip').hidden = !t; if (t) $('targetChip').textContent = `대상: ${t.name} (나머지는 잠김)`;
-    $('autoBtn').textContent = `자동 개선 ${autoMode ? 'ON · 최대 3회' : 'OFF'}`;
+    $('autoBtn').title = `자동 개선 ${autoMode ? '켜짐 · 최대 3회' : '꺼짐'}`;
     $('autoBtn').setAttribute('aria-pressed', String(autoMode));
-    $('ask').placeholder = aiEnabled ? '어떻게 바꿀까? 예: 드럼은 그대로 두고 베이스만 바꿔줘' : 'AI 연결 안 됨 · 재생과 믹서는 쓸 수 있어';
+    $('ask').placeholder = aiEnabled ? '바꿀 내용이나 궁금한 걸 말해 줘' : 'AI 연결 안 됨 · 재생과 믹서는 쓸 수 있어';
+    if (tab === 'score' && scoreShown !== p.versionId) showScore();
   }
   function renderChat() { $('log').textContent = ''; project().chat.forEach(appendMsg); }
 
@@ -311,15 +362,44 @@
     albumArt.move($('art'), cycles, bands, !playing || calm.matches);
     const phase = cycles - Math.floor(cycles);
     for (const row of $('tracks').children) {
-      const cv = row.querySelector('canvas'), x = cv.getContext('2d');
-      if (cv.width !== cv.clientWidth) cv.width = cv.clientWidth;
-      x.clearRect(0, 0, cv.width, cv.height);
-      x.fillStyle = getComputedStyle(row).getPropertyValue('--tc');
-      const h = cv.height - 12;
+      const cv = row.querySelector('canvas'); if (!cv) continue;
       const list = (trackEvents[row.dataset.track] || []).slice(0, 256);
-      for (const [b, e] of list) x.fillRect(b * cv.width, 6, Math.max(2, (e - b) * cv.width - 2), h);
-      if (playing) { x.fillStyle = '#F5F5F5'; x.fillRect(phase * cv.width, 0, 2, cv.height); }
+      const color = getComputedStyle(row).getPropertyValue('--tc');
+      drawTrack(cv, list, color, playing ? phase : null);
     }
+  }
+
+  // One cycle of a track: pitch sets height, drums get a labelled lane per sound, brightness is gain.
+  function drawTrack(cv, list, color, phase) {
+    const ratio = devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+    if (!W) return;
+    if (cv.width !== Math.round(W * ratio) || cv.height !== Math.round(H * ratio)) { cv.width = Math.round(W * ratio); cv.height = Math.round(H * ratio); }
+    const x = cv.getContext('2d');
+    x.setTransform(ratio, 0, 0, ratio, 0, 0);
+    x.clearRect(0, 0, W, H);
+    x.fillStyle = 'rgba(255,255,255,.1)';
+    for (let beat = 1; beat < 4; beat++) x.fillRect(beat / 4 * W, 0, 1, H);
+    const pitches = list.map((e) => e[2]).filter((n) => n != null);
+    const lanes = [...new Set(list.filter((e) => e[2] == null).map((e) => e[4]))];
+    const rows = (pitches.length ? 1 : 0) + lanes.length || 1;
+    const laneH = (H - 4) / rows, pitchTop = 2;
+    const low = pitches.length ? Math.min(...pitches) : 0, high = pitches.length ? Math.max(...pitches) : 0;
+    const range = Math.max(high - low, 12), base = low - (range - (high - low)) / 2;
+    x.font = '600 10px "Noto Sans KR",sans-serif'; x.textBaseline = 'middle';
+    for (const [b, e, pitch, gain, sound] of list) {
+      const left = b * W, width = Math.max(2, (e - b) * W - 1);
+      const lane = pitch == null ? lanes.indexOf(sound) + (pitches.length ? 1 : 0) : 0;
+      const h = pitch == null ? Math.max(4, laneH - 2) : Math.max(5, laneH / 6);
+      const y = pitch == null ? 2 + lane * laneH + (laneH - h) / 2 : pitchTop + (1 - (pitch - base) / range) * (laneH - h);
+      x.globalAlpha = 0.35 + 0.65 * Math.min(1, (typeof gain === 'number' ? gain : 1) / 0.6);
+      x.fillStyle = color;
+      x.fillRect(left, y, width, h);
+      x.globalAlpha = 1;
+      if (pitch != null && width > 26) { x.fillStyle = '#F5F5F5'; x.fillText(noteName(pitch), left + 3, Math.max(7, y - 6 < 2 ? y + h + 6 : y - 6)); }
+    }
+    x.fillStyle = '#C4C4C4';
+    lanes.forEach((name, i) => { if (rows > 1 || lanes.length) x.fillText(name, 3, 2 + (i + (pitches.length ? 1 : 0) + .5) * laneH); });
+    if (phase != null) { x.fillStyle = '#F5F5F5'; x.fillRect(phase * W, 0, 2, H); }
   }
 
   /* ---------- dialogs ---------- */
@@ -329,6 +409,17 @@
     const r = document.createElement('div'); r.className = 'row';
     const t = document.createElement('div'); t.className = 'grow'; t.textContent = text; r.append(t, ...actions); return r;
   }
+  function iconButton(name, label, fn) { const b = button('', fn); b.className = 'iconBtn'; iconLabel(b, name, label); return b; }
+  function openDialog(title) {
+    dlg.textContent = '';
+    const x = iconButton('close', '닫기', () => dlg.close()); x.classList.add('ghost', 'dlgClose');
+    dlg.append(x, heading('h2', title));
+  }
+  dlg.addEventListener('click', (e) => { // clicks on the backdrop land on the dialog itself, outside its box
+    if (e.target !== dlg) return;
+    const box = dlg.getBoundingClientRect();
+    if (e.clientX < box.left || e.clientX > box.right || e.clientY < box.top || e.clientY > box.bottom) dlg.close();
+  });
   function heading(tag, text) { const h = document.createElement(tag); h.textContent = text; return h; }
   function saveFile(name, text) {
     const a = document.createElement('a');
@@ -338,48 +429,46 @@
 
   // Plays a saved version without touching the project. Closing the dialog returns to what was playing.
   let audition = null;
-  function endAudition() { if (audition) audition.button.textContent = '듣기'; audition = null; }
+  function endAudition() { if (audition) iconLabel(audition.button, 'play', '듣기'); audition = null; }
   async function listenTo(v, b) {
-    if (audition?.id === v.id) { const back = audition.back; endAudition(); back ? await play() : stop(); return; }
+    if (audition?.id === v.id) { const back = audition.back; endAudition(); if (back) await play(); else { stop(); pushMix(); } return; }
     const back = audition ? audition.back : playing;
     endAudition();
     await engines.live.whenReady;
-    pushMix();
+    const p = project(); // an audition plays every track, whatever is muted in the mixer
+    postTo('live', { type: 'mix', mix: Object.fromEntries(v.tracks.map((t) => [t.id, mixOf(p, t.id).gain])) });
     const r = await ask('live', { type: 'apply', code: compose(v, true) }, 'applied', 8000);
-    if (!r.ok) { b.textContent = '재생 실패'; return; }
+    if (!r.ok) { b.title = '재생 실패: ' + r.error; b.style.color = 'var(--err)'; return; }
     if (!playing) startedAt = performance.now();
     playing = true; renderPlay();
-    b.textContent = '정지'; audition = { id: v.id, button: b, back };
+    iconLabel(b, 'stop', '정지'); audition = { id: v.id, button: b, back };
   }
   dlg.addEventListener('close', () => {
     if (!audition) return;
     const back = audition.back; audition = null;
-    if (back) play(); else stop();
+    if (back) play(); else { stop(); pushMix(); }
   });
 
   function projectDialog() {
-    const p = project(); dlg.textContent = '';
-    dlg.append(heading('h2', '프로젝트'));
+    const p = project(); openDialog('프로젝트');
     const name = document.createElement('input'); name.type = 'text'; name.value = p.name; name.setAttribute('aria-label', '곡 이름');
     name.oninput = () => { p.name = name.value.slice(0, 80) || '이름 없는 곡'; touched(); render(); };
     dlg.append(name);
-    dlg.append(row('앨범 아트', button('그림 다시 뽑기', () => { p.artSeed = Math.floor(Math.random() * 2 ** 32); touched(); render(); })));
-    for (const x of db.projects) if (x !== p) dlg.append(row(x.name, button('열기', () => switchTo(x.id))));
-    dlg.append(row('', button('새 곡 만들기', () => { const n = newProject('새 곡'); db.projects.push(n); switchTo(n.id); }),
-      button('파일 불러오기', importFile), button('프로젝트 내보내기', () => saveFile(`${p.name}.ddalkkak.json`, JSON.stringify(p)))));
+    for (const x of db.projects) if (x !== p) dlg.append(row(x.name, iconButton('folder', `${x.name} 열기`, () => switchTo(x.id))));
+    dlg.append(row('', iconButton('plus', '새 곡 만들기', () => { const n = newProject('새 곡'); db.projects.push(n); switchTo(n.id); }),
+      iconButton('upload', '파일 불러오기', importFile), iconButton('download', '프로젝트 내보내기', () => saveFile(`${p.name}.ddalkkak.json`, JSON.stringify(p)))));
     dlg.append(heading('h3', '이전 버전'));
     for (const v of [...p.versions].reverse().slice(0, 30)) {
-      const b = button('복구', async () => {
+      const b = iconButton('restore', '복구', async () => {
         endAudition();
         p.bpm = v.bpm; p.head = v.head || ''; p.tracks = v.tracks.map((t) => ({ ...t })); addVersion(p, `복구: ${v.summary}`, 'user');
         touched(); render(); dlg.close(); if (playing) await play();
       });
       if (v.id === p.versionId) b.disabled = true;
-      const hear = button('듣기', () => listenTo(v, hear));
+      const hear = iconButton('play', '듣기', () => listenTo(v, hear));
       hear.disabled = job?.status === 'running'; // auto-improve captures the live output
       dlg.append(row(`${new Date(v.at).toLocaleString('ko-KR')} · ${v.summary}`, hear, b));
     }
-    dlg.append(button('닫기', () => dlg.close()));
     dlg.showModal();
   }
   function importFile() {
@@ -402,8 +491,7 @@
     input.click();
   }
   function settingsDialog() {
-    const p = project(); dlg.textContent = '';
-    dlg.append(heading('h2', '설정'));
+    const p = project(); openDialog('설정');
     const scale = document.createElement('select'); scale.setAttribute('aria-label', '글자 크기');
     for (const v of [100, 125, 150, 200]) scale.add(new Option(v + '%', v));
     scale.value = db.scale || 100;
@@ -413,7 +501,7 @@
     dlg.append(row('자동 개선 한도: 개선 3회, 재수정 2회, 호출 5회, 5분, 회당 최대 16초 듣기'));
     dlg.append(row('코드는 상단의 코드 버튼에서 보고 고칠 수 있어.'));
     dlg.append(heading('h3', '기타'));
-    dlg.append(row('', button('게임하기', () => { stop(); persist(); dlg.close(); send('game', {}); }), button('닫기', () => dlg.close())));
+    dlg.append(row('', button('게임하기', () => { stop(); persist(); dlg.close(); send('game', {}); })));
     dlg.showModal();
   }
   /* ---------- code editor ---------- */
@@ -514,13 +602,51 @@
   $('codeExport').onclick = () => saveFile(`${project().name}.strudel.js`, songText(project()));
   $('codeImport').onclick = importFile;
   $('codeReload').onclick = fillEditor;
-  $('chatFold').onclick = () => { $('app').classList.add('folded'); $('chatOpen').hidden = false; };
-  $('chatOpen').onclick = () => { $('app').classList.remove('folded'); $('chatOpen').hidden = true; };
-  $('volume').oninput = () => engines.live && postTo('live', { type: 'volume', value: +$('volume').value });
-  $('bpm').onchange = async () => {
-    const p = project(), v = Math.min(400, Math.max(20, +$('bpm').value || p.bpm));
-    p.bpm = v; addVersion(p, `BPM ${v}`, 'user'); touched(); render(); if (playing) await play();
+  const art = $('art'); let artHold = 0, artHeld = false;
+  const newArt = () => pickArt(project(), Math.floor(Math.random() * 2 ** 32));
+  art.onpointerdown = () => { artHeld = false; artHold = setTimeout(() => { artHeld = true; artDialog(); }, 500); };
+  art.onpointerup = art.onpointerleave = art.onpointercancel = () => clearTimeout(artHold);
+  art.oncontextmenu = (e) => e.preventDefault();
+  art.onclick = () => { if (!artHeld) newArt(); artHeld = false; };
+  art.onkeydown = (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault(); e.stopPropagation();
+    if (e.shiftKey) artDialog(); else newArt();
   };
+
+  let tab = 'tracks', scoreShown = '';
+  function showScore() {
+    const p = project(), song = { name: p.name, bpm: p.bpm, tracks: p.tracks.map((t) => ({ ...t })) };
+    scoreShown = p.versionId;
+    window.studioScore?.mount($('scorePanel'), {
+      song, onError: (text) => say('error', text),
+      query: async (cycles) => {
+        await engines.probe.whenReady;
+        try { return await ask('probe', { type: 'score', code: compose(song, true), cycles }, 'scored', 8000); }
+        catch (e) { createEngine('probe').catch(() => {}); throw e; }
+      },
+    });
+  }
+  function setTab(name) {
+    tab = name;
+    $('tabTracks').setAttribute('aria-selected', String(name === 'tracks'));
+    $('tabScore').setAttribute('aria-selected', String(name === 'score'));
+    $('tracks').hidden = name !== 'tracks'; $('scorePanel').hidden = name !== 'score'; $('allMute').hidden = name !== 'tracks';
+    if (name === 'score' && scoreShown !== project().versionId) showScore();
+  }
+  $('tabTracks').onclick = () => setTab('tracks');
+  $('tabScore').onclick = () => setTab('score');
+  $('volume').oninput = () => engines.live && postTo('live', { type: 'volume', value: +$('volume').value });
+  let bpmWait = 0;
+  function setBpm(value) { // stepping presses collapse into one version
+    const p = project(), v = Math.min(400, Math.max(20, +value || p.bpm));
+    p.bpm = v; $('bpm').value = v;
+    clearTimeout(bpmWait);
+    bpmWait = setTimeout(async () => { addVersion(p, `BPM ${v}`, 'user'); touched(); render(); if (playing) await play(); }, 350);
+  }
+  $('bpm').onchange = () => setBpm($('bpm').value);
+  $('bpmDown').onclick = () => setBpm(+$('bpm').value - 10);
+  $('bpmUp').onclick = () => setBpm(+$('bpm').value + 10);
   addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') { e.preventDefault(); toggleCode(); }
     if (e.code === 'Space' && !dlg.open && !e.target.isContentEditable && !/INPUT|TEXTAREA|SELECT|BUTTON/.test(e.target.tagName)) { e.preventDefault(); $('play').click(); }
@@ -544,9 +670,6 @@
   (async () => {
     load(); applyScale(); render(); renderChat();
     addEventListener('resize', fit);
-    let wide = innerWidth;
-    try { wide = window.parent.innerWidth; } catch { /* uses own width */ }
-    if (wide < 1100) $('chatFold').click();
     try { window.parent.addEventListener('resize', fit); } catch { /* cross-origin host */ }
     requestAnimationFrame(drawLoop);
     toHost('streamlit:componentReady', { apiVersion: 1 });

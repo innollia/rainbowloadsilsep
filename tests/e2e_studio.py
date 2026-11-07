@@ -118,13 +118,37 @@ try:
                    tempo: c.parseSong('setcps(0.5)\\n$a: s("bd")', prev).bpm === 120, plainOk: c.parseSong('s("bd")', prev).tracks[0].raw === true }; }""")
         frame.locator("#codeBtn").click()
         tracks_before = inner.evaluate("JSON.stringify(JSON.parse(localStorage.getItem('strudel-ddalkkak-v1')).projects[0].tracks)")
+        frame.locator("#tracks .mute").first.click()
         frame.locator("#projectBtn").click()
         hear = frame.locator("#dialog").get_by_role("button", name="듣기", exact=True).first
         hear.click()
         frame.locator("#dialog").get_by_role("button", name="정지", exact=True).wait_for(timeout=10000)
+        time.sleep(.3)
         frame.locator("#dialog").get_by_role("button", name="닫기").click()
         time.sleep(1)
         audition_ok = inner.evaluate("JSON.stringify(JSON.parse(localStorage.getItem('strudel-ddalkkak-v1')).projects[0].tracks)") == tracks_before
+        frame.locator("#tracks .mute").first.click()
+        frame.locator("#allMute").click()
+        all_off = inner.evaluate("[...document.querySelectorAll('#tracks .mute')].every(b => b.getAttribute('aria-pressed') === 'true')")
+        frame.locator("#allMute").click()
+        all_on = inner.evaluate("[...document.querySelectorAll('#tracks .mute')].every(b => b.getAttribute('aria-pressed') === 'false')")
+        seed = lambda: inner.evaluate("document.getElementById('art').innerHTML")
+        art_before = seed()
+        frame.locator("#art").click()
+        art_clicked = seed() != art_before
+        box = frame.locator("#art").bounding_box()
+        page.mouse.move(box["x"] + 50, box["y"] + 50); page.mouse.down(); time.sleep(.7); page.mouse.up()
+        history_count = frame.locator("#dialog .artGrid button").count()
+        page.mouse.click(box["x"] - 10, box["y"] + 10)
+        time.sleep(.2)
+        outside_closed = not inner.evaluate("document.getElementById('dialog').open")
+        frame.locator("#bpmUp").click(); frame.locator("#bpmUp").click()
+        time.sleep(1.2)
+        bpm_step = inner.evaluate("(() => { const p = JSON.parse(localStorage.getItem('strudel-ddalkkak-v1')).projects[0]; return [p.bpm, p.versions[p.versions.length-1].summary]; })()")
+        frame.locator("#tabScore").click()
+        frame.locator("#scorePanel svg").first.wait_for(timeout=20000)
+        score_notes = inner.evaluate("document.querySelectorAll('#scorePanel svg path').length")
+        frame.locator("#tabTracks").click()
         frame.locator("#settingsBtn").click()
         frame.get_by_role("button", name="게임하기").click()
         page.get_by_text("음악 작업실로 돌아가기").wait_for(timeout=15000)
@@ -149,6 +173,12 @@ try:
         "text round trip": all(trip.values()),
         "art follows playback": art_moves,
         "version audition leaves project alone": audition_ok,
+        "score tab renders notes": score_notes > 50,
+        "all tracks toggle": all_off and all_on,
+        "cover click changes art": art_clicked,
+        "cover long press shows history": history_count >= 2,
+        "backdrop click closes dialog": outside_closed,
+        "bpm steps by ten as one version": bpm_step[1] == f"BPM {bpm_step[0]}",
     }
     print(calls, errors[:3])
     for name, ok in checks.items():

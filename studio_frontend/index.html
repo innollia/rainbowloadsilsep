@@ -6,23 +6,23 @@
 <title>strudel 딸깍이</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="score.css">
 </head>
 <body>
 <div id="app">
   <header>
-    <strong class="brand">strudel 딸깍이</strong>
-    <button id="projectBtn" class="ghost" aria-haspopup="dialog"></button>
+    <button id="projectBtn" class="ghost iconBtn" data-icon="folder" aria-haspopup="dialog" aria-label="프로젝트" title="프로젝트"></button>
     <span id="saveState" role="status"></span>
     <span class="spacer"></span>
-    <button id="codeBtn" aria-pressed="false" title="Ctrl+E">코드</button>
-    <button id="saveBtn">저장</button>
-    <button id="autoBtn" aria-pressed="false">자동 개선 OFF</button>
-    <button id="settingsBtn">설정</button>
+    <button id="codeBtn" class="iconBtn" data-icon="code" aria-pressed="false" aria-label="코드" title="코드 (Ctrl+E)"></button>
+    <button id="saveBtn" class="iconBtn" data-icon="save" aria-label="저장" title="저장"></button>
+    <button id="autoBtn" class="iconBtn" data-icon="auto" aria-pressed="false" aria-label="자동 개선"></button>
+    <button id="settingsBtn" class="iconBtn" data-icon="settings" aria-label="설정" title="설정"></button>
   </header>
   <main>
     <section id="stage">
       <div class="hero">
-        <svg id="art" viewBox="0 0 100 100" role="img" aria-label="앨범 아트"></svg>
+        <svg id="art" viewBox="0 0 100 100" role="button" tabindex="0" aria-label="앨범 아트 바꾸기. 길게 누르면 지난 그림에서 고르기" title="눌러서 바꾸기 · 길게 눌러 지난 그림 고르기"></svg>
         <div class="heroText">
           <h1 id="songTitle"></h1>
           <p id="songMeta"></p>
@@ -30,45 +30,54 @@
           <div id="listenBand" hidden></div>
         </div>
       </div>
-      <h2 id="trackHead">트랙</h2>
-      <div id="tracks"></div>
+      <div class="tabs" role="tablist">
+        <button id="tabTracks" role="tab" aria-selected="true" aria-controls="tracks">트랙</button>
+        <button id="tabScore" role="tab" aria-selected="false" aria-controls="scorePanel">악보</button>
+        <span class="spacer"></span>
+        <button id="allMute" class="ghost iconBtn" data-icon="sound" aria-label="전체 끄기" title="전체 끄기"></button>
+      </div>
+      <div id="tracks" role="tabpanel"></div>
+      <div id="scorePanel" role="tabpanel" hidden></div>
       <div id="codePanel" hidden>
         <div class="codeBar">
-          <button id="codeRun" title="Ctrl+Enter">실행</button>
-          <button id="codeExport" class="ghost">내보내기</button>
-          <button id="codeImport" class="ghost">불러오기</button>
+          <button id="codeRun" class="iconBtn" data-icon="play" aria-label="실행" title="실행 (Ctrl+Enter)"></button>
+          <button id="codeExport" class="ghost iconBtn" data-icon="download" aria-label="코드 내보내기" title="코드 내보내기"></button>
+          <button id="codeImport" class="ghost iconBtn" data-icon="upload" aria-label="불러오기" title="불러오기"></button>
           <span id="codeNote" role="status"></span>
           <button id="codeReload" class="ghost" hidden>최신 곡 불러오기</button>
         </div>
         <div id="codeHost"></div>
-        <p class="muted">Ctrl+Enter 실행 · Ctrl+. 정지 · Ctrl+E 닫기 · 입력 중 자동 완성</p>
       </div>
     </section>
     <div id="divider" role="separator" aria-orientation="vertical" aria-label="채팅 너비" tabindex="0"></div>
     <aside id="chat">
-      <div class="chatHead"><h2>AI와 만들기</h2><button id="chatFold" class="ghost">접기</button></div>
       <div id="log" aria-live="polite"></div>
-      <div id="progress" hidden><span id="progressText"></span><button id="stopAi">중단</button></div>
+      <div id="progress" hidden><span id="progressText"></span><button id="stopAi" class="iconBtn" data-icon="stop" aria-label="중단" title="중단"></button></div>
       <div id="targetChip" hidden></div>
       <form id="askForm">
         <textarea id="ask" rows="2" placeholder="바꿀 내용이나 궁금한 걸 말해 줘. 예: 베이스만 바꿔줘, 지금 곡 분위기 어때?" aria-label="AI에게 말하기"></textarea>
-        <button id="send" aria-label="보내기">↑</button>
+        <button id="send" class="iconBtn" data-icon="send" aria-label="보내기" title="보내기"></button>
       </form>
     </aside>
-    <button id="chatOpen" hidden>AI 열기</button>
   </main>
   <footer>
-    <span id="footTitle" class="footTitle"></span>
-    <button id="play" aria-label="재생">▶</button>
+    <button id="play" class="iconBtn" data-icon="play" aria-label="재생"></button>
     <span id="clock" class="num">00:00</span>
     <span id="bar" class="num">1마디</span>
-    <label class="bpm num"><input id="bpm" type="number" min="20" max="400" aria-label="BPM"> BPM</label>
-    <label class="vol">음량 <input id="volume" type="range" min="0" max="1" step="0.01" value="0.8"></label>
+    <span class="spacer"></span>
+    <div class="bpm num">
+      <button id="bpmDown" class="ghost iconBtn" data-icon="minus" aria-label="BPM 10 내리기" title="10 내리기"></button>
+      <input id="bpm" type="number" min="20" max="400" step="10" aria-label="BPM">
+      <button id="bpmUp" class="ghost iconBtn" data-icon="plus" aria-label="BPM 10 올리기" title="10 올리기"></button>
+      <span>BPM</span>
+    </div>
+    <label class="vol"><span data-icon="sound" aria-hidden="true"></span><input id="volume" type="range" min="0" max="1" step="0.01" value="0.8" aria-label="음량"></label>
   </footer>
 </div>
 <dialog id="dialog"></dialog>
 <script src="art.js"></script>
 <script src="song.js"></script>
+<script src="score.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
