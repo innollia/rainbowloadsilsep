@@ -7,7 +7,8 @@
 ```powershell
 pip install -r requirements.txt
 $env:GEMINI_API_KEY = '내 키'
-.un_local.ps1
+.
+un_local.ps1
 ```
 
 키가 없어도 재생, 믹서, 저장은 동작한다.
@@ -20,6 +21,8 @@ share.streamlit.io에서 이 저장소의 `main`, `app.py`를 연결하고 Secre
 GEMINI_API_KEY = "..."
 STUDIO_PASSWORD = "..."
 ```
+
+학교 Gemini 키는 `SCHOOL_GEMINI_API_KEY`로 넣는다(Secrets, 로컬은 `~/.all-tomorrow/key-pool.env`). 둘 다 있으면 학교 키를 먼저 쓴다.
 
 `STUDIO_PASSWORD`가 없으면 공개 URL에서 키가 쓰이지 않도록 AI가 꺼진다. 선택 값은 `GEMINI_MODEL`, `STRUDEL_DAILY_CALLS`다.
 

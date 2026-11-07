@@ -23,9 +23,28 @@ def setting(name, default=""):
         return default
 
 
+def key_pool():
+    """Local-only key file. Absent on Cloud, where Streamlit Secrets are used."""
+    try:
+        lines = (Path.home() / ".all-tomorrow" / "key-pool.env").read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return {}
+    pairs = (line.removeprefix("export ").split("=", 1) for line in lines if "=" in line and not line.lstrip().startswith("#"))
+    return {name.strip(): value.strip().strip("'\"") for name, value in pairs}
+
+
+def gemini_key():
+    pool = key_pool()
+    for name in ("SCHOOL_GEMINI_API_KEY", "GEMINI_API_KEY"):
+        key = setting(name) or pool.get(name, "")
+        if key:
+            return key
+    return ""
+
+
 @st.cache_resource
 def jobs():
-    key = setting("GEMINI_API_KEY")
+    key = gemini_key()
     model = Gemini(key, setting("GEMINI_MODEL"), setting("GEMINI_BASE_URL")) if key else None
     return Jobs(model, daily_limit=int(setting("STRUDEL_DAILY_CALLS", "200")))
 
