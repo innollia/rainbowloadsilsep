@@ -545,3 +545,12 @@ def test_agy_falls_back_to_the_json_in_its_response():
     assert sb.AgyCli.parse(out) == {"summary": "y", "changes": []}
     with pytest.raises(sb.ModelError):
         sb.AgyCli.parse(json.dumps({"status": "SUCCESS", "response": "no json here"}).encode())
+
+
+def test_agy_asks_again_only_when_a_denied_tool_call_left_the_turn_empty():
+    denied = json.dumps({"status": "SUCCESS", "response": "", "conversation_id": "c1",
+                         "denied_actions": [{"action": "command"}]}).encode()
+    assert sb.AgyCli.denied_conversation(denied) == "c1"
+    answered = json.dumps({"status": "SUCCESS", "response": "x", "conversation_id": "c1", "denied_actions": [1]}).encode()
+    assert sb.AgyCli.denied_conversation(answered) == ""
+    assert sb.AgyCli.denied_conversation(json.dumps({"status": "SUCCESS", "response": ""}).encode()) == ""

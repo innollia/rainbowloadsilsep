@@ -644,20 +644,46 @@ class AgyCli:
             schema = os.path.join(folder, "schema.json")
             with open(schema, "w", encoding="utf-8") as stream:
                 json.dump(plain_schema(schema_def), stream)
-            args = [self.executable, "--output-format", "json", "--json-schema", schema, "--disable-slash-commands",
-                    "--sandbox", "--print-timeout", f"{self.TIMEOUT}s"] + (["--model", self.model] if self.model else []) + ["-p", text]
-            flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+            base = [self.executable, "--output-format", "json", "--json-schema", schema, "--disable-slash-commands",
+                    "--sandbox", "--print-timeout", f"{self.TIMEOUT}s"] + (["--model", self.model] if self.model else [])
+            out, err = self._exec(base + ["-p", text], folder)
+            self.last_usage = self.usage_of(out)
             try:
-                self.process = subprocess.Popen(args, cwd=folder, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                                stderr=subprocess.PIPE, creationflags=flags)
-                out, err = self.process.communicate(timeout=self.TIMEOUT + 20)
-            except OSError:
-                raise ModelError("agy_missing") from None
-            except subprocess.TimeoutExpired:
-                self.stop()
-                raise ModelError("agy_timeout") from None
-        self.last_usage = self.usage_of(out)
-        return self.parse(out, err)
+                return self.parse(out, err)
+            except ModelError:
+                conversation = self.denied_conversation(out)
+                if not conversation:
+                    raise
+            # The agent tried a tool, print mode denied it and the turn ended empty: ask once more in the same
+            # conversation. This is the CLI's agent loop, not the model's answer, so it is not counted as a retry.
+            out, err = self._exec(base + ["--conversation", conversation, "-p", self.AFTER_DENIAL], folder)
+            self.last_usage = {"first": self.last_usage, "second": self.usage_of(out)}
+            return self.parse(out, err)
+
+    AFTER_DENIAL = "Tools are not available here and the call was denied. Reply now with only the JSON object for the request above."
+
+    def _exec(self, args: list, folder: str) -> tuple[bytes, bytes]:
+        flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        try:
+            self.process = subprocess.Popen(args, cwd=folder, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                            stderr=subprocess.PIPE, creationflags=flags)
+            return self.process.communicate(timeout=self.TIMEOUT + 20)
+        except OSError:
+            raise ModelError("agy_missing") from None
+        except subprocess.TimeoutExpired:
+            self.stop()
+            raise ModelError("agy_timeout") from None
+
+    @staticmethod
+    def denied_conversation(out: bytes) -> str:
+        """The conversation id when the turn ended empty because a tool call was denied."""
+        try:
+            data = json.loads(out.decode("utf-8", "replace"))
+        except ValueError:
+            return ""
+        if not isinstance(data, dict) or data.get("status") != "SUCCESS" or str(data.get("response") or "").strip():
+            return ""
+        return str(data.get("conversation_id") or "") if data.get("denied_actions") else ""
 
     @staticmethod
     def usage_of(out: bytes) -> dict:

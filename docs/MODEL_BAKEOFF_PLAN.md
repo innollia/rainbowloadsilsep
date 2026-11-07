@@ -41,7 +41,7 @@ Hugging Face를 주력으로 하지 않는 이유: 기준선(Claude·Gemini)과 
 같은 편집 프롬프트·같은 생각 강도(`medium`)·같은 라운드 수로 돌린다. 가격은 1M 토큰당 USD(OpenRouter 표시가).
 
 연결 방식(사용자 결정 반영):
-- **Gemini 3.8 Flash는 agy CLI**(`--model gemini-3.8-flash-medium`)로 돌린다. 구독이라 원가 $0. agy에는 오디오 입력이 없어 듣기는 다른 후보와 같은 측정 분석이다.
+- **Gemini 3.8 Flash는 agy CLI**(`--model gemini-3.8-flash-medium`)로 돌린다. 구독이라 원가 $0. agy에는 오디오 입력이 없어 듣기는 다른 후보와 같은 측정 분석이다. agy의 에이전트가 도구를 쓰려다 거절당해 빈 답으로 끝나면(시범에서 두 번 봄) 같은 대화에서 "JSON만 답하라"고 한 번 더 묻는다. 모델의 답을 다시 받는 재시도가 아니라 CLI 고리를 마무리하는 것이라 실패로 세지 않는다.
 - **GPT-5.6 Luna·Terra는 codex CLI**(`codex exec -m <모델> -c model_reasoning_effort="medium" --output-schema`)로 돌린다. 구독이라 원가 $0. 토큰 수는 codex의 `turn.completed` 사용량으로 남긴다.
 - **나머지는 OpenRouter 경유**. Claude Haiku·Sonnet도 같은 모델·같은 프롬프트라 비교에 문제가 없다. 원가는 OpenRouter `usage.cost`로 잰다.
 - **Opus 5.5는 뺀다.** 작업당 최대 약 $0.70. 비싼 쪽 천장은 Sonnet·GPT-5.6 Terra로 본다.
