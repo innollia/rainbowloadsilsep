@@ -1,5 +1,5 @@
 // Seeded album art. The seed picks a drawing method, then every number in it.
-// Elements carry data-* motion hints; app.js moves them from song position and real output.
+// Elements carry data-* motion hints (spin, pulse, band) so motion can follow the real output without redrawing.
 (() => {
   const PALETTES = [
     ['#10131F', '#F2C14E', '#F78154', '#4D9078', '#B4436C'],
@@ -32,7 +32,7 @@
   }
 
   const METHODS = {
-    contour(r, ink, bg) {
+    contour(r, ink) {
       const f = surface(r), count = 15, cx = 30 + r() * 40, cy = 30 + r() * 40;
       let s = '';
       for (let i = 0; i < count; i++) {
@@ -57,7 +57,7 @@
       }
       return `<g${motion({ band: 8, pulse: 0.04 })}>${s}</g>`;
     },
-    truchet(r, ink, bg) {
+    truchet(r, ink) {
       const cells = 6 + Math.floor(r() * 5), size = 100 / cells, wide = size * (0.2 + r() * 0.16);
       let back = '', lines = '';
       for (let y = 0; y < cells; y++) {
@@ -152,15 +152,14 @@
     },
     // Motion comes only from arguments: stopped or silent songs stay still.
     move(root, cycles, bands, still) {
-      for (const el of root.querySelectorAll('[data-spin],[data-flow],[data-pulse]')) {
+      for (const el of root.querySelectorAll('[data-spin],[data-pulse]')) {
         const d = el.dataset;
         if (still) { el.removeAttribute('transform'); continue; }
         const cx = +(d.cx || 50), cy = +(d.cy || 50);
         const level = bands && d.band ? bands[+d.band] / 255 : 0;
         const size = 1 + level * +(d.pulse || 0) + (d.pulse ? Math.sin(cycles * Math.PI * 2) * 0.012 : 0);
-        const shift = d.flow ? (cycles * +d.flow) % +d.period : 0;
         const turn = cycles * +(d.spin || 0);
-        el.setAttribute('transform', `translate(${n(cx + shift)} ${cy}) rotate(${n(turn)}) scale(${size.toFixed(4)}) translate(${-cx} ${-cy})`);
+        el.setAttribute('transform', `translate(${n(cx)} ${cy}) rotate(${n(turn)}) scale(${size.toFixed(4)}) translate(${-cx} ${-cy})`);
       }
     },
   };

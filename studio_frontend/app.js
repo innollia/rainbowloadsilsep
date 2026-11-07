@@ -11,105 +11,18 @@
     { id: 'bass', role: 'bass', code: 'note("<c2 c2 eb2 g1>*2").s("sawtooth").lpf(600).decay(.2).sustain(.3).gain(.4)' },
     { id: 'melody', role: 'melody', code: 'note("c4 eb4 g4 bb4 g4 eb4").s("triangle").gain(.3).delay(.3)' },
   ];
+  const dlg = $('dialog');
+  const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
 
   /* ---------- language ---------- */
-  const TEXT = {
-    en: {
-      role_drums: 'Drums', role_bass: 'Bass', role_melody: 'Melody', role_pad: 'Pad', role_other: 'Other',
-      v_default: 'Starter song', first_song: 'First song', saved: 'Saved', save_failed: 'Save failed · export from Settings', saving: 'Saving',
-      no_events: 'No sound events', timeout4: "Code didn't finish in 4 seconds, so it was stopped",
-      boot_error: "Couldn't start the music engine: ", runtime_error: 'Runtime error: ', play_failed: 'Playback failed: ', play_failed_short: 'Playback failed',
-      stage_editing: 'Editing code', stage_verifying: 'Checking it runs', stage_listening: 'Listening', stage_signal: 'Signal check', stage_analyzing: 'Analyzing',
-      v_edit: 'Edit', listening_span: 'Listening {span}', round: '{stage} · round {i}/{n}',
-      credits_btn: 'Credits {n}', cost_hint: 'Up to {n} credits', credit_big: '{n} credits', credits_title: 'Credits',
-      welcome: 'You got {n} free trial credits. You only pay for what you use, and failed calls are refunded.',
-      kind_free: 'Free trial', kind_buy: 'Top-up', kind_charge: 'Used', kind_refund: 'Refunded', kind_reversal: 'Refund reversed',
-      credit_how: 'Each request calls the AI once. With auto-improve on, each round adds one fix and one measurement. You only pay for calls made, and failed calls are refunded.',
-      deep: 'Deep reasoning',
-      credit_buy: '{n} credits per $1 on Buy Me a Coffee. Put the code below in the message box when you pay. Without it, the payment counts as a tip. It shows up in your history in a few seconds.',
-      copy: 'Copy', copied: 'Copied', top_up: 'Top up', history: 'History', loading: 'Loading…', none_yet: 'Nothing yet.', logout: 'Log out',
-      use_art: 'Use this cover', past_art: 'Past covers', art_n: 'Cover {n}', current_cover: 'Current cover', close: 'Close',
-      stop: 'Stop', play: 'Play', unmute_x: 'Unmute {name}', mute_x: 'Mute {name}', vol_x: '{name} volume', all_on: 'Unmute all', all_off: 'Mute all',
-      no_samples: " · Samples didn't load, synth sounds only", target: 'Target: {name} (others locked)', auto_on: 'Up to {n} more fixes', auto_off: 'Off',
-      ask_ph: 'Tell me what to change, or ask anything', ask_ph_off: 'AI not connected · playback and mixer still work', bar_n: 'Bar {n}', bar_1: 'Bar 1', listen: 'Listen',
-      project: 'Project', song_name: 'Song name', untitled: 'Untitled song', open_x: 'Open {name}', new_song: 'New song', new_song_name: 'New song',
-      import_file: 'Import file', export_project: 'Export project', prev_versions: 'Earlier versions', restore: 'Restore', restored: 'Restored: {s}',
-      imported_song: 'Imported song', imported_code: 'Imported code',
-      settings: 'Settings', font_size: 'Text size', ai_on: 'AI connected ({e})', ai_off: 'AI not connected: check the server settings.',
-      tips: 'Good to know', misc: 'More', play_game: 'Play a game', language: 'Language',
-      editor_loading: 'Loading the editor.', editor_failed: "Couldn't load the editor.", unsaved_edit: 'Changes not run yet',
-      line_err: '{name} line {line}: {err}', checking: 'Checking.', run_failed: 'Run failed, not applied · {why}', v_code_edit: 'Edited code',
-      applied_raw: "Applied. Couldn't split it into tracks, so it plays as one song.", applied: 'Applied.',
-      song_changed: 'The song changed. Your edits are kept.', low_credits: 'Not enough credits. Top up with the credits button at the top.',
-      game_sounds: 'Game sounds', game_assets: 'Game sound assets', art_aria: 'Change album art. Long-press to pick a past cover', art_title: 'Click to change · long-press for past covers',
-      viz_aria: 'Live output visualizer', tracks: 'Tracks', score: 'Score', code: 'Code', code_title: 'Code (Ctrl+E)', run: 'Run', run_title: 'Run (Ctrl+Enter)',
-      reload_latest: 'Load latest song', import: 'Import', export_code: 'Export code', chat_width: 'Chat width', stop_ai: 'Stop', auto: 'Auto-improve',
-      auto_max: 'Max auto-improve rounds', ai_model: 'AI model', effort: 'Reasoning level', ask_aria: 'Talk to the AI', send: 'Send',
-      bpm_down: 'Lower BPM by 10', bpm_down_t: 'Down 10', bpm_up: 'Raise BPM by 10', bpm_up_t: 'Up 10', volume: 'Volume',
-      tip_list: [
-        ['Click the album cover', 'It changes to a new picture.'],
-        ['Long-press the album cover', 'Opens a shelf of past covers. Flip through and pick one.'],
-        ['Click a track name', 'Only that track will be changed by the AI.'],
-        ['Auto-improve', 'Drag the slider to set how many more fixes to try. It stops early when nothing is left to fix or it stops getting better, and keeps the best-scoring version. Up to 5 calls, 5 minutes, 16 seconds per round.'],
-        ['Project folder', 'Switch songs, listen to and restore earlier versions, and export files.'],
-        ['Code tab (Ctrl+E)', 'Next to Tracks and Score, see and edit the song code. Run it with Ctrl+Enter.'],
-        ['Saving', 'Every change is saved in this browser automatically.'],
-      ],
-    },
-    ko: {
-      role_drums: '드럼', role_bass: '베이스', role_melody: '멜로디', role_pad: '패드', role_other: '기타',
-      v_default: '기본 곡', first_song: '첫 곡', saved: '저장됨', save_failed: '저장 실패 · 설정에서 내보내기', saving: '저장 중',
-      no_events: '소리 이벤트가 없어', timeout4: '코드가 4초 안에 끝나지 않아 멈췄어',
-      boot_error: '음악 엔진을 시작하지 못했어: ', runtime_error: '실행 오류: ', play_failed: '재생 실패: ', play_failed_short: '재생에 실패했어',
-      stage_editing: '코드 수정', stage_verifying: '실행 확인', stage_listening: '듣는 중', stage_signal: '신호 검사', stage_analyzing: '결과 분석',
-      v_edit: '수정', listening_span: '{span} 듣는 중', round: '{stage} · {i}/{n}회차',
-      credits_btn: '크레딧 {n}', cost_hint: '최대 {n} 크레딧', credit_big: '{n} 크레딧', credits_title: '크레딧',
-      welcome: '무료 체험 크레딧 {n}개가 들어왔어. 쓴 만큼만 빠지고, 실패한 호출은 돌려줘.',
-      kind_free: '무료 체험', kind_buy: '충전', kind_charge: '사용', kind_refund: '돌려받음', kind_reversal: '환불 취소',
-      credit_how: '요청 한 번에 AI를 1번 부르고, 자동 개선을 켜면 회차마다 고치기와 측정이 1번씩 더해져. 부른 만큼만 빠지고 실패한 호출은 돌려줘.',
-      deep: '깊게 추론',
-      credit_buy: 'Buy Me a Coffee에서 1달러당 {n} 크레딧. 결제할 때 메시지 칸에 아래 코드를 꼭 적어 줘. 코드가 없으면 후원으로만 처리돼. 몇 초 뒤 내역에 들어와.',
-      copy: '복사', copied: '복사했어', top_up: '충전하러 가기', history: '내역', loading: '불러오는 중…', none_yet: '아직 없어.', logout: '로그아웃',
-      use_art: '이 그림으로 바꾸기', past_art: '지난 그림', art_n: '그림 {n}', current_cover: '지금 커버', close: '닫기',
-      stop: '정지', play: '재생', unmute_x: '{name} 켜기', mute_x: '{name} 끄기', vol_x: '{name} 음량', all_on: '전체 켜기', all_off: '전체 끄기',
-      no_samples: ' · 샘플을 불러오지 못해 합성음만 나와', target: '대상: {name} (나머지는 잠김)', auto_on: '최대 {n}번 더 고쳐', auto_off: '꺼짐',
-      ask_ph: '바꿀 내용이나 궁금한 걸 말해 줘', ask_ph_off: 'AI 연결 안 됨 · 재생과 믹서는 쓸 수 있어', bar_n: '{n}마디', bar_1: '1마디', listen: '듣기',
-      project: '프로젝트', song_name: '곡 이름', untitled: '이름 없는 곡', open_x: '{name} 열기', new_song: '새 곡 만들기', new_song_name: '새 곡',
-      import_file: '파일 불러오기', export_project: '프로젝트 내보내기', prev_versions: '이전 버전', restore: '복구', restored: '복구: {s}',
-      imported_song: '불러온 곡', imported_code: '불러온 코드',
-      settings: '설정', font_size: '글자 크기', ai_on: 'AI 연결됨 ({e})', ai_off: 'AI 연결 안 됨: 서버 설정을 확인해 줘.',
-      tips: '알아두면 좋은 기능', misc: '기타', play_game: '게임하기', language: '언어',
-      editor_loading: '편집기를 불러오는 중이야.', editor_failed: '편집기를 불러오지 못했어.', unsaved_edit: '실행 전 변경 있음',
-      line_err: '{name} {line}번째 줄: {err}', checking: '확인하는 중이야.', run_failed: '실행 실패, 적용 안 함 · {why}', v_code_edit: '코드 직접 수정',
-      applied_raw: '적용했어. 트랙으로 나누지 못해 전체 곡 하나로 재생해.', applied: '적용했어.',
-      song_changed: '곡이 바뀌었어. 편집 중인 내용은 그대로 뒀어.', low_credits: '크레딧이 모자라. 위쪽 크레딧 버튼에서 충전할 수 있어.',
-      game_sounds: '게임 소리', game_assets: '게임 소리 에셋', art_aria: '앨범 아트 바꾸기. 길게 누르면 지난 그림에서 고르기', art_title: '눌러서 바꾸기 · 길게 눌러 지난 그림 고르기',
-      viz_aria: '실제 출력 시각화', tracks: '트랙', score: '악보', code: '코드', code_title: '코드 (Ctrl+E)', run: '실행', run_title: '실행 (Ctrl+Enter)',
-      reload_latest: '최신 곡 불러오기', import: '불러오기', export_code: '코드 내보내기', chat_width: '채팅 너비', stop_ai: '중단', auto: '자동 개선',
-      auto_max: '자동 개선 최대 횟수', ai_model: 'AI 모델', effort: '추론 수준', ask_aria: 'AI에게 말하기', send: '보내기',
-      bpm_down: 'BPM 10 내리기', bpm_down_t: '10 내리기', bpm_up: 'BPM 10 올리기', bpm_up_t: '10 올리기', volume: '음량',
-      tip_list: [
-        ['앨범 커버 누르기', '새 그림으로 바뀌어.'],
-        ['앨범 커버 길게 누르기', '지난 그림 책장이 열려. 하나씩 꺼내 보고 고를 수 있어.'],
-        ['트랙 이름 누르기', '그 트랙만 AI가 고치도록 지정해.'],
-        ['자동 개선', '막대를 끌어 최대 몇 번 더 고칠지 정해. 고칠 게 없거나 더 나아지지 않으면 그 전에 멈추고, 가장 점수가 높았던 버전을 남겨. 호출 5회, 5분, 회당 16초까지 들어.'],
-        ['프로젝트 폴더', '곡 전환, 이전 버전 듣기와 복구, 파일 내보내기가 여기 있어.'],
-        ['코드 탭 (Ctrl+E)', '트랙, 악보 옆 코드 탭에서 곡의 코드를 보고 고쳐. Ctrl+Enter로 실행해.'],
-        ['저장', '바뀔 때마다 이 브라우저에 자동으로 저장돼.'],
-      ],
-    },
-  };
-  const pickLang = (v) => (v === 'en' || v === 'ko' ? v : '');
-  let lang = (() => { try { return pickLang(new URLSearchParams(window.parent.location.search).get('lang')); } catch { return ''; } })() || 'en';
-  const t = (key, vars = {}) => String(TEXT[lang][key] ?? TEXT.en[key] ?? key).replace(/\{(\w+)\}/g, (_, n) => vars[n] ?? '');
+  const i18n = window.studioI18n, { t, raw } = i18n;
   let pendingLang = '';
-  window.studioLang = () => lang;
   function applyStatic() {
-    document.documentElement.lang = lang;
-    document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
-    document.querySelectorAll('[data-i18n-aria]').forEach((el) => el.setAttribute('aria-label', t(el.dataset.i18nAria)));
-    document.querySelectorAll('[data-i18n-title]').forEach((el) => { el.title = t(el.dataset.i18nTitle); });
-    $('langPick').value = lang;
+    document.documentElement.lang = i18n.lang;
+    document.querySelectorAll('[data-i18n]').forEach((e) => { e.textContent = t(e.dataset.i18n); });
+    document.querySelectorAll('[data-i18n-aria]').forEach((e) => e.setAttribute('aria-label', t(e.dataset.i18nAria)));
+    document.querySelectorAll('[data-i18n-title]').forEach((e) => { e.title = t(e.dataset.i18nTitle); });
+    $('langPick').value = i18n.lang;
   }
   applyStatic();
 
@@ -131,15 +44,15 @@
     game: '<path d="M7 8h10a5 5 0 0 1 4.7 6.7l-.8 2.1a2.5 2.5 0 0 1-4.1.9L14.5 15.5h-5l-2.3 2.2a2.5 2.5 0 0 1-4.1-.9l-.8-2.1A5 5 0 0 1 7 8z"/><path d="M8 10v3.5M6.2 11.750h3.6M15.5 11h.01M17.5 13h.01"/>',
     upload: '<path d="M12 20V9M7 13l5-5 5 5M5 4h14"/>',
   };
-  const setIcon = (el, name) => { el.innerHTML = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`; };
-  const iconLabel = (el, name, label) => { setIcon(el, name); el.setAttribute('aria-label', label); el.title = label; };
-  document.querySelectorAll('[data-icon]').forEach((el) => setIcon(el, el.dataset.icon));
+  const setIcon = (e, name) => { e.innerHTML = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`; };
+  const iconLabel = (e, name, label) => { setIcon(e, name); e.setAttribute('aria-label', label); e.title = label; };
+  document.querySelectorAll('[data-icon]').forEach((e) => setIcon(e, e.dataset.icon));
   const NOTE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
   const noteName = (m) => NOTE[((Math.round(m) % 12) + 12) % 12] + (Math.floor(Math.round(m) / 12) - 1);
 
   /* ---------- pure model ---------- */
   const uid = () => Math.random().toString(36).slice(2, 10);
-  const snapshot = (p) => ({ bpm: p.bpm, head: p.head || '', tracks: p.tracks.map((t) => ({ ...t })) });
+  const snapshot = (p) => ({ bpm: p.bpm, head: p.head || '', tracks: p.tracks.map((tr) => ({ ...tr })) });
 
   function newProject(name) {
     const p = { id: uid(), name, bpm: 120, tracks: DEFAULT_TRACKS.map((d) => ({ ...d, name: t('role_' + d.role) })), mix: {}, chat: [], versions: [], versionId: '' };
@@ -161,21 +74,22 @@
   let db = { current: '', projects: [] };
   let dirty = false;
   function load() {
-    try { const raw = localStorage.getItem(STORE); if (raw) db = JSON.parse(raw); } catch { /* starts fresh */ }
+    try { const stored = localStorage.getItem(STORE); if (stored) db = JSON.parse(stored); } catch { /* starts fresh */ }
     if (!db.projects.length) { const p = newProject(t('first_song')); db = { current: p.id, projects: [p] }; }
   }
+  function showSave(text, color = '') { $('saveState').textContent = text; $('saveState').style.color = color; }
   function persist() {
     try {
       localStorage.setItem(STORE, JSON.stringify(db));
-      dirty = false; $('saveState').textContent = t('saved'); $('saveState').style.color = '';
+      dirty = false; showSave(t('saved'));
       return true;
     } catch {
-      $('saveState').textContent = t('save_failed'); $('saveState').style.color = 'var(--err)';
+      showSave(t('save_failed'), 'var(--err)');
       return false;
     }
   }
   function touched() {
-    dirty = true; $('saveState').textContent = t('saving'); $('saveState').style.color = '';
+    dirty = true; showSave(t('saving'));
     clearTimeout(touched.t); touched.t = setTimeout(persist, 400);
   }
   const project = () => db.projects.find((p) => p.id === db.current);
@@ -212,6 +126,7 @@
     return whenReady;
   }
   const postTo = (mode, m) => engines[mode].frame.contentWindow.postMessage(m, '*');
+  const engineText = (type) => ({ type, noPattern: t('no_pattern') });
   function ask(mode, m, reply, ms) {
     return new Promise((resolve, reject) => {
       const id = uid();
@@ -239,7 +154,7 @@
     const entry = Object.entries(engines).find(([, v]) => v.frame.contentWindow === e.source);
     if (!entry) return;
     const [mode, eng] = entry;
-    if (m.type === 'loaded') postTo(mode, { type: 'boot', strudel: strudelText, samples: SAMPLES, lang });
+    if (m.type === 'loaded') postTo(mode, { ...engineText('boot'), strudel: strudelText, samples: SAMPLES });
     else if (m.type === 'ready') { if (mode === 'live') { samplesOk = m.samplesOk; soundNames = m.sounds || []; editor?.setSounds(soundNames); } eng.ready(); render(); }
     else if (m.type === 'boot-error') say('error', t('boot_error') + m.message);
     else if (m.type === 'tick') { cycles = m.cycles; bands = m.bands; }
@@ -250,18 +165,20 @@
 
   function pushMix() {
     const p = project(), mix = {};
-    for (const t of p.tracks) { const s = mixOf(p, t.id); mix[t.id] = s.mute ? 0 : s.gain; }
+    for (const tr of p.tracks) { const s = mixOf(p, tr.id); mix[tr.id] = s.mute ? 0 : s.gain; }
     postTo('live', { type: 'mix', mix });
+  }
+  async function startLive(code) {
+    const r = await ask('live', { type: 'apply', code }, 'applied', 8000);
+    if (r.ok) { if (!playing) startedAt = performance.now(); playing = true; renderPlay(); }
+    return r;
   }
   async function play() {
     await engines.live.whenReady;
-    const p = project();
     pushMix();
-    const r = await ask('live', { type: 'apply', code: compose(p, true) }, 'applied', 8000);
-    if (!r.ok) { say('error', t('play_failed') + r.error); return false; }
-    if (!playing) startedAt = performance.now();
-    playing = true; renderPlay();
-    return true;
+    const r = await startLive(compose(project(), true));
+    if (!r.ok) say('error', t('play_failed') + r.error);
+    return r.ok;
   }
   function stop() {
     if (engines.live) postTo('live', { type: 'stop' });
@@ -269,7 +186,7 @@
   }
 
   /* ---------- AI job handling ---------- */
-  let job = null, handledSeq = '', shownMsg = {}, busyFeedback = false;
+  let job = null, handledSeq = '', shownMsg = {};
   let localStage = '';
 
   function wavFrom(pcm, rate) {
@@ -288,15 +205,17 @@
   async function handleCandidate(j) {
     const c = j.candidate, p = project();
     const report = (extra) => send('feedback', { job_id: j.id, seq: c.seq, ...extra });
-    const trial = { bpm: c.bpm, tracks: c.tracks };
-    const proved = await probe(compose(trial, true));
+    const proved = await probe(compose({ bpm: c.bpm, tracks: c.tracks }, true));
     if (!proved.ok) { report({ ok: false, error: proved.error }); return; }
     p.bpm = c.bpm; p.tracks = c.tracks;
-    const applied = await play();
-    if (!applied) { report({ ok: false, error: t('play_failed_short') }); return; }
+    if (!await play()) { report({ ok: false, error: t('play_failed_short') }); return; }
     addVersion(p, c.summary || t('v_edit'), 'ai');
     touched(); render();
-    if (!c.listen) { report({ ok: true }); return; }
+    if (c.listen) report(await listenBack(p));
+    else report({ ok: true });
+  }
+  // Records a stretch of the real output so the AI can hear its own edit.
+  async function listenBack(p) {
     const seconds = Math.min(16, Math.max(8, 2 * 240 / p.bpm));
     const from = (performance.now() - startedAt) / 1000;
     const span = `${mmss(from)}–${mmss(from + seconds)}`;
@@ -306,17 +225,17 @@
       const r = await ask('live', { type: 'capture', seconds }, 'captured', (seconds + 6) * 1000);
       if (r.error) throw new Error(r.error);
       localStage = ''; renderProgress();
-      report({ ok: true, wav: wavFrom(r.pcm, r.sampleRate), span });
-    } catch (e) {
+      return { ok: true, wav: wavFrom(r.pcm, r.sampleRate), span };
+    } catch {
       localStage = '';
-      report({ ok: true, wav: '' });
+      return { ok: true, wav: '' };
     } finally { $('listenBand').hidden = true; }
   }
 
   function onRender(args) {
     fit();
     if (args.lang === pendingLang) pendingLang = '';
-    if (!pendingLang && pickLang(args.lang) && args.lang !== lang) setLang(args.lang);
+    if (!pendingLang && i18n.pick(args.lang) && args.lang !== i18n.lang) setLang(args.lang);
     aiEnabled = !!args.ai_enabled; engineName = args.engine || '';
     fillChoices(args.choices);
     account = args.account || null; showCredits();
@@ -335,13 +254,10 @@
     $('send').disabled = !aiEnabled;
   }
   let aiEnabled = false, lastServerError = '', engineName = '', choicesKey = '', account = null, welcomed = false;
-  const MODEL_COST = (id) => account?.prices.models[id] ?? 2;
+  const modelCost = (id) => account?.prices.models[id] ?? 2;
+  const callCost = () => modelCost($('modelPick').value) + (account.prices.efforts[$('effortPick').value] ?? 0);
   // Most a request can cost: the first call, then one edit and one measurement per extra round.
-  const worstCost = () => {
-    if (!account) return 0;
-    const per = MODEL_COST($('modelPick').value) + (account.prices.efforts[$('effortPick').value] ?? 0);
-    return per * (1 + 2 * (db.autoRounds || 0) + (db.autoRounds ? 1 : 0));
-  };
+  const worstCost = () => (account ? callCost() * (1 + 2 * (db.autoRounds || 0) + (db.autoRounds ? 1 : 0)) : 0);
   function showCredits() {
     $('creditBtn').hidden = !account;
     if (!account) { $('costHint').textContent = ''; return; }
@@ -349,42 +265,41 @@
     $('creditBtn').classList.toggle('low', account.credits < worstCost());
     $('costHint').textContent = t('cost_hint', { n: worstCost() });
     if (account.free && !welcomed) { welcomed = true; say('status', t('welcome', { n: account.credits })); }
-    if ($('dialog').open && $('dialog').dataset.kind === 'credits') creditBody();
+    if (dlg.open && dlg.dataset.kind === 'credits') creditBody();
   }
   function creditBody() {
-    const box = $('dialog').querySelector('.creditBody'); if (!box) return;
-    box.textContent = '';
-    const big = document.createElement('p'); big.className = 'creditBig'; big.textContent = t('credit_big', { n: account.credits });
-    const how = document.createElement('p'); how.className = 'note';
-    how.textContent = t('credit_how');
-    const table = document.createElement('div'); table.className = 'creditTable';
-    for (const o of $('modelPick').options) table.append(Object.assign(document.createElement('span'), { textContent: o.textContent }), Object.assign(document.createElement('b'), { textContent: `${MODEL_COST(o.value)}` }));
-    table.append(Object.assign(document.createElement('span'), { textContent: t('deep') }), Object.assign(document.createElement('b'), { textContent: `+${account.prices.efforts.high}` }));
-    const buy = document.createElement('div'); buy.className = 'creditBuy';
-    const text = document.createElement('p');
-    text.textContent = t('credit_buy', { n: account.per_usd });
-    const code = document.createElement('button'); code.className = 'ghost creditCode'; code.textContent = account.code; code.title = t('copy');
+    const box = dlg.querySelector('.creditBody'); if (!box) return;
+    const table = el('div', { className: 'creditTable' });
+    for (const o of $('modelPick').options) table.append(el('span', { textContent: o.textContent }), el('b', { textContent: `${modelCost(o.value)}` }));
+    table.append(el('span', { textContent: t('deep') }), el('b', { textContent: `+${account.prices.efforts.high}` }));
+    const out = el('button', { className: 'ghost', textContent: t('logout'), onclick: () => { dlg.close(); send('logout', {}); } });
+    box.replaceChildren(
+      el('p', { className: 'creditBig', textContent: t('credit_big', { n: account.credits }) }),
+      el('p', { className: 'note', textContent: t('credit_how') }),
+      table, creditBuy(), creditHistory(), out);
+  }
+  function creditBuy() {
+    const code = el('button', { className: 'ghost creditCode', textContent: account.code, title: t('copy') });
     code.onclick = () => navigator.clipboard?.writeText(account.code).then(() => { code.textContent = t('copied'); setTimeout(() => (code.textContent = account.code), 1200); });
-    const go = document.createElement('a'); go.className = 'primaryLink'; go.href = account.buy_url; go.target = '_blank'; go.rel = 'noopener'; go.textContent = t('top_up');
-    buy.append(text, code, go);
-    const list = document.createElement('div'); list.className = 'creditHistory';
-    const head = document.createElement('h3'); head.textContent = t('history');
-    list.append(head);
-    if (!account.history) list.append(Object.assign(document.createElement('p'), { className: 'note', textContent: t('loading') }));
-    else if (!account.history.length) list.append(Object.assign(document.createElement('p'), { className: 'note', textContent: t('none_yet') }));
+    const go = el('a', { className: 'primaryLink', href: account.buy_url, target: '_blank', rel: 'noopener', textContent: t('top_up') });
+    return el('div', { className: 'creditBuy' }, el('p', { textContent: t('credit_buy', { n: account.per_usd }) }), code, go);
+  }
+  function creditHistory() {
+    const list = el('div', { className: 'creditHistory' }, el('h3', { textContent: t('history') }));
+    const note = (text) => list.append(el('p', { className: 'note', textContent: text }));
+    if (!account.history) note(t('loading'));
+    else if (!account.history.length) note(t('none_yet'));
     else for (const h of account.history.slice(0, 30)) {
-      const row = document.createElement('div'); row.className = 'lineItem';
-      row.append(Object.assign(document.createElement('span'), { className: 'grow', textContent: `${TEXT[lang]['kind_' + h.kind] || h.kind} · ${String(h.at).slice(0, 16).replace('T', ' ')}` }), Object.assign(document.createElement('b'), { textContent: `${h.amount > 0 ? '+' : ''}${h.amount}` }));
-      list.append(row);
+      list.append(el('div', { className: 'lineItem' },
+        el('span', { className: 'grow', textContent: `${raw('kind_' + h.kind) || h.kind} · ${String(h.at).slice(0, 16).replace('T', ' ')}` }),
+        el('b', { textContent: `${h.amount > 0 ? '+' : ''}${h.amount}` })));
     }
-    const out = document.createElement('button'); out.className = 'ghost'; out.textContent = t('logout');
-    out.onclick = () => { $('dialog').close(); send('logout', {}); };
-    box.append(big, how, table, buy, list, out);
+    return list;
   }
   function creditDialog() {
-    openDialog(t('credits_title')); $('dialog').dataset.kind = 'credits';
-    const box = document.createElement('div'); box.className = 'creditBody'; $('dialog').append(box);
-    creditBody(); $('dialog').showModal();
+    openDialog(t('credits_title')); dlg.dataset.kind = 'credits';
+    dlg.append(el('div', { className: 'creditBody' }));
+    creditBody(); dlg.showModal();
     send('account', {});
   }
   function fillChoices(choices) {
@@ -394,7 +309,7 @@
     $('modelTools').hidden = !choices;
     if (!choices) return;
     const fill = (box, list, saved, fallback) => {
-      box.replaceChildren(...list.map((o) => Object.assign(document.createElement('option'), { value: o.id, textContent: o.label })));
+      box.replaceChildren(...list.map((o) => el('option', { value: o.id, textContent: o.label })));
       box.value = list.some((o) => o.id === saved) ? saved : fallback;
     };
     fill($('modelPick'), choices.models, db.model, choices.model);
@@ -405,7 +320,7 @@
     const running = job?.status === 'running';
     $('progress').hidden = !running;
     if (!running) return;
-    const stage = localStage || TEXT[lang]['stage_' + job.stage] || job.stage;
+    const stage = localStage || raw('stage_' + job.stage) || job.stage;
     $('progressText').textContent = job.auto ? t('round', { stage, i: job.iteration, n: job.limit }) : stage;
   }
 
@@ -419,13 +334,9 @@
     appendMsg({ kind, text, detail }); touched();
   }
   function appendMsg(m) {
-    const d = document.createElement('div');
-    d.className = 'msg ' + m.kind;
-    if (m.detail) {
-      const box = document.createElement('details'), head = document.createElement('summary'), body = document.createElement('div');
-      head.textContent = m.text; body.textContent = m.detail;
-      box.append(head, body); d.append(box);
-    } else d.textContent = m.text;
+    const d = el('div', { className: 'msg ' + m.kind });
+    if (m.detail) d.append(el('details', {}, el('summary', { textContent: m.text }), el('div', { textContent: m.detail })));
+    else d.textContent = m.text;
     $('log').append(d); $('log').scrollTop = 1e9;
   }
   function seedOf(p) {
@@ -449,15 +360,14 @@
   // Past covers stand on a shelf; one comes out at a time, and pulling it out twice puts it on the song.
   function artDialog() {
     const p = project(), list = [...(p.artHistory || [seedOf(p)])].reverse(), now = seedOf(p);
-    const make = (tag, cls) => { const e = document.createElement(tag); if (cls) e.className = cls; return e; };
-    const shelf = make('div', 'shelf'), rack = make('div', 'rack'), track = make('div', 'rackTrack'), plank = make('div', 'plank'), bar = make('div', 'shelfBar');
-    const label = make('span'), use = button(t('use_art'), () => { pickArt(p, list[at]); close(); });
+    const div = (className) => el('div', { className });
+    const shelf = div('shelf'), rack = div('rack'), track = div('rackTrack'), plank = div('plank'), bar = div('shelfBar');
+    const label = el('span'), use = button(t('use_art'), () => { pickArt(p, list[at]); close(); });
     use.className = 'primary'; use.id = 'shelfUse';
     shelf.setAttribute('role', 'dialog'); shelf.setAttribute('aria-modal', 'true'); shelf.setAttribute('aria-label', t('past_art'));
     let at = Math.max(0, list.indexOf(now));
     const slot = 36, side = 24, lps = list.map((seed, i) => {
-      const b = make('button', 'lp');
-      b.innerHTML = `<svg viewBox="0 0 100 100" aria-hidden="true">${albumArt.make(seed).svg}</svg>`;
+      const b = el('button', { className: 'lp', innerHTML: `<svg viewBox="0 0 100 100" aria-hidden="true">${albumArt.make(seed).svg}</svg>` });
       b.setAttribute('aria-label', t('art_n', { n: list.length - i }));
       b.style.animationDelay = `${Math.min(i, 24) * 28}ms`;
       b.onclick = () => { if (i === at) use.click(); else show(i); };
@@ -479,7 +389,7 @@
       else if (e.key === 'ArrowRight') { e.preventDefault(); show(at + 1); } else if (e.key === 'ArrowLeft') { e.preventDefault(); show(at - 1); }
     };
     let wheelAt = 0;
-    shelf.onwheel = (e) => { e.preventDefault(); const t = performance.now(); if (t - wheelAt > 90) { wheelAt = t; show(at + Math.sign(e.deltaY || e.deltaX)); } };
+    shelf.onwheel = (e) => { e.preventDefault(); const stamp = performance.now(); if (stamp - wheelAt > 90) { wheelAt = stamp; show(at + Math.sign(e.deltaY || e.deltaX)); } };
     shelf.onclick = (e) => { if (e.target === shelf) close(); };
     const shut = iconButton('close', t('close'), close); shut.classList.add('ghost', 'shelfClose');
     bar.append(label, use);
@@ -489,39 +399,38 @@
     show(at);
   }
   function renderPlay() { iconLabel($('play'), playing ? 'stop' : 'play', playing ? t('stop') : t('play')); }
+  function trackRow(p, tr) {
+    const s = mixOf(p, tr.id);
+    const row = el('div', { className: 'track' + (selected && selected !== tr.id ? ' locked' : '') });
+    row.style.setProperty('--tc', `var(--${ROLE[tr.role] ? tr.role : 'other'})`);
+    row.innerHTML = '<button class="pick"><span class="icon" aria-hidden="true"></span><span></span></button><div class="pattern"><canvas height="44"></canvas></div><button class="mute"></button><input type="range" min="0" max="1.5" step="0.01">';
+    const [pick, , mute, gain] = row.children;
+    pick.querySelector('.icon').textContent = ROLE[tr.role] || ROLE.other;
+    pick.lastChild.textContent = tr.name;
+    pick.title = `${tr.name} (${raw('role_' + tr.role) || raw('role_other')})`;
+    pick.setAttribute('aria-pressed', String(selected === tr.id));
+    pick.onclick = () => { selected = selected === tr.id ? null : tr.id; render(); };
+    iconLabel(mute, s.mute ? 'muted' : 'sound', t(s.mute ? 'unmute_x' : 'mute_x', { name: tr.name }));
+    mute.setAttribute('aria-pressed', String(s.mute));
+    mute.onclick = () => { p.mix[tr.id] = { ...s, mute: !s.mute }; pushMix(); touched(); render(); };
+    gain.value = s.gain; gain.setAttribute('aria-label', t('vol_x', { name: tr.name }));
+    gain.disabled = !!tr.raw; mute.disabled = !!tr.raw;
+    gain.oninput = () => { p.mix[tr.id] = { ...mixOf(p, tr.id), gain: +gain.value }; pushMix(); };
+    gain.onchange = touched;
+    row.dataset.track = tr.id;
+    return row;
+  }
+  const liveTracks = (p) => p.tracks.filter((tr) => !tr.raw);
   function renderTracks(p) {
-    const box = $('tracks'); box.textContent = '';
-    for (const t of p.tracks) {
-      const icon = ROLE[t.role] || ROLE.other, label = TEXT[lang]['role_' + t.role] || TEXT[lang].role_other;
-      const s = mixOf(p, t.id);
-      const row = document.createElement('div');
-      row.className = 'track' + (selected && selected !== t.id ? ' locked' : '');
-      row.style.setProperty('--tc', `var(--${ROLE[t.role] ? t.role : 'other'})`);
-      row.innerHTML = '<button class="pick"><span class="icon" aria-hidden="true"></span><span></span></button><div class="pattern"><canvas height="44"></canvas></div><button class="mute"></button><input type="range" min="0" max="1.5" step="0.01">';
-      const [pick, , mute, gain] = row.children;
-      pick.querySelector('.icon').textContent = icon;
-      pick.lastChild.textContent = t.name;
-      pick.title = `${t.name} (${label})`;
-      pick.setAttribute('aria-pressed', String(selected === t.id));
-      pick.onclick = () => { selected = selected === t.id ? null : t.id; render(); };
-      iconLabel(mute, s.mute ? 'muted' : 'sound', TEXT[lang][s.mute ? 'unmute_x' : 'mute_x'].replace('{name}', t.name));
-      mute.setAttribute('aria-pressed', String(s.mute));
-      mute.onclick = () => { p.mix[t.id] = { ...s, mute: !s.mute }; pushMix(); touched(); render(); };
-      gain.value = s.gain; gain.setAttribute('aria-label', TEXT[lang].vol_x.replace('{name}', t.name));
-      gain.disabled = !!t.raw; mute.disabled = !!t.raw;
-      gain.oninput = () => { p.mix[t.id] = { ...mixOf(p, t.id), gain: +gain.value }; pushMix(); };
-      gain.onchange = touched;
-      row.dataset.track = t.id;
-      box.append(row);
-    }
-    const live = p.tracks.filter((t) => !t.raw), allOff = live.length > 0 && live.every((t) => mixOf(p, t.id).mute);
+    $('tracks').replaceChildren(...p.tracks.map((tr) => trackRow(p, tr)));
+    const live = liveTracks(p), allOff = live.length > 0 && live.every((tr) => mixOf(p, tr.id).mute);
     iconLabel($('allMute'), allOff ? 'muted' : 'sound', allOff ? t('all_on') : t('all_off'));
     $('allMute').setAttribute('aria-pressed', String(allOff));
     $('allMute').disabled = !live.length;
   }
   $('allMute').onclick = () => {
-    const p = project(), live = p.tracks.filter((t) => !t.raw), off = !live.every((t) => mixOf(p, t.id).mute);
-    for (const t of live) p.mix[t.id] = { ...mixOf(p, t.id), mute: off };
+    const p = project(), live = liveTracks(p), off = !live.every((tr) => mixOf(p, tr.id).mute);
+    for (const tr of live) p.mix[tr.id] = { ...mixOf(p, tr.id), mute: off };
     pushMix(); touched(); render();
   };
   function render() {
@@ -604,12 +513,9 @@
   }
 
   /* ---------- dialogs ---------- */
-  const dlg = $('dialog');
-  function button(label, fn) { const b = document.createElement('button'); b.textContent = label; b.onclick = fn; return b; }
-  function row(text, ...actions) {
-    const r = document.createElement('div'); r.className = 'row';
-    const t = document.createElement('div'); t.className = 'grow'; t.textContent = text; r.append(t, ...actions); return r;
-  }
+  const button = (label, fn) => el('button', { textContent: label, onclick: fn });
+  const heading = (tag, text) => el(tag, { textContent: text });
+  const row = (text, ...actions) => el('div', { className: 'row' }, el('div', { className: 'grow', textContent: text }), ...actions);
   function iconButton(name, label, fn) { const b = button('', fn); b.className = 'iconBtn'; iconLabel(b, name, label); return b; }
   function openDialog(title) {
     dlg.textContent = ''; dlg.dataset.kind = '';
@@ -621,7 +527,6 @@
     const box = dlg.getBoundingClientRect();
     if (e.clientX < box.left || e.clientX > box.right || e.clientY < box.top || e.clientY > box.bottom) dlg.close();
   });
-  function heading(tag, text) { const h = document.createElement(tag); h.textContent = text; return h; }
   function saveFile(name, text) {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = name; a.click();
@@ -631,49 +536,50 @@
   // Plays a saved version without touching the project. Closing the dialog returns to what was playing.
   let audition = null;
   function endAudition() { if (audition) iconLabel(audition.button, 'play', t('listen')); audition = null; }
+  const resume = async (back) => { if (back) await play(); else { stop(); pushMix(); } };
   async function listenTo(v, b) {
-    if (audition?.id === v.id) { const back = audition.back; endAudition(); if (back) await play(); else { stop(); pushMix(); } return; }
+    if (audition?.id === v.id) { const back = audition.back; endAudition(); await resume(back); return; }
     const back = audition ? audition.back : playing;
     endAudition();
     await engines.live.whenReady;
     const p = project(); // an audition plays every track, whatever is muted in the mixer
-    postTo('live', { type: 'mix', mix: Object.fromEntries(v.tracks.map((t) => [t.id, mixOf(p, t.id).gain])) });
-    const r = await ask('live', { type: 'apply', code: compose(v, true) }, 'applied', 8000);
+    postTo('live', { type: 'mix', mix: Object.fromEntries(v.tracks.map((tr) => [tr.id, mixOf(p, tr.id).gain])) });
+    const r = await startLive(compose(v, true));
     if (!r.ok) { b.title = t('play_failed') + r.error; b.style.color = 'var(--err)'; return; }
-    if (!playing) startedAt = performance.now();
-    playing = true; renderPlay();
     iconLabel(b, 'stop', t('stop')); audition = { id: v.id, button: b, back };
   }
   dlg.addEventListener('close', () => {
     if (!audition) return;
     const back = audition.back; audition = null;
-    if (back) play(); else { stop(); pushMix(); }
+    resume(back);
   });
 
   function projectDialog() {
     const p = project(); openDialog(t('project'));
-    const name = document.createElement('input'); name.type = 'text'; name.value = p.name; name.setAttribute('aria-label', t('song_name'));
+    const name = el('input', { type: 'text', value: p.name });
+    name.setAttribute('aria-label', t('song_name'));
     name.oninput = () => { p.name = name.value.slice(0, 80) || t('untitled'); touched(); render(); };
     dlg.append(name);
-    for (const x of db.projects) if (x !== p) dlg.append(row(x.name, iconButton('folder', TEXT[lang].open_x.replace('{name}', x.name), () => switchTo(x.id))));
+    for (const x of db.projects) if (x !== p) dlg.append(row(x.name, iconButton('folder', t('open_x', { name: x.name }), () => switchTo(x.id))));
     dlg.append(row('', iconButton('plus', t('new_song'), () => { const n = newProject(t('new_song_name')); db.projects.push(n); switchTo(n.id); }),
       iconButton('upload', t('import_file'), importFile), iconButton('download', t('export_project'), () => saveFile(`${p.name}.ddalkkak.json`, JSON.stringify(p)))));
     dlg.append(heading('h3', t('prev_versions')));
-    for (const v of [...p.versions].reverse().slice(0, 30)) {
-      const b = iconButton('restore', t('restore'), async () => {
-        endAudition();
-        p.bpm = v.bpm; p.head = v.head || ''; p.tracks = v.tracks.map((t) => ({ ...t })); addVersion(p, t('restored', { s: v.summary }), 'user');
-        touched(); render(); dlg.close(); if (playing) await play();
-      });
-      if (v.id === p.versionId) b.disabled = true;
-      const hear = iconButton('play', t('listen'), () => listenTo(v, hear));
-      hear.disabled = job?.status === 'running'; // auto-improve captures the live output
-      dlg.append(row(`${new Date(v.at).toLocaleString(lang === 'ko' ? 'ko-KR' : 'en-US')} · ${v.summary}`, hear, b));
-    }
+    for (const v of [...p.versions].reverse().slice(0, 30)) dlg.append(versionRow(p, v));
     dlg.showModal();
   }
+  function versionRow(p, v) {
+    const back = iconButton('restore', t('restore'), async () => {
+      endAudition();
+      p.bpm = v.bpm; p.head = v.head || ''; p.tracks = v.tracks.map((tr) => ({ ...tr })); addVersion(p, t('restored', { s: v.summary }), 'user');
+      touched(); render(); dlg.close(); if (playing) await play();
+    });
+    back.disabled = v.id === p.versionId;
+    const hear = iconButton('play', t('listen'), () => listenTo(v, hear));
+    hear.disabled = job?.status === 'running'; // auto-improve captures the live output
+    return row(`${new Date(v.at).toLocaleString(i18n.lang === 'ko' ? 'ko-KR' : 'en-US')} · ${v.summary}`, hear, back);
+  }
   function importFile() {
-    const input = document.createElement('input'); input.type = 'file'; input.accept = '.json,.js,.txt,.strudel';
+    const input = el('input', { type: 'file', accept: '.json,.js,.txt,.strudel' });
     input.onchange = async () => {
       const text = await input.files[0].text();
       let n;
@@ -692,15 +598,16 @@
     input.click();
   }
   function settingsDialog() {
-    const p = project(); openDialog(t('settings'));
-    const scale = document.createElement('select'); scale.setAttribute('aria-label', t('font_size'));
+    openDialog(t('settings'));
+    const scale = el('select');
+    scale.setAttribute('aria-label', t('font_size'));
     for (const v of [100, 125, 150, 200]) scale.add(new Option(v + '%', v));
     scale.value = db.scale || 100;
     scale.onchange = () => { db.scale = +scale.value; applyScale(); touched(); };
     dlg.append(row(t('font_size'), scale));
     dlg.append(row(aiEnabled ? t('ai_on', { e: engineName }) : t('ai_off')));
     dlg.append(heading('h3', t('tips')));
-    for (const [what, how] of TEXT[lang].tip_list) { const r = row(''); r.textContent = ''; const b = document.createElement('b'); b.textContent = what; r.append(b, how); dlg.append(r); }
+    for (const [what, how] of raw('tip_list')) dlg.append(el('div', { className: 'row' }, el('b', { textContent: what }), how));
     dlg.append(heading('h3', t('misc')));
     dlg.append(row('', button(t('play_game'), () => { stop(); persist(); dlg.close(); send('game', {}); })));
     dlg.showModal();
@@ -711,7 +618,7 @@
 
   function loadScript(src) {
     return new Promise((resolve, reject) => {
-      const tag = document.createElement('script'); tag.src = src; tag.onload = resolve; tag.onerror = reject; document.head.append(tag);
+      document.head.append(el('script', { src, onload: resolve, onerror: reject }));
     });
   }
   function fillEditor() {
@@ -781,11 +688,11 @@
   function submit() {
     const text = $('ask').value.trim(); const p = project();
     if (!text || !aiEnabled || job?.status === 'running') return;
-    if (account && account.credits < MODEL_COST($('modelPick').value) + (account.prices.efforts[$('effortPick').value] ?? 0)) { say('error', t('low_credits')); creditDialog(); return; }
+    if (account && account.credits < callCost()) { say('error', t('low_credits')); creditDialog(); return; }
     const history = p.chat.filter((m) => ['user', 'reply', 'change', 'heard', 'measured'].includes(m.kind)).slice(-10)
       .map((m) => ({ role: m.kind === 'user' ? 'user' : 'assistant', text: m.detail ? m.text + ' ' + m.detail : m.text }));
     say('user', text); $('ask').value = '';
-    send('generate', { text, tracks: p.tracks, bpm: p.bpm, target: selected, auto: !!db.autoRounds, rounds: db.autoRounds || 0, model: $('modelPick').value, effort: $('effortPick').value, base_version: p.versionId, history, lang });
+    send('generate', { text, tracks: p.tracks, bpm: p.bpm, target: selected, auto: !!db.autoRounds, rounds: db.autoRounds || 0, model: $('modelPick').value, effort: $('effortPick').value, base_version: p.versionId, history, lang: i18n.lang });
   }
   $('askForm').onsubmit = (e) => { e.preventDefault(); submit(); };
   $('ask').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); } };
@@ -815,7 +722,7 @@
 
   let tab = 'tracks', lastTab = 'tracks', scoreShown = '';
   function showScore() {
-    const p = project(), song = { name: p.name, bpm: p.bpm, tracks: p.tracks.map((t) => ({ ...t })) };
+    const p = project(), song = { name: p.name, bpm: p.bpm, tracks: p.tracks.map((tr) => ({ ...tr })) };
     scoreShown = p.versionId;
     window.studioScore?.mount($('scorePanel'), {
       song, onError: (text) => say('error', text),
@@ -870,10 +777,10 @@
   let assetOpen = false, morphing = false;
   function barPieces() { // the coloured track bars become the flying pieces
     const out = [];
-    for (const row of $('tracks').children) {
-      const cv = row.querySelector('canvas'); if (!cv) continue;
+    for (const r of $('tracks').children) {
+      const cv = r.querySelector('canvas'); if (!cv) continue;
       const q = cv.getBoundingClientRect(); if (!q.width) continue;
-      const c = getComputedStyle(row).getPropertyValue('--tc'), n = 10, w = q.width / n;
+      const c = getComputedStyle(r).getPropertyValue('--tc'), n = 10, w = q.width / n;
       for (let i = 0; i < n; i++) out.push({ x: q.left + i * w, y: q.top + 8, w: w - 3, h: q.height - 16, c });
     }
     return out.length ? out : Array.from({ length: 24 }, (_, i) => ({ x: 40 + (i % 8) * 60, y: 300 + (i >> 3) * 40, w: 54, h: 30, c: '#C4C4C4' }));
@@ -886,7 +793,7 @@
   });
   async function morph(from, to, opening) {
     const box = $('morph'); box.textContent = ''; box.hidden = false;
-    const veil = document.createElement('div'); veil.className = 'veil'; box.append(veil);
+    const veil = el('div', { className: 'veil' }); box.append(veil);
     const count = Math.max(from.length, to.length), jobs = [];
     veil.animate([{ opacity: opening ? 0 : 1 }, { opacity: opening ? 1 : 0 }], { duration: 620, fill: 'both', easing: 'ease-in-out' });
     for (let i = 0; i < count; i++) {
@@ -904,28 +811,29 @@
     await Promise.all(jobs);
   }
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function openAssets(still) {
+    stop();
+    if (!frame.getAttribute('src')) { frame.src = `asset_studio/index.html?lang=${i18n.lang}`; await new Promise((r) => { frame.onload = r; }); }
+    frame.classList.add('waiting'); frame.hidden = false;
+    await wait(60);
+    const targets = await tileRects();
+    if (!still && targets.length) await morph(barPieces(), targets, true);
+    assetOpen = true; frame.classList.remove('waiting');
+    await wait(230);
+    frame.contentWindow.focus();
+  }
+  async function closeAssets(still) {
+    frame.contentWindow.postMessage({ type: 'asset:hide' }, '*');
+    const targets = await tileRects();
+    frame.classList.add('waiting');
+    assetOpen = false;
+    if (!still && targets.length) await morph(targets, barPieces(), false);
+    frame.hidden = true;
+  }
   async function showAssets(open) {
     if (morphing || open === assetOpen) return;
     morphing = true;
-    const still = calm.matches;
-    if (open) {
-      stop();
-      if (!frame.getAttribute('src')) { frame.src = `asset_studio/index.html?lang=${lang}`; await new Promise((r) => { frame.onload = r; }); }
-      frame.classList.add('waiting'); frame.hidden = false;
-      await wait(60);
-      const targets = await tileRects();
-      if (!still && targets.length) await morph(barPieces(), targets, true);
-      assetOpen = true; frame.classList.remove('waiting');
-      await wait(230);
-      frame.contentWindow.focus();
-    } else {
-      frame.contentWindow.postMessage({ type: 'asset:hide' }, '*');
-      const targets = await tileRects();
-      frame.classList.add('waiting');
-      assetOpen = false;
-      if (!still && targets.length) await morph(targets, barPieces(), false);
-      frame.hidden = true;
-    }
+    await (open ? openAssets : closeAssets)(calm.matches);
     $('morph').hidden = true; $('morph').textContent = '';
     morphing = false;
   }
@@ -936,13 +844,13 @@
 
   // Language follows Streamlit (args.lang); the header picker asks Streamlit to switch.
   function setLang(next) {
-    if (!pickLang(next) || next === lang) return;
-    lang = next;
+    if (!i18n.pick(next) || next === i18n.lang) return;
+    i18n.lang = next;
     applyStatic(); renderPlay(); render(); renderProgress(); showCredits();
     if (dlg.open) dlg.close();
     if (tab === 'score') showScore(); else scoreShown = '';
-    if (frame.getAttribute('src')) frame.contentWindow?.postMessage({ type: 'asset:lang', lang }, '*');
-    for (const mode of Object.keys(engines)) postTo(mode, { type: 'lang', lang });
+    if (frame.getAttribute('src')) frame.contentWindow?.postMessage({ type: 'asset:lang', lang: next }, '*');
+    for (const mode of Object.keys(engines)) postTo(mode, engineText('lang'));
   }
   // Until Streamlit echoes the new language back, older renders must not switch it back.
   $('langPick').onchange = (e) => { const next = e.target.value; pendingLang = next; setLang(next); send('lang', { lang: next }); };

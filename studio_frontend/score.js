@@ -12,30 +12,13 @@
   const FLATS = [['C', 0], ['D', -1], ['D', 0], ['E', -1], ['E', 0], ['F', 0], ['G', -1], ['G', 0], ['A', -1], ['A', 0], ['B', -1], ['B', 0]];
   const PROGRAMS = { bass: 33, pad: 89, melody: 80 };
 
-  const ko = () => window.studioLang?.() === 'ko';
-  const TEXT = {
-    en: {
-      perc_of: '{name} perc', untitled: 'Untitled', track: 'Track', bars: 'Bars', bars_n: '{n} bars', save: 'Save score', file_failed: "Couldn't make the file.",
-      range: 'Bars {a}–{b}', all_tracks: 'All tracks', empty_all: 'No notes in this part.', empty_track: 'This track has no notes in this part.',
-      moved: 'Notes off the sixteenth grid were moved to the nearest step.', legend: 'Percussion: {list}',
-      draw_failed: "Couldn't draw the score. Saving files still works.", reading: 'Reading the score...', make_failed: "Couldn't make the score. Check that the song plays.",
-    },
-    ko: {
-      perc_of: '{name} 타악', untitled: '제목 없음', track: '트랙', bars: '마디 수', bars_n: '{n}마디', save: '악보 저장', file_failed: '파일을 만들지 못했어.',
-      range: '{a}~{b}마디', all_tracks: '전체 트랙', empty_all: '이 구간에는 음이 없어.', empty_track: '이 트랙은 이 구간에 음이 없어.',
-      moved: '16분음표에 맞지 않는 음은 가장 가까운 칸으로 옮겨 적었어.', legend: '타악 표기: {list}',
-      draw_failed: '악보를 그리지 못했어. 파일 저장은 그대로 쓸 수 있어.', reading: '악보를 읽는 중...', make_failed: '악보를 만들지 못했어. 곡이 소리 나는 상태인지 확인해 줘.',
-    },
-  };
-  const txt = (key, vars = {}) => TEXT[ko() ? 'ko' : 'en'][key].replace(/\{(\w+)\}/g, (_, n) => vars[n] ?? '');
+  const txt = (key, vars) => window.studioI18n.t('score_' + key, vars);
   // gm is the General MIDI drum key; step/oct place it on the five-line percussion staff.
-  const drum = (key, names, gm, step, oct, head = 'normal') => ({ key, get label() { return names[ko() ? 1 : 0]; }, gm, step, oct, head });
+  const drum = (key, gm, step, oct, head = 'normal') => ({ key, get label() { return window.studioI18n.t('drum_' + key); }, gm, step, oct, head });
   const DRUMS = [
-    drum('bd', ['Kick', '킥'], 36, 'F', 4), drum('sd', ['Snare', '스네어'], 38, 'C', 5), drum('rim', ['Rimshot', '림샷'], 37, 'B', 4, 'x'),
-    drum('cp', ['Clap', '클랩'], 39, 'D', 5, 'x'), drum('hh', ['Hi-hat', '하이햇'], 42, 'G', 5, 'x'), drum('oh', ['Open hi-hat', '오픈 하이햇'], 46, 'A', 5, 'x'),
-    drum('cr', ['Crash', '크래시'], 49, 'B', 5, 'x'), drum('rd', ['Ride', '라이드'], 51, 'F', 5, 'x'), drum('ht', ['High tom', '하이 탐'], 50, 'E', 5),
-    drum('mt', ['Mid tom', '미드 탐'], 47, 'B', 4), drum('lt', ['Low tom', '로우 탐'], 45, 'A', 4), drum('cb', ['Cowbell', '카우벨'], 56, 'E', 5, 'x'),
-    drum('sh', ['Shaker', '셰이커'], 70, 'E', 4, 'x'), drum('tb', ['Tambourine', '탬버린'], 54, 'D', 4, 'x'), drum('perc', ['Percussion', '타악기'], 76, 'G', 4, 'x'),
+    drum('bd', 36, 'F', 4), drum('sd', 38, 'C', 5), drum('rim', 37, 'B', 4, 'x'), drum('cp', 39, 'D', 5, 'x'), drum('hh', 42, 'G', 5, 'x'),
+    drum('oh', 46, 'A', 5, 'x'), drum('cr', 49, 'B', 5, 'x'), drum('rd', 51, 'F', 5, 'x'), drum('ht', 50, 'E', 5), drum('mt', 47, 'B', 4),
+    drum('lt', 45, 'A', 4), drum('cb', 56, 'E', 5, 'x'), drum('sh', 70, 'E', 4, 'x'), drum('tb', 54, 'D', 4, 'x'), drum('perc', 76, 'G', 4, 'x'),
   ];
   const DRUM_WORDS = [
     [/kick|bass ?drum/, 'bd'], [/snare/, 'sd'], [/clap/, 'cp'], [/open.*hat/, 'oh'], [/hat/, 'hh'],
@@ -326,14 +309,6 @@
     });
     return abcjsLoad;
   }
-  function ensureCss() {
-    if (document.querySelector('link[data-score-css]')) return;
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = asset('score.css');
-    link.dataset.scoreCss = '1';
-    document.head.append(link);
-  }
 
   function save(name, type, data) {
     const url = URL.createObjectURL(new Blob([data], { type }));
@@ -361,8 +336,32 @@
     ['ABC', 'abc', 'text/vnd.abc', toAbc],
   ];
 
+  // The save button and its format menu. The page-wide listeners drop themselves once the mount is replaced.
+  function saveMenu(stale, onPick) {
+    const button = element('button', { type: 'button', className: 'iconBtn', innerHTML: SAVE_ICON, ariaLabel: txt('save'), title: txt('save'), disabled: true });
+    button.setAttribute('aria-haspopup', 'menu');
+    button.setAttribute('aria-expanded', 'false');
+    const menu = element('div', { className: 'score-menu', role: 'menu', hidden: true });
+    const close = () => { menu.hidden = true; button.setAttribute('aria-expanded', 'false'); };
+    button.onclick = (e) => {
+      e.stopPropagation();
+      menu.hidden = !menu.hidden; button.setAttribute('aria-expanded', String(!menu.hidden));
+      if (!menu.hidden) menu.firstChild.focus();
+    };
+    for (const [label, ext, type, make] of FORMATS) {
+      menu.append(element('button', { type: 'button', role: 'menuitem', onclick: () => { close(); onPick(ext, type, make); } },
+        element('span', { textContent: label }), element('small', { textContent: `.${ext}` })));
+    }
+    const dismiss = (e) => {
+      if (stale()) { removeEventListener('pointerdown', dismiss); removeEventListener('keydown', escape); return; }
+      if (!menu.hidden && !menu.contains(e.target) && !button.contains(e.target)) close();
+    };
+    const escape = (e) => { if (e.key === 'Escape' && !menu.hidden) { close(); button.focus(); } };
+    addEventListener('pointerdown', dismiss); addEventListener('keydown', escape);
+    return { button, menu, close };
+  }
+
   function mount(host, { song, query, onError, position }) {
-    ensureCss();
     const view = mounts.get(host)?.view ?? { track: 'all', cycles: 4 };
     const run = { view };
     mounts.set(host, run);
@@ -377,19 +376,8 @@
     const note = element('p', { className: 'score-note', role: 'status' });
     const paper = element('div', { className: 'score-paper', hidden: true });
     const legend = element('p', { className: 'score-legend', hidden: true });
-    const saveBtn = element('button', { type: 'button', className: 'iconBtn', innerHTML: SAVE_ICON, ariaLabel: txt('save'), title: txt('save'), disabled: true });
-    saveBtn.setAttribute('aria-haspopup', 'menu');
-    saveBtn.setAttribute('aria-expanded', 'false');
-    const menu = element('div', { className: 'score-menu', role: 'menu', hidden: true });
-    const closeMenu = () => { menu.hidden = true; saveBtn.setAttribute('aria-expanded', 'false'); };
-    saveBtn.onclick = (e) => {
-      e.stopPropagation();
-      menu.hidden = !menu.hidden; saveBtn.setAttribute('aria-expanded', String(!menu.hidden));
-      if (!menu.hidden) menu.firstChild.focus();
-    };
     // A file always starts at bar 1, wherever playback has turned the page to.
     async function saveAs(ext, type, make) {
-      closeMenu();
       if (!score) return;
       let made = score;
       if (from) {
@@ -399,21 +387,11 @@
       }
       save(`${fileName(made.title)}.${ext}`, type, make(made));
     }
-    for (const [label, ext, type, make] of FORMATS) {
-      const item = element('button', { type: 'button', role: 'menuitem', onclick: () => saveAs(ext, type, make) },
-        element('span', { textContent: label }), element('small', { textContent: `.${ext}` }));
-      menu.append(item);
-    }
-    const dismiss = (e) => {
-      if (stale()) { removeEventListener('pointerdown', dismiss); removeEventListener('keydown', escape); return; }
-      if (!menu.hidden && !menu.contains(e.target) && !saveBtn.contains(e.target)) closeMenu();
-    };
-    const escape = (e) => { if (e.key === 'Escape' && !menu.hidden) { closeMenu(); saveBtn.focus(); } };
-    addEventListener('pointerdown', dismiss); addEventListener('keydown', escape);
+    const saving = saveMenu(stale, saveAs), saveBtn = saving.button;
 
     host.replaceChildren(element('div', { className: 'score' },
       element('div', { className: 'score-bar' }, trackBox, barBox, range, element('span', { className: 'score-gap' }),
-        element('div', { className: 'score-save' }, saveBtn, menu)),
+        element('div', { className: 'score-save' }, saveBtn, saving.menu)),
       note, paper, legend));
 
     const say = (text) => { note.textContent = text; };
@@ -422,7 +400,7 @@
     const blank = () => {
       score = null; drawn = ''; beats = []; cursor = null; lit = -1;
       paper.hidden = legend.hidden = true; paper.replaceChildren();
-      saveBtn.disabled = true; closeMenu();
+      saveBtn.disabled = true; saving.close();
     };
     function fillTracks() {
       const extra = Object.keys(reply ?? {}).filter((id) => !song.tracks.some((t) => t.id === id));

@@ -8,7 +8,7 @@
     constructor(o = {}) { super({ ...o, sampleRate: 48000 }); }
   };
   let tap, analyser, volume, recorder, repl, playing = false, volumeValue = 0.8;
-  let lastCycle = null, capture = null, evalError = null;
+  let lastCycle = null, evalError = null, noPatternText = 'No pattern was produced';
   globalThis.__mix = {};
 
   const connect = AudioNode.prototype.connect;
@@ -51,9 +51,6 @@
     const total = Math.round(seconds * ctx.sampleRate);
     const left = new Float32Array(total), right = new Float32Array(total);
     let n = 0;
-    const startCycle = repl.scheduler.now();
-    const startTime = ctx.currentTime;
-    capture = { id };
     node.port.onmessage = (e) => {
       const frames = e.data ? e.data[0].length : 128;
       const count = Math.min(frames, total - n);
@@ -61,18 +58,18 @@
       n += count;
       if (n >= total) {
         node.port.postMessage('stop'); node.port.onmessage = null; node.disconnect?.(); tap.disconnect(node);
-        capture = null;
-        const pcm = new Int16Array(total * 2);
-        let peak = 0;
-        for (let i = 0; i < total; i++) {
-          const a = Math.max(-1, Math.min(1, left[i])), b = Math.max(-1, Math.min(1, right[i]));
-          peak = Math.max(peak, Math.abs(a), Math.abs(b));
-          pcm[i * 2] = a * 32767; pcm[i * 2 + 1] = b * 32767;
-        }
-        post({ type: 'captured', id, pcm: pcm.buffer, sampleRate: ctx.sampleRate, peak, startCycle, endCycle: repl.scheduler.now(), startTime, seconds });
+        post({ type: 'captured', id, pcm: interleave(left, right), sampleRate: ctx.sampleRate });
       }
     };
     connect.call(tap, node);
+  }
+  function interleave(left, right) {
+    const pcm = new Int16Array(left.length * 2);
+    for (let i = 0; i < left.length; i++) {
+      pcm[i * 2] = Math.max(-1, Math.min(1, left[i])) * 32767;
+      pcm[i * 2 + 1] = Math.max(-1, Math.min(1, right[i])) * 32767;
+    }
+    return pcm.buffer;
   }
 
   function pitchOf(value) {
@@ -104,7 +101,7 @@
         (tracks[t] ||= []).push([Number(h.whole.begin) - cycle, Number(h.whole.end) - cycle, pitchOf(h.value), h.value.gain ?? 1, h.value.s || '']);
       }
       post({ type: 'events', cycle, tracks });
-    } catch (e) { post({ type: 'runtime-error', message: String(e.message || e) }); }
+    } catch (e) { post({ type: 'runtime-error', message: errorText(e) }); }
   }
 
   setInterval(() => {
@@ -133,30 +130,33 @@
     post({ type: 'ready', samplesOk, sounds });
   }
 
+  const errorText = (e) => String(e.message || e);
+  // Evaluates without playing; Strudel reports some errors through onEvalError instead of throwing.
+  async function patternOf(code) {
+    evalError = null;
+    const pat = await repl.evaluate(code, false);
+    if (evalError) throw new Error(evalError);
+    if (!pat || !pat.queryArc) throw new Error(noPatternText);
+    return pat;
+  }
+  // A numeric n is a sample index or harmonic count, never a pitch; only a note name in n is one.
+  function midiOf(v) {
+    const raw = v.note ?? (typeof v.n === 'string' ? v.n : undefined);
+    if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
+    if (typeof raw === 'string') { try { return strudel.noteToMidi(raw); } catch { return null; } }
+    return typeof v.freq === 'number' && v.freq > 0 ? 69 + 12 * Math.log2(v.freq / 440) : null;
+  }
+
   const handlers = {
     async probe({ id, code }) {
-      evalError = null;
       try {
-        const pat = await repl.evaluate(code, false);
-        if (evalError) throw new Error(evalError);
-        if (!pat || !pat.queryArc) throw new Error(noPattern());
-        const haps = pat.queryArc(0, 4);
-        post({ type: 'probed', id, ok: true, events: haps.length });
-      } catch (e) { post({ type: 'probed', id, ok: false, error: String(e.message || e) }); }
+        const pat = await patternOf(code);
+        post({ type: 'probed', id, ok: true, events: pat.queryArc(0, 4).length });
+      } catch (e) { post({ type: 'probed', id, ok: false, error: errorText(e) }); }
     },
     async score({ id, code, cycles, from = 0 }) {
-      evalError = null;
-      // A numeric n is a sample index or harmonic count, never a pitch; only a note name in n is one.
-      const midiOf = (v) => {
-        const raw = v.note ?? (typeof v.n === 'string' ? v.n : undefined);
-        if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
-        if (typeof raw === 'string') { try { return strudel.noteToMidi(raw); } catch { return null; } }
-        return typeof v.freq === 'number' && v.freq > 0 ? 69 + 12 * Math.log2(v.freq / 440) : null;
-      };
       try {
-        const pat = await repl.evaluate(code, false);
-        if (evalError) throw new Error(evalError);
-        if (!pat || !pat.queryArc) throw new Error(noPattern());
+        const pat = await patternOf(code);
         const tracks = {};
         for (const h of pat.queryArc(from, from + cycles)) {
           // Long notes come back once per cycle with the same whole; hasOnset keeps only the first piece.
@@ -169,7 +169,7 @@
           });
         }
         post({ type: 'scored', id, ok: true, tracks });
-      } catch (e) { post({ type: 'scored', id, ok: false, error: String(e.message || e) }); }
+      } catch (e) { post({ type: 'scored', id, ok: false, error: errorText(e) }); }
     },
     async apply({ id, code }) {
       evalError = null;
@@ -178,27 +178,24 @@
         if (evalError) throw new Error(evalError);
         await strudel.getAudioContext().resume();
         playing = true; lastCycle = null;
-        post({ type: 'applied', id, ok: true, state: strudel.getAudioContext().state });
-      } catch (e) { post({ type: 'applied', id, ok: false, error: String(e.message || e) }); }
+        post({ type: 'applied', id, ok: true });
+      } catch (e) { post({ type: 'applied', id, ok: false, error: errorText(e) }); }
     },
-    stop() { repl.stop(); playing = false; post({ type: 'stopped' }); },
+    stop() { repl.stop(); playing = false; },
     mix({ mix }) { globalThis.__mix = mix; },
     volume({ value }) { volumeValue = value; if (volume) volume.gain.setTargetAtTime(value, volume.context.currentTime, 0.01); },
-    capture({ id, seconds }) { return startCapture(id, seconds).catch((e) => post({ type: 'captured', id, error: String(e.message || e) })); },
-    ping({ id }) { post({ type: 'pong', id }); },
+    capture({ id, seconds }) { return startCapture(id, seconds).catch((e) => post({ type: 'captured', id, error: errorText(e) })); },
   };
 
-  let lang = 'en';
-  const noPattern = () => (lang === 'ko' ? '패턴이 만들어지지 않았어' : 'No pattern was produced');
   addEventListener('message', async (e) => {
     if (e.source !== parent) return;
     const m = e.data;
-    if (m.lang === 'en' || m.lang === 'ko') lang = m.lang;
+    if (m.noPattern) noPatternText = m.noPattern;
     if (m.type === 'lang') return;
     if (m.type === 'boot') {
       const s = document.createElement('script');
       s.src = URL.createObjectURL(new Blob([m.strudel], { type: 'text/javascript' }));
-      s.onload = () => boot(m.samples).catch((err) => post({ type: 'boot-error', message: String(err.message || err) }));
+      s.onload = () => boot(m.samples).catch((err) => post({ type: 'boot-error', message: errorText(err) }));
       s.onerror = () => post({ type: 'boot-error', message: 'strudel load failed' });
       document.head.append(s);
       return;

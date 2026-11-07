@@ -20,13 +20,14 @@
       out[start + i] += osc(l.wave, phase) * l.gain * (1 - p) ** 1.6 * Math.min(1, i / 40);
     }
   }
+  // Seeded white noise in [-1, 1), so a re-render of the same asset is the same sound.
+  const whiteFrom = (seed) => { let random = seed; return () => { random = (random * 16807) % 2147483647; return random / 1073741824 - 1; }; };
   function noise(out, l, stretch, seed) {
-    let random = seed, low = 0;
+    const next = whiteFrom(seed);
+    let low = 0;
     const start = Math.floor(l.at * RATE), n = Math.floor(l.len * stretch * RATE), rise = Math.max(1, l.attack * RATE);
     for (let i = 0; i < n && start + i < out.length; i++) {
-      random = (random * 16807) % 2147483647;
-      const white = random / 1073741824 - 1;
-      low += (white - low) * l.cutoff;
+      low += (next() - low) * l.cutoff;
       const env = Math.min(1, i / rise) * (1 - i / n) ** (l.len > 1 ? 0.5 : 1.6);
       out[start + i] += low * l.gain * env * (1 + (1 - l.cutoff));
     }
@@ -34,8 +35,8 @@
   // Ambience never fades: it runs for the whole buffer, and render() folds the overrun back onto the head.
   function bed(out, l, shift, stretch, seed) {
     const period = l.len * stretch * RATE, cutoff = Math.min(0.98, l.cutoff * shift);
-    let random = seed, low = 0;
-    const next = () => { random = (random * 16807) % 2147483647; return random / 1073741824 - 1; };
+    const next = whiteFrom(seed);
+    let low = 0;
     for (let i = 0; i < 2000; i++) low += (next() - low) * cutoff;
     for (let i = 0; i < out.length; i++) {
       low += (next() - low) * cutoff;

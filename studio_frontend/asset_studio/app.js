@@ -613,7 +613,7 @@ ${p.form}`,
   $('rejectAll').onclick = () => { assets.filter((a) => a.status === 'review').forEach((a) => settle(a, false)); };
 
   /* ---------- detail ---------- */
-  let stemState = {}, liveRaf = 0;
+  let stemState = {};
   const stemLevel = (name) => {
     const list = Object.values(stemState), anySolo = list.some((s) => s.solo), s = stemState[name] || { gain: 1 };
     return s.mute || (anySolo && !s.solo) ? 0 : s.gain;
@@ -724,7 +724,7 @@ ${p.form}`,
         body.append(row);
       });
     } else {
-      LICENSES.forEach((l) => { const row = el('div', 'lineItem'); row.append(el('span', 'grow', `${l.name} · ${tx(l.use)}`), el('span', 'tag', l.license)); body.append(row); });
+      body.append(...licenseRows());
       const copy = el('button', '', t('copyLicenses')); copy.onclick = copyLicenses; body.append(copy);
     }
     const dock = el('form', 'detailDock'), input = el('input'); input.placeholder = t('askThis'); input.setAttribute('aria-label', t('askThis'));
@@ -735,7 +735,7 @@ ${p.form}`,
     return side;
   }
   function liveLoop() {
-    liveRaf = requestAnimationFrame(liveLoop);
+    requestAnimationFrame(liveLoop);
     if (player) {
       const a = player.asset, t = tileOf(a), p = position() / player.length;
       let head = t?.querySelector('.ph');
@@ -787,6 +787,7 @@ ${p.form}`,
   }
   const licenseText = () => `${t('licenseTitle', tx(GAME))}\n\n` + LICENSES.map((l) => `${l.name}\n  ${t('use')}: ${tx(l.use)}\n  ${t('license')}: ${l.license}\n  ${t('holder')}: ${l.holder}`).join('\n\n') + '\n';
   const copyLicenses = () => copy(licenseText(), t('copiedLicenses'));
+  const licenseRows = () => LICENSES.map((l) => { const r = el('div', 'lineItem'); r.append(el('span', 'grow', `${l.name} · ${tx(l.use)}`), el('span', 'tag', l.license)); return r; });
 
   const specExample = () => {
     const ex = t('example'), ids = [['sfx_ui_click', 'ui', 0.1, false], ['sfx_combat_parry', 'combat', 0.3, false], ['bgm_garden', 'bgm', 60, true]];
@@ -861,7 +862,7 @@ ${p.form}`,
     dlg.append(el('h3', '', t('inBundle')));
     for (const item of t('bundleItems')) dlg.append(Object.assign(el('div', 'lineItem'), { textContent: item }));
     dlg.append(el('h3', '', t('licenses')));
-    LICENSES.forEach((l) => { const r = el('div', 'lineItem'); r.append(el('span', 'grow', `${l.name} · ${tx(l.use)}`), el('span', 'tag', l.license)); dlg.append(r); });
+    dlg.append(...licenseRows());
     const row = el('div', 'dlgRow'), go = el('button', 'primary', t('exportBundle')), lic = el('button', '', t('copyLicenses'));
     go.id = 'exportGo'; go.onclick = () => { dlg.close(); stage = 'export'; renderHeader(); toast(t('shellOnly')); };
     lic.onclick = copyLicenses; row.append(lic, go); dlg.append(row);
@@ -912,5 +913,4 @@ ${p.form}`,
   let seen = false;
   try { seen = !!localStorage.getItem('asset-tutorial-seen'); localStorage.setItem('asset-tutorial-seen', '1'); } catch { /* shows again next time */ }
   if (!seen) tutorial();
-  window.assetStudio = { assets, selected, issues, position: () => position() };
 })();

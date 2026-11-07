@@ -65,11 +65,11 @@ try:
         frame.locator("#play").wait_for(timeout=30000)
         inner = next(f for f in page.frames if "studio_frontend" in f.url or "component" in f.url)
         inner.wait_for_function("document.querySelectorAll('iframe[sandbox]').length===2", timeout=20000)
-        boots = inner.evaluate("window.__marker=1")
+        inner.evaluate("window.__marker=1")
         time.sleep(4)
         frame.locator("#play").click()
         inner.wait_for_function("document.getElementById('clock').textContent!=='00:00'", timeout=15000)
-        spin = "document.querySelector('#art [data-spin],#art [data-flow],#art [data-pulse]').getAttribute('transform')"
+        spin = "document.querySelector('#art [data-spin],#art [data-pulse]').getAttribute('transform')"
         first = inner.evaluate(spin); time.sleep(0.5); art_moves = bool(first) and inner.evaluate(spin) != first
         frame.locator('.track button.pick').nth(1).click()
         frame.locator("#autoRounds").fill("3")
@@ -84,7 +84,6 @@ try:
         frame.locator("#tabCode").click()
         inner.wait_for_selector("#codeHost .cm-content", timeout=15000)
         code_visible = frame.locator("#codeHost .cm-content").is_visible() and not frame.locator("#tracks").is_visible()
-        put = "t=>document.querySelector('#codeHost .cm-content').cmView?.view"
         def set_code(text):
             frame.locator("#codeHost .cm-content").click()
             page.keyboard.press("Control+a"); page.keyboard.press("Delete")
@@ -142,7 +141,7 @@ try:
         history_count = frame.locator(".shelf .lp").count()
         page.keyboard.press("Escape")
         time.sleep(.2)
-        outside_closed = frame.locator(".shelf").count() == 0
+        shelf_closed = frame.locator(".shelf").count() == 0
         frame.locator("#bpmUp").click(); frame.locator("#bpmUp").click()
         time.sleep(1.2)
         bpm_step = inner.evaluate("(() => { const p = JSON.parse(localStorage.getItem('strudel-ddalkkak-v1')).projects[0]; return [p.bpm, p.versions[p.versions.length-1].summary]; })()")
@@ -178,7 +177,7 @@ try:
         "all tracks toggle": all_off and all_on,
         "cover click changes art": art_clicked,
         "cover long press shows history": history_count >= 2,
-        "backdrop click closes dialog": outside_closed,
+        "escape closes cover shelf": shelf_closed,
         "bpm steps by ten as one version": bpm_step[1] == f"BPM {bpm_step[0]}",
     }
     print(calls, errors[:3])

@@ -31,8 +31,6 @@ button.primary:disabled { background:var(--raised); color:var(--disabled); }
 .iconBtn { width:44px; padding:0; display:inline-grid; place-items:center; }
 .ico { width:20px; height:20px; display:block; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 .spacer { flex:1; }
-.badge { display:inline-block; min-width:20px; padding:0 6px; border-radius:14px; background:var(--err); color:#111; font-size:.75rem; line-height:20px; text-align:center; }
-.badge.warn { background:var(--warn); }
 
 #app { height:100vh; display:grid; grid-template-rows:auto minmax(0,1fr) auto; }
 header { display:flex; align-items:center; gap:8px; padding:12px; border-bottom:1px solid var(--divider); }
@@ -64,7 +62,7 @@ header .iconBtn { width:48px; position:relative; }
 .group h2 span { color:var(--text3); font-weight:400; font-size:.85rem; }
 .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; }
 
-.tile { position:relative; background:var(--surface); border-radius:14px; padding:0; min-height:0; height:112px; display:block; overflow:hidden; text-align:left; font-weight:500; cursor:pointer; outline-offset:2px; transition:background .15s, transform .15s; }
+.tile { position:relative; background:var(--surface); border-radius:14px; padding:0; min-height:0; height:112px; display:block; overflow:hidden; text-align:left; font-weight:500; cursor:pointer; outline-offset:2px; touch-action:manipulation; -webkit-touch-callout:none; transition:scale .45s ease-in; }
 .tile.wide { grid-column:span 2; }
 .tile:hover { background:var(--raised); }
 .tile:active { transform:none; }
@@ -80,7 +78,6 @@ header .iconBtn { width:48px; position:relative; }
 .tile.selected { box-shadow:inset 0 0 0 2px var(--text); background:var(--raised); }
 .tile.playing { box-shadow:inset 0 0 0 2px var(--c); }
 .tile.selected.playing { box-shadow:inset 0 0 0 2px var(--text); }
-.tile { touch-action:manipulation; -webkit-touch-callout:none; transition:scale .45s ease-in; }
 .tile.pressing { scale:.96; }
 .group h2 button { min-height:28px; padding:0 8px; font-size:.75rem; font-weight:500; color:var(--text3); margin-left:4px; }
 .tile[data-status="pending"] { background:none; box-shadow:inset 0 0 0 1px var(--divider); cursor:default; color:var(--text3); }
@@ -88,12 +85,10 @@ header .iconBtn { width:48px; position:relative; }
 .tile.arrive { animation:arrive .4s both; }
 @keyframes arrive { from { opacity:0; transform:scale(.9); } }
 .tile .bar { position:absolute; left:0; right:0; top:0; height:62px; background:rgba(138,180,248,.16); transform-origin:left; transform:scaleX(var(--p,0)); transition:transform .25s linear; }
-.tile .ab { position:absolute; left:6px; top:6px; right:6px; display:flex; gap:4px; }
-.tile .ab { align-items:center; }
+.tile .ab { position:absolute; left:6px; top:6px; right:6px; display:flex; align-items:center; gap:4px; }
 .tile .ab button { min-height:28px; padding:0 7px; font-size:.75rem; background:rgba(0,0,0,.72); border-radius:8px; white-space:nowrap; }
 .tile .ab button.keep, .tile .ab button.drop { width:28px; padding:0; display:grid; place-items:center; flex:none; }
 .tile .ab .ico { width:16px; height:16px; }
-.tile[data-status="review"] .lintMark { display:none; }
 .tile .ab button[aria-pressed="true"] { background:var(--text); color:#111; }
 .tile .ab button.keep { margin-left:auto; color:var(--ok); }
 .tile .ab button.drop { color:var(--err); }
@@ -130,7 +125,6 @@ header .iconBtn { width:48px; position:relative; }
 .stem canvas { width:100%; height:44px; display:block; background:rgba(255,255,255,.03); border-radius:8px; }
 .stem button[aria-pressed="true"].mute { color:var(--err); }
 .stem button[aria-pressed="true"].solo { background:var(--text); color:#111; }
-.stem button.solo { width:44px; padding:0; display:inline-grid; place-items:center; }
 .stem input[type=range] { width:100%; accent-color:var(--text); }
 
 .dSide { background:var(--surface); display:flex; flex-direction:column; min-height:0; border-left:1px solid var(--divider); }
@@ -142,13 +136,6 @@ header .iconBtn { width:48px; position:relative; }
 .msg.me { align-self:flex-end; max-width:90%; }
 .msg.ai { background:none; color:var(--text2); padding-left:0; }
 pre.code { margin:0; padding:10px; border-radius:11px; background:#111; font:400 .8rem/1.6 ui-monospace,Consolas,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
-.rule { display:flex; gap:8px; align-items:flex-start; padding:6px 0; border-top:1px solid var(--divider); font-size:.88rem; }
-.rule:first-child { border-top:0; }
-.rule i { width:10px; height:10px; border-radius:50%; corner-shape:round; margin-top:6px; flex:none; background:var(--ok); }
-.rule.error i { background:var(--err); }
-.rule.warn i { background:var(--warn); }
-.rule b { font-weight:600; display:block; }
-.rule small { color:var(--text3); }
 .detailDock { display:flex; gap:8px; padding:8px 12px; border-top:1px solid var(--divider); flex:none; }
 .detailDock input { flex:1; min-width:0; height:44px; background:var(--raised); border:0; border-radius:11px; padding:0 10px; }
 .draftPick { display:inline-flex; align-items:center; gap:6px; flex:none; color:var(--text2); font-size:.82rem; }
