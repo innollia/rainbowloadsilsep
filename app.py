@@ -8,7 +8,7 @@ import runpy
 import streamlit as st
 import streamlit.components.v1 as components
 
-from studio_backend import AgyCli, Claude, Gemini, Jobs, validate_request
+from studio_backend import AgyCli, Jobs, Router, validate_request
 
 st.set_page_config(page_title="strudel 딸깍이", page_icon="◉", layout="wide", initial_sidebar_state="collapsed")
 
@@ -40,22 +40,18 @@ def choose_model():
     def secret(*names):
         return next((value for name in names if (value := setting(name) or pool.get(name, ""))), "")
 
-    def gemini():
-        key = secret("SCHOOL_GEMINI_API_KEY", "GEMINI_API_KEY")
-        return Gemini(key, setting("GEMINI_MODEL"), setting("GEMINI_BASE_URL")) if key else None
-
-    def claude():
-        key = secret("ANTHROPIC_API_KEY")
-        return Claude(key, setting("CLAUDE_MODEL")) if key else None
-
+    gemini_key = secret("SCHOOL_GEMINI_API_KEY", "GEMINI_API_KEY")
+    claude_key = secret("ANTHROPIC_API_KEY")
     provider = setting("AI_PROVIDER").strip().lower()
     if setting("STRUDEL_ENGINE") == "agy":
         return AgyCli()
     if provider == "gemini":
-        return gemini()
+        claude_key = ""
     if provider == "claude":
-        return claude()
-    return gemini() or claude() or (AgyCli() if setting("STRUDEL_LOCAL_AI") == "1" else None)
+        gemini_key = ""
+    if gemini_key or claude_key:
+        return Router(gemini_key, claude_key, setting("GEMINI_MODEL"), setting("GEMINI_BASE_URL"), setting("CLAUDE_MODEL"), provider)
+    return AgyCli() if setting("STRUDEL_LOCAL_AI") == "1" else None
 
 
 @st.cache_resource
@@ -106,7 +102,8 @@ ai_ready = jobs().model is not None and (bool(password) or setting("STRUDEL_LOCA
 @st.fragment(run_every=1)
 def render():
     manager = jobs()
-    result = studio(ai_enabled=ai_ready, engine=manager.model.name if manager.model else "", job=manager.snapshot(owner),
+    choices = manager.model.choices() if hasattr(manager.model, "choices") else None
+    result = studio(ai_enabled=ai_ready, engine=manager.model.name if manager.model else "", choices=choices, job=manager.snapshot(owner),
                     server_error=st.session_state.get("studio_error", ""), key="studio", default=None)
     if not isinstance(result, dict):
         return

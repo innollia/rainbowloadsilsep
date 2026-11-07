@@ -24,6 +24,19 @@ import uuid
 
 DEFAULT_MODEL = "gemini-3.8-flash"
 DEFAULT_CLAUDE_MODEL = "claude-sonnet-5-5"
+# What a browser may ask for. Anything else is ignored, so a request can never name a model the owner did not offer.
+MODEL_CHOICES = (
+    {"id": "claude-haiku-5-5", "label": "Haiku 5.5", "provider": "claude"},
+    {"id": "claude-sonnet-5-5", "label": "Sonnet 5.5", "provider": "claude"},
+    {"id": "claude-opus-5-5", "label": "Opus 5.5", "provider": "claude"},
+    {"id": "gemini-3.8-flash", "label": "Gemini 3.8 Flash", "provider": "gemini"},
+)
+EFFORT_CHOICES = (
+    {"id": "low", "label": "빠르게"},
+    {"id": "medium", "label": "보통"},
+    {"id": "high", "label": "깊게"},
+)
+DEFAULT_EFFORT = "medium"
 MAX_ROUNDS = 5         # most extra fixes the slider can ask for
 DEFAULT_ROUNDS = 2     # an automatic request that names no count
 GOOD_SCORE = 85        # at or above this a round is good enough to stop
@@ -117,16 +130,20 @@ class Gemini:
     name = "Gemini"
     hears = True
 
-    def __init__(self, key: str, model: str = "", base_url: str = ""):
+    def __init__(self, key: str, model: str = "", base_url: str = "", effort: str = ""):
         self.key = key
         self.model = model or DEFAULT_MODEL
+        self.effort = effort
         self.base_url = (base_url or "https://generativelanguage.googleapis.com").rstrip("/")
 
     def _call(self, parts: list, schema: dict) -> dict:
+        config = {"responseMimeType": "application/json", "responseSchema": schema}
+        if self.effort:
+            config["thinkingConfig"] = {"thinkingLevel": self.effort}
         body = json.dumps({
             "systemInstruction": {"parts": [{"text": SYSTEM}]},
             "contents": [{"role": "user", "parts": parts}],
-            "generationConfig": {"responseMimeType": "application/json", "responseSchema": schema},
+            "generationConfig": config,
         }).encode()
         req = urllib.request.Request(
             f"{self.base_url}/v1beta/models/{self.model}:generateContent", data=body,
@@ -193,10 +210,11 @@ class Claude:
     name = "Claude"
     hears = False
 
-    def __init__(self, key: str, model: str = "", client=None):
+    def __init__(self, key: str, model: str = "", client=None, effort: str = ""):
         self.key = key
         self.model = model or DEFAULT_CLAUDE_MODEL
         self.client = client
+        self.effort = effort
 
     def _sdk(self):
         if self.client is None:
@@ -210,9 +228,12 @@ class Claude:
         import anthropic
 
         try:
+            output = {"format": {"type": "json_schema", "schema": strict_schema(plain_schema(schema))}}
+            if self.effort:
+                output["effort"] = self.effort
             response = self._sdk().messages.create(
-                model=self.model, max_tokens=16000, system=SYSTEM,
-                output_config={"format": {"type": "json_schema", "schema": strict_schema(plain_schema(schema))}},
+                model=self.model, max_tokens=16000, system=SYSTEM, thinking={"type": "adaptive"},
+                output_config=output,
                 messages=[{"role": "user", "content": prompt}],
             )
         except anthropic.AuthenticationError:
@@ -239,6 +260,43 @@ class Claude:
 
     def listen(self, wav: bytes, prompt: str) -> dict:
         return self._call(measured_prompt(wav, prompt), LISTEN_SCHEMA)
+
+
+class Router:
+    """Holds the keys and builds the engine each request asked for. Keys never leave this object."""
+
+    def __init__(self, gemini_key: str = "", claude_key: str = "", gemini_model: str = "", gemini_url: str = "",
+                 claude_model: str = "", default: str = "", clients=None):
+        self.keys = {"gemini": gemini_key, "claude": claude_key}
+        self.gemini_url = gemini_url
+        self.clients = clients or {}
+        self.first = default if default in self.keys and self.keys[default] else "gemini" if gemini_key else "claude"
+        self.named = {"gemini": gemini_model or DEFAULT_MODEL, "claude": claude_model or DEFAULT_CLAUDE_MODEL}
+        self.client = None
+
+    @property
+    def name(self) -> str:
+        return " · ".join(p.capitalize() for p in self.keys if self.keys[p])
+
+    @property
+    def hears(self) -> bool:
+        return self.first == "gemini"
+
+    def choices(self) -> dict:
+        models = [{"id": m["id"], "label": m["label"]} for m in MODEL_CHOICES if self.keys[m["provider"]]]
+        known = {m["id"] for m in models}
+        named = self.named[self.first]
+        return {"models": models, "efforts": list(EFFORT_CHOICES), "model": named if named in known else models[0]["id"],
+                "effort": DEFAULT_EFFORT}
+
+    def engine(self, model: str = "", effort: str = ""):
+        choice = next((m for m in MODEL_CHOICES if m["id"] == model and self.keys[m["provider"]]), None)
+        provider = choice["provider"] if choice else self.first
+        name = choice["id"] if choice else self.named[provider]
+        effort = effort or DEFAULT_EFFORT
+        if provider == "gemini":
+            return Gemini(self.keys["gemini"], name, self.gemini_url, effort)
+        return Claude(self.keys["claude"], name, self.clients.get("claude"), effort)
 
 
 class AgyCli:
@@ -361,7 +419,9 @@ def validate_request(payload: dict) -> dict:
         raise ValueError("선택한 트랙을 찾지 못했어.")
     return {
         "text": text.strip(), "tracks": tracks, "bpm": valid_bpm(payload.get("bpm")),
-        "target": target, "auto": payload.get("auto") is True, "rounds": rounds_from(payload), "base_version": str(payload.get("base_version", ""))[:64],
+        "target": target, "auto": payload.get("auto") is True, "rounds": rounds_from(payload),
+        "model": payload.get("model") if payload.get("model") in {m["id"] for m in MODEL_CHOICES} else "",
+        "effort": payload.get("effort") if payload.get("effort") in {e["id"] for e in EFFORT_CHOICES} else "", "base_version": str(payload.get("base_version", ""))[:64],
         "history": clean_history(payload.get("history")),
     }
 
@@ -587,6 +647,8 @@ class Jobs:
 
     def _loop(self, job: Job):
         req = job.request
+        pick = getattr(self.model, "engine", None)
+        model = pick(req["model"], req["effort"]) if pick else self.model
         state = {"tracks": req["tracks"], "bpm": req["bpm"]}
         instruction, error = req["text"], ""
         seq, edits, fixes, best = 0, 0, 0, -1
@@ -598,7 +660,7 @@ class Jobs:
                 raise Stop("limit", f"코드 수정 호출 한도({max_edits}회)에 닿아 멈췄어.")
             self._spend(job)
             edits += 1
-            reply = self.model.edit(edit_prompt(state, instruction, error, req["target"], req.get("history", ()),
+            reply = model.edit(edit_prompt(state, instruction, error, req["target"], req.get("history", ()),
                                                 goal=req["text"] if tried else "", tried=tried))
             if isinstance(reply, dict) and reply.get("intent") == "talk":
                 job.say("reply", str(reply.get("reply") or reply.get("summary") or "무슨 말인지 다시 알려 줘.")[:MAX_REPLY])
@@ -645,11 +707,11 @@ class Jobs:
                       + " Do not invent work to fill the rounds."
                       + " Put concrete fixes in next_instruction, following the measurement table in your instructions.")
             try:
-                verdict = self.model.listen(wav, prompt)
+                verdict = model.listen(wav, prompt)
             except ModelError as exc:
                 raise Stop("failed", f"신호 검사만 완료, 분석 실패: {exc}") from None
             problems = [str(p)[:200] for p in verdict.get("problems", [])][:5]
-            hears = getattr(self.model, "hears", True)
+            hears = getattr(model, "hears", True)
             label = "오디오 분석" if hears else "측정 분석"
             job.say("heard" if hears else "measured",
                     f"{label}: {verdict.get('score', 0)}점, " + (f"문제 {len(problems)}개" if problems else "문제 없음"),

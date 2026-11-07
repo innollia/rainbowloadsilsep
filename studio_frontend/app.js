@@ -216,6 +216,7 @@
   function onRender(args) {
     fit();
     aiEnabled = !!args.ai_enabled; engineName = args.engine || '';
+    fillChoices(args.choices);
     if (args.server_error && args.server_error !== lastServerError) say('error', args.server_error);
     lastServerError = args.server_error || '';
     const j = args.job;
@@ -230,7 +231,20 @@
     renderProgress();
     $('send').disabled = !aiEnabled;
   }
-  let aiEnabled = false, lastServerError = '', engineName = '';
+  let aiEnabled = false, lastServerError = '', engineName = '', choicesKey = '';
+  function fillChoices(choices) {
+    const key = JSON.stringify(choices || null);
+    if (key === choicesKey) return;
+    choicesKey = key;
+    $('modelTools').hidden = !choices;
+    if (!choices) return;
+    const fill = (box, list, saved, fallback) => {
+      box.replaceChildren(...list.map((o) => Object.assign(document.createElement('option'), { value: o.id, textContent: o.label })));
+      box.value = list.some((o) => o.id === saved) ? saved : fallback;
+    };
+    fill($('modelPick'), choices.models, db.model, choices.model);
+    fill($('effortPick'), choices.efforts, db.effort, choices.effort);
+  }
 
   function renderProgress() {
     const running = job?.status === 'running';
@@ -624,12 +638,14 @@
     const history = p.chat.filter((m) => ['user', 'reply', 'change', 'heard', 'measured'].includes(m.kind)).slice(-10)
       .map((m) => ({ role: m.kind === 'user' ? 'user' : 'assistant', text: m.detail ? m.text + ' ' + m.detail : m.text }));
     say('user', text); $('ask').value = '';
-    send('generate', { text, tracks: p.tracks, bpm: p.bpm, target: selected, auto: !!db.autoRounds, rounds: db.autoRounds || 0, base_version: p.versionId, history });
+    send('generate', { text, tracks: p.tracks, bpm: p.bpm, target: selected, auto: !!db.autoRounds, rounds: db.autoRounds || 0, model: $('modelPick').value, effort: $('effortPick').value, base_version: p.versionId, history });
   }
   $('askForm').onsubmit = (e) => { e.preventDefault(); submit(); };
   $('ask').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); } };
   $('stopAi').onclick = () => send('cancel', {});
   $('play').onclick = () => (playing ? stop() : play());
+  $('modelPick').onchange = (e) => { db.model = e.target.value; touched(); };
+  $('effortPick').onchange = (e) => { db.effort = e.target.value; touched(); };
   $('autoRounds').oninput = (e) => { db.autoRounds = +e.target.value; touched(); render(); };
   $('projectBtn').onclick = projectDialog;
   $('settingsBtn').onclick = settingsDialog;

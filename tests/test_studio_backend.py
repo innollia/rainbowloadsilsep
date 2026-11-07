@@ -349,3 +349,35 @@ def test_good_score_ends_the_job_early():
     fake = Fake(verdicts=[_round(sb.GOOD_SCORE)])
     snap = _rounds(fake, 5)
     assert fake.listen_calls == 1 and snap["status"] == "done"
+
+
+def test_browser_cannot_name_an_unlisted_model_or_effort():
+    req = sb.validate_request(request(model="claude-mythos", effort="max"))
+    assert req["model"] == "" and req["effort"] == ""
+
+
+def test_router_builds_the_engine_the_request_picked():
+    router = sb.Router(gemini_key="g", claude_key="c")
+    engine = router.engine("claude-opus-5-5", "high")
+    assert isinstance(engine, sb.Claude) and engine.model == "claude-opus-5-5" and engine.effort == "high"
+    assert isinstance(router.engine("gemini-3.8-flash", "low"), sb.Gemini)
+
+
+def test_router_only_offers_models_it_has_a_key_for():
+    router = sb.Router(claude_key="c")
+    assert [m["id"] for m in router.choices()["models"]] == ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"]
+    assert isinstance(router.engine("gemini-3.8-flash", ""), sb.Claude)
+
+
+def test_effort_reaches_claude():
+    seen = {}
+
+    class Messages:
+        def create(self, **kw):
+            seen.update(kw)
+            block = type("B", (), {"type": "text", "text": '{"intent":"talk","reply":"hi"}'})
+            return type("R", (), {"stop_reason": "end_turn", "content": [block]})
+
+    client = type("C", (), {"messages": Messages()})
+    sb.Claude("k", "claude-opus-5-5", client, "high").edit("p")
+    assert seen["model"] == "claude-opus-5-5" and seen["output_config"]["effort"] == "high"

@@ -92,7 +92,10 @@ input[type=range] { accent-color:var(--text); height:32px; }
 .msg details div { margin-top:4px; color:var(--text2); font-size:.85rem; }
 #progress { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 16px; border-top:1px solid var(--divider); }
 #targetChip { margin:0 16px; color:var(--text2); }
-#askTools { display:flex; align-items:center; gap:8px; padding:8px 16px 0; min-width:0; }
+#askTools { display:flex; align-items:center; flex-wrap:wrap; gap:4px 8px; padding:8px 16px 0; min-width:0; }
+#modelTools { display:inline-flex; gap:6px; margin-left:auto; }
+#modelTools[hidden] { display:none; }
+#modelTools select { height:32px; background:var(--raised); color:var(--text2); border:0; border-radius:10px; padding:0 6px; font-size:.78rem; max-width:130px; }
 #autoLabel { display:inline-flex; align-items:center; gap:6px; min-height:36px; padding:0 2px; font-size:.82rem; flex:none; color:var(--text2); }
 #autoLabel [data-icon] .ico { width:16px; height:16px; }
 #autoRounds { width:96px; accent-color:var(--text); cursor:pointer; }
