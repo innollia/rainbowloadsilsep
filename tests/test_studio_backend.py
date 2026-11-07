@@ -204,11 +204,18 @@ def test_agy_reads_structured_output_and_rejects_failure():
         sb.AgyCli.parse(json.dumps({"status": "ERROR"}).encode())
 
 
-def test_agy_never_claims_to_hear():
-    jobs = sb.Jobs(sb.AgyCli()); jobs.model.edit = Fake().edit
+def test_agy_verdict_is_labelled_as_measurement_not_hearing():
+    fake = Fake(verdicts=[{"heard": "저음이 큼", "problems": [], "score": 90, "goal_met": True, "next_instruction": ""}])
+    cli = sb.AgyCli(); cli.edit = fake.edit
+    prompts = []
+    cli._run = lambda prompt, schema: prompts.append(prompt) or fake.listen(b"", prompt)
+    jobs = sb.Jobs(cli)
     jobs.submit("o", request(auto=True))
     snap = drive(jobs)
-    assert snap["status"] == "failed" and not [m for m in snap["messages"] if m["kind"] == "heard"]
+    assert snap["status"] == "done"
+    assert not [m for m in snap["messages"] if m["kind"] == "heard"]
+    assert any(m["kind"] == "measured" and "측정 분석" in m["text"] for m in snap["messages"])
+    assert "측정 템포" in prompts[0] or "무음" in prompts[0]
 
 
 def test_plain_schema_lowercases_types_only():

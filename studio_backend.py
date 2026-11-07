@@ -88,6 +88,7 @@ def redact(text: str, secret: str = "") -> str:
 
 class Gemini:
     name = "Gemini"
+    hears = True
 
     def __init__(self, key: str, model: str = "", base_url: str = ""):
         self.key = key
@@ -141,23 +142,25 @@ def plain_schema(schema):
 
 class AgyCli:
     """Local test engine using the logged-in Antigravity CLI. It runs tool-free in an empty
-    temp folder and cannot hear: listen fails openly so nothing is reported as heard."""
+    temp folder. It has no audio input, so listen hands it ear.py's measurements of the real
+    capture and its result is labelled as measurement analysis, never as hearing."""
 
     name = "Antigravity CLI"
+    hears = False
     TIMEOUT = 180
 
     def __init__(self, executable: str = "agy"):
         self.executable = executable
         self.process = None
 
-    def edit(self, prompt: str) -> dict:
+    def _run(self, prompt: str, schema_def: dict) -> dict:
         if os.name == "nt" and len(prompt) > 24000:
             raise ModelError("곡이 너무 길어 CLI 명령줄에 들어가지 않아.")
         text = SYSTEM + "\nDo not use any tools. Reply only with the JSON object.\n\n" + prompt
         with tempfile.TemporaryDirectory(prefix="ddalkkak-agy-") as folder:
             schema = os.path.join(folder, "schema.json")
             with open(schema, "w", encoding="utf-8") as stream:
-                json.dump(plain_schema(EDIT_SCHEMA), stream)
+                json.dump(plain_schema(schema_def), stream)
             args = [self.executable, "--output-format", "json", "--json-schema", schema, "--disable-slash-commands",
                     "--sandbox", "--print-timeout", f"{self.TIMEOUT}s", "-p", text]
             flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
@@ -171,6 +174,9 @@ class AgyCli:
                 self.stop()
                 raise ModelError("Antigravity CLI가 시간 안에 끝나지 않았어.") from None
         return self.parse(out, err)
+
+    def edit(self, prompt: str) -> dict:
+        return self._run(prompt, EDIT_SCHEMA)
 
     @staticmethod
     def parse(out: bytes, err: bytes = b"") -> dict:
@@ -192,7 +198,12 @@ class AgyCli:
                 process.kill()
 
     def listen(self, wav: bytes, prompt: str) -> dict:
-        raise ModelError("Antigravity CLI는 오디오를 듣지 못해. 듣기는 Gemini 키가 있어야 해.")
+        import ear
+
+        report = ear.describe(wav)
+        return self._run(
+            prompt + "\n\nYou have no audio input. Judge only from these measurements of the real capture. "
+            "In the heard field state what the measurements show, not how it sounds.\n" + report, LISTEN_SCHEMA)
 
 
 def clean_tracks(tracks) -> list[dict]:
@@ -485,9 +496,11 @@ class Jobs:
             try:
                 verdict = self.model.listen(wav, prompt)
             except ModelError as exc:
-                raise Stop("failed", f"신호 검사만 완료, 오디오 분석 실패: {exc}") from None
+                raise Stop("failed", f"신호 검사만 완료, 분석 실패: {exc}") from None
             problems = [str(p)[:200] for p in verdict.get("problems", [])][:5]
-            job.say("heard", f"{capture['span']} 오디오 분석 (캡처 {capture['id']}): {str(verdict.get('heard', ''))[:300]}"
+            hears = getattr(self.model, "hears", True)
+            job.say("heard" if hears else "measured",
+                    f"{capture['span']} {'오디오 분석' if hears else '측정 분석'} (캡처 {capture['id']}): {str(verdict.get('heard', ''))[:300]}"
                     + (" / 문제: " + "; ".join(problems) if problems else ""))
             if verdict.get("goal_met") and not report["silent"]:
                 job.update(status="done", stage="done")

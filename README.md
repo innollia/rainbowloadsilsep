@@ -11,7 +11,7 @@ $env:GEMINI_API_KEY = '내 키'
 un_local.ps1
 ```
 
-키가 없으면 `run_local.ps1`은 로그인된 Antigravity CLI(`agy`)로 코드를 수정한다. CLI는 듣지 못하므로 자동 개선은 첫 수정과 신호 검사 뒤 멈춘다. `STRUDEL_ENGINE=agy`로 강제할 수 있다. AI 없이도 재생, 믹서, 저장은 동작한다.
+키가 없으면 `run_local.ps1`은 로그인된 Antigravity CLI(`agy`)로 코드를 수정한다. CLI에는 오디오 입력이 없어서 `ear.py`가 실제 캡처를 측정한 템포·음·대역 표를 대신 넘긴다. 결과는 "측정 분석"으로 표시한다. `STRUDEL_ENGINE=agy`로 강제할 수 있다. AI 없이도 재생, 믹서, 저장은 동작한다.
 
 ## Streamlit Cloud 배포
 

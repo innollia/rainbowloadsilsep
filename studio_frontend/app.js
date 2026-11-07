@@ -153,7 +153,7 @@
 
   /* ---------- AI job handling ---------- */
   let job = null, handledSeq = '', shownMsg = {}, busyFeedback = false;
-  const STAGE = { editing: '코드 수정', verifying: '실행 확인', listening: '듣는 중', signal: '신호 검사', analyzing: '오디오 분석' };
+  const STAGE = { editing: '코드 수정', verifying: '실행 확인', listening: '듣는 중', signal: '신호 검사', analyzing: '결과 분석' };
   let localStage = '';
 
   function wavFrom(pcm, rate) {
