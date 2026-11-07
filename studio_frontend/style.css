@@ -27,7 +27,7 @@ header { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:12px
 .spacer { flex:1; }
 #projectBtn { max-width:320px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #saveState { color:var(--text3); font-size:.89rem; }
-#autoBtn[aria-pressed="true"] { background:var(--text); color:#111; }
+#autoBtn[aria-pressed="true"], #codeBtn[aria-pressed="true"] { background:var(--text); color:#111; }
 
 main { display:flex; min-height:0; }
 #stage { flex:1; min-width:0; overflow:auto; padding:24px 32px; }
@@ -49,6 +49,18 @@ main { display:flex; min-height:0; }
 .track .mute[aria-pressed="true"] { color:var(--err); }
 .track input[type=range] { width:100%; }
 input[type=range] { accent-color:var(--text); height:32px; }
+
+#app.coding #stage { display:flex; flex-direction:column; }
+#app.coding #tracks, #app.coding #trackHead, #app.coding #viz { display:none; }
+#app.coding .hero { margin-bottom:12px; }
+#app.coding #art { width:72px; height:72px; }
+#codePanel { flex:1; min-height:240px; display:flex; flex-direction:column; gap:8px; }
+.codeBar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+#codeRun { background:var(--text); color:#111; }
+#codeNote { color:var(--text2); overflow-wrap:anywhere; min-width:0; flex:1; }
+#codeHost { flex:1; min-height:0; border-radius:8px; overflow:hidden; background:#282c34; }
+#codeHost .cm-editor { height:100%; }
+#codePanel .muted { margin:0; }
 
 #divider { width:8px; cursor:col-resize; border-left:1px solid var(--divider); }
 #divider:hover { background:var(--raised); }

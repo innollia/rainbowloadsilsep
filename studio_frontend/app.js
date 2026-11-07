@@ -30,15 +30,7 @@
   }
   const mixOf = (p, id) => p.mix[id] || { mute: false, gain: 1 };
 
-  function compose(song, wired) {
-    const lines = [`setcpm(${song.bpm}/4)`];
-    for (const t of song.tracks) {
-      if (t.raw) { lines.push(t.code); continue; }
-      const live = wired ? `.set({trk:'${t.id}'}).postgain(ref(()=>globalThis.__mix['${t.id}']??1))` : '';
-      lines.push(`$${t.id}: (${t.code})${live}`);
-    }
-    return lines.join('\n');
-  }
+  const { compose, songText, parseSong } = window.songCode;
 
   /* ---------- storage ---------- */
   let db = { current: '', projects: [] };
@@ -287,7 +279,7 @@
     const v = p.versions.find((x) => x.id === p.versionId);
     $('songMeta').textContent = `${p.bpm} BPM · 마지막 변경: ${v ? v.summary : '-'}` + (samplesOk ? '' : ' · 샘플을 불러오지 못해 합성음만 나와');
     if (document.activeElement !== $('bpm')) $('bpm').value = p.bpm;
-    renderArt(p); renderTracks(p);
+    renderArt(p); renderTracks(p); syncEditor();
     const t = selected && p.tracks.find((x) => x.id === selected);
     $('targetChip').hidden = !t; if (t) $('targetChip').textContent = `대상: ${t.name} (나머지는 잠김)`;
     $('autoBtn').textContent = `자동 개선 ${autoMode ? 'ON · 최대 3회' : 'OFF'}`;
@@ -342,7 +334,7 @@
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = name; a.click();
   }
-  function switchTo(id) { stop(); db.current = id; selected = null; touched(); render(); renderChat(); dlg.close(); }
+  function switchTo(id) { stop(); db.current = id; selected = null; editorDirty = false; touched(); render(); renderChat(); if (dlg.open) dlg.close(); }
 
   function projectDialog() {
     const p = project(); dlg.textContent = '';
@@ -367,7 +359,7 @@
     dlg.showModal();
   }
   function importFile() {
-    const input = document.createElement('input'); input.type = 'file'; input.accept = '.json,.js,.txt';
+    const input = document.createElement('input'); input.type = 'file'; input.accept = '.json,.js,.txt,.strudel';
     input.onchange = async () => {
       const text = await input.files[0].text();
       let n;
@@ -377,7 +369,8 @@
         n = { ...newProject(n.name || '불러온 곡'), bpm: n.bpm, tracks: n.tracks, mix: n.mix || {}, chat: n.chat || [], versions: n.versions || [], id: uid() };
       } catch {
         n = newProject(input.files[0].name);
-        n.tracks = [{ id: 'song', name: '전체 곡', role: 'other', code: text.slice(0, 4000), raw: true }];
+        const parsed = parseSong(text, n);
+        n.bpm = parsed.bpm; n.tracks = parsed.tracks;
         addVersion(n, '불러온 코드', 'user');
       }
       db.projects.push(n); switchTo(n.id);
@@ -394,24 +387,75 @@
     dlg.append(row('글자 크기', scale));
     dlg.append(row(aiEnabled ? `AI 연결됨 (${engineName})` : 'AI 연결 안 됨: 서버 설정을 확인해 줘.'));
     dlg.append(row('자동 개선 한도: 개선 3회, 재수정 2회, 호출 5회, 5분, 회당 최대 16초 듣기'));
-    dlg.append(heading('h3', '고급 코드'));
-    const pick = document.createElement('select'); pick.setAttribute('aria-label', '트랙 선택');
-    p.tracks.forEach((t) => pick.add(new Option(t.name, t.id)));
-    const code = document.createElement('textarea'); code.setAttribute('aria-label', '트랙 코드'); code.spellcheck = false;
-    const fill = () => { code.value = p.tracks.find((t) => t.id === pick.value)?.code || ''; };
-    pick.onchange = fill; fill();
-    const note = document.createElement('div'); note.className = 'muted';
-    dlg.append(pick, code, note, row('', button('코드 적용', async () => {
-      const trial = snapshot(p); trial.tracks.find((t) => t.id === pick.value).code = code.value;
-      const r = await probe(compose(trial, true));
-      if (!r.ok) { note.textContent = '실행 실패, 적용 안 함: ' + r.error; return; }
-      p.tracks = trial.tracks; addVersion(p, '코드 직접 수정', 'user'); touched(); render();
-      note.textContent = '적용했어.'; if (playing) await play();
-    }), button('코드 내보내기', () => saveFile(`${p.name}.strudel.js`, compose(p, false)))));
+    dlg.append(row('코드는 상단의 코드 버튼에서 보고 고칠 수 있어.'));
     dlg.append(heading('h3', '기타'));
     dlg.append(row('', button('게임하기', () => { stop(); persist(); dlg.close(); send('game', {}); }), button('닫기', () => dlg.close())));
     dlg.showModal();
   }
+  /* ---------- code editor ---------- */
+  let editor = null, editorOpen = false, editorDirty = false, editorBase = '';
+  const codeNote = (text, tone) => { $('codeNote').textContent = text; $('codeNote').style.color = tone ? `var(--${tone})` : ''; $('codeReload').hidden = true; };
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const tag = document.createElement('script'); tag.src = src; tag.onload = resolve; tag.onerror = reject; document.head.append(tag);
+    });
+  }
+  function fillEditor() {
+    editorBase = songText(project());
+    editor.set(editorBase);
+    editorDirty = false;
+    codeNote('');
+  }
+  async function toggleCode(open = !editorOpen) {
+    editorOpen = open;
+    $('app').classList.toggle('coding', open);
+    $('codeBtn').setAttribute('aria-pressed', String(open));
+    $('codePanel').hidden = !open;
+    if (!open) return;
+    if (!editor) {
+      codeNote('편집기를 불러오는 중이야.');
+      try { await loadScript('vendor/editor.js'); } catch { codeNote('편집기를 불러오지 못했어.', 'err'); return; }
+      editor = CodeEditor.create($('codeHost'), {
+        doc: '', onRun: applyCode, onStop: stop,
+        onChange: () => { editorDirty = editor.text() !== editorBase; if (editorDirty) $('codeNote').textContent = '실행 전 변경 있음'; },
+      });
+    }
+    if (!editorDirty) fillEditor();
+    editor.focus();
+  }
+  // Names the failing track, since the song text and the running code differ line by line.
+  async function explainFailure(trial, error) {
+    for (const t of trial.tracks) {
+      const alone = await probe(compose({ bpm: trial.bpm, tracks: [t] }, true));
+      if (!alone.ok) return `${t.name}: ${alone.error}`;
+    }
+    return error;
+  }
+  async function applyCode() {
+    const p = project();
+    await engines.probe.whenReady;
+    const trial = parseSong(editor.text(), p);
+    codeNote('확인하는 중이야.');
+    const r = await probe(compose(trial, true));
+    if (!r.ok) { codeNote('실행 실패, 적용 안 함 · ' + await explainFailure(trial, r.error), 'err'); return; }
+    p.bpm = trial.bpm; p.tracks = trial.tracks;
+    selected = p.tracks.some((t) => t.id === selected) ? selected : null;
+    addVersion(p, '코드 직접 수정', 'user');
+    editorBase = songText(p);
+    editorDirty = editor.text() !== editorBase;
+    touched(); render();
+    if (await play()) codeNote(trial.tracks[0].raw ? '적용했어. 트랙으로 나누지 못해 전체 곡 하나로 재생해.' : '적용했어.', 'ok');
+  }
+  function syncEditor() {
+    if (!editor) return;
+    const now = songText(project());
+    if (now === editorBase) return;
+    if (!editorDirty) { fillEditor(); return; }
+    codeNote('곡이 바뀌었어. 편집 중인 내용은 그대로 뒀어.', 'warn');
+    $('codeReload').hidden = false;
+  }
+
   function applyScale() { document.documentElement.style.fontSize = (18 * (db.scale || 100) / 100) + 'px'; }
 
   /* ---------- controls ---------- */
@@ -429,6 +473,11 @@
   $('autoBtn').onclick = () => { autoMode = !autoMode; render(); };
   $('projectBtn').onclick = projectDialog;
   $('settingsBtn').onclick = settingsDialog;
+  $('codeBtn').onclick = () => toggleCode();
+  $('codeRun').onclick = applyCode;
+  $('codeExport').onclick = () => saveFile(`${project().name}.strudel.js`, songText(project()));
+  $('codeImport').onclick = importFile;
+  $('codeReload').onclick = fillEditor;
   $('chatFold').onclick = () => { $('app').classList.add('folded'); $('chatOpen').hidden = false; };
   $('chatOpen').onclick = () => { $('app').classList.remove('folded'); $('chatOpen').hidden = true; };
   $('volume').oninput = () => engines.live && postTo('live', { type: 'volume', value: +$('volume').value });
@@ -437,7 +486,8 @@
     p.bpm = v; addVersion(p, `BPM ${v}`, 'user'); touched(); render(); if (playing) await play();
   };
   addEventListener('keydown', (e) => {
-    if (e.code === 'Space' && !dlg.open && !/INPUT|TEXTAREA|SELECT|BUTTON/.test(e.target.tagName)) { e.preventDefault(); $('play').click(); }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') { e.preventDefault(); toggleCode(); }
+    if (e.code === 'Space' && !dlg.open && !e.target.isContentEditable && !/INPUT|TEXTAREA|SELECT|BUTTON/.test(e.target.tagName)) { e.preventDefault(); $('play').click(); }
   });
   const setWidth = (w) => { const v = Math.min(640, Math.max(320, w)); document.documentElement.style.setProperty('--chat', v + 'px'); $('divider').setAttribute('aria-valuenow', v); };
   $('divider').onpointerdown = (e) => {

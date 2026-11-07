@@ -14,6 +14,7 @@
     <button id="projectBtn" class="ghost" aria-haspopup="dialog"></button>
     <span id="saveState" role="status"></span>
     <span class="spacer"></span>
+    <button id="codeBtn" aria-pressed="false" title="Ctrl+E">코드</button>
     <button id="saveBtn">저장</button>
     <button id="autoBtn" aria-pressed="false">자동 개선 OFF</button>
     <button id="settingsBtn">설정</button>
@@ -29,8 +30,19 @@
           <div id="listenBand" hidden></div>
         </div>
       </div>
-      <h2>트랙</h2>
+      <h2 id="trackHead">트랙</h2>
       <div id="tracks"></div>
+      <div id="codePanel" hidden>
+        <div class="codeBar">
+          <button id="codeRun" title="Ctrl+Enter">실행</button>
+          <button id="codeExport" class="ghost">내보내기</button>
+          <button id="codeImport" class="ghost">불러오기</button>
+          <span id="codeNote" role="status"></span>
+          <button id="codeReload" class="ghost" hidden>최신 곡 불러오기</button>
+        </div>
+        <div id="codeHost"></div>
+        <p class="muted">Ctrl+Enter 실행 · Ctrl+. 정지 · Ctrl+E 닫기 · 입력 중 자동 완성</p>
+      </div>
     </section>
     <div id="divider" role="separator" aria-orientation="vertical" aria-label="채팅 너비" tabindex="0"></div>
     <aside id="chat">
@@ -56,6 +68,7 @@
 </div>
 <dialog id="dialog"></dialog>
 <script src="art.js"></script>
+<script src="song.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -35,9 +35,13 @@ python -m pytest -q tests
 python tests/e2e_studio.py
 ```
 
+## 코드 직접 수정
+
+상단의 코드 버튼(Ctrl+E)에서 곡 전체를 편집한다. Ctrl+Enter로 실행하고, 실행에 실패하면 어느 트랙인지 표시하며 적용하지 않는다.
+
 ## 라이선스
 
-`studio_frontend/vendor/strudel.js`는 [Strudel](https://codeberg.org/uzu/strudel)의 번들이며 AGPL-3.0이다(`STRUDEL-LICENSE`). 배포 시 소스 공개 조건이 적용된다. 샘플은 실행할 때 tidalcycles/dirt-samples에서 불러오며 저장소에 포함하지 않는다.
+`studio_frontend/vendor/strudel.js`는 [Strudel](https://codeberg.org/uzu/strudel)의 번들이며 AGPL-3.0이다(`STRUDEL-LICENSE`). 배포 시 소스 공개 조건이 적용된다. `vendor/editor.js`는 CodeMirror 6(MIT) 번들이다. 샘플은 실행할 때 tidalcycles/dirt-samples에서 불러오며 저장소에 포함하지 않는다.
 
 ---
 
