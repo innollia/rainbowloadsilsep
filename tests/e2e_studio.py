@@ -68,6 +68,8 @@ try:
         time.sleep(4)
         frame.locator("#play").click()
         inner.wait_for_function("document.getElementById('clock').textContent!=='00:00'", timeout=15000)
+        spin = "document.querySelector('#art circle').getAttribute('transform')"
+        first = inner.evaluate(spin); time.sleep(0.5); art_moves = bool(first) and inner.evaluate(spin) != first
         frame.locator('.track button.pick').nth(1).click()
         frame.locator("#autoBtn").click()
         frame.locator("#ask").fill("베이스만 더 세게")
@@ -91,6 +93,7 @@ try:
         "signal not silent": not any("소리가 거의 없음" in x for x in log),
         "no clipping": not any("클리핑" in x for x in log),
         "no page errors": not errors,
+        "art follows playback": art_moves,
     }
     print(calls, errors[:3])
     for name, ok in checks.items():

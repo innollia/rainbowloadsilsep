@@ -8,7 +8,7 @@ import runpy
 import streamlit as st
 import streamlit.components.v1 as components
 
-from studio_backend import Gemini, Jobs, validate_request
+from studio_backend import AgyCli, Gemini, Jobs, validate_request
 
 st.set_page_config(page_title="strudel 딸깍이", page_icon="◉", layout="wide", initial_sidebar_state="collapsed")
 
@@ -45,7 +45,10 @@ def gemini_key():
 @st.cache_resource
 def jobs():
     key = gemini_key()
-    model = Gemini(key, setting("GEMINI_MODEL"), setting("GEMINI_BASE_URL")) if key else None
+    if setting("STRUDEL_ENGINE") == "agy" or (not key and setting("STRUDEL_LOCAL_AI") == "1"):
+        model = AgyCli()
+    else:
+        model = Gemini(key, setting("GEMINI_MODEL"), setting("GEMINI_BASE_URL")) if key else None
     return Jobs(model, daily_limit=int(setting("STRUDEL_DAILY_CALLS", "200")))
 
 
@@ -91,7 +94,7 @@ ai_ready = jobs().model is not None and (bool(password) or setting("STRUDEL_LOCA
 @st.fragment(run_every=1)
 def render():
     manager = jobs()
-    result = studio(ai_enabled=ai_ready, job=manager.snapshot(owner),
+    result = studio(ai_enabled=ai_ready, engine=manager.model.name if manager.model else "", job=manager.snapshot(owner),
                     server_error=st.session_state.get("studio_error", ""), key="studio", default=None)
     if not isinstance(result, dict):
         return

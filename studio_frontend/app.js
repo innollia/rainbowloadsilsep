@@ -199,7 +199,7 @@
 
   function onRender(args) {
     fit();
-    aiEnabled = !!args.ai_enabled;
+    aiEnabled = !!args.ai_enabled; engineName = args.engine || '';
     if (args.server_error && args.server_error !== lastServerError) say('error', args.server_error);
     lastServerError = args.server_error || '';
     const j = args.job;
@@ -214,7 +214,7 @@
     renderProgress();
     $('send').disabled = !aiEnabled;
   }
-  let aiEnabled = false, lastServerError = '';
+  let aiEnabled = false, lastServerError = '', engineName = '';
 
   function renderProgress() {
     const running = job?.status === 'running';
@@ -295,6 +295,18 @@
   }
   function renderChat() { $('log').textContent = ''; project().chat.forEach(appendMsg); }
 
+  // Rings follow the song position and real output level, so silence and stop leave them still.
+  const calm = matchMedia('(prefers-reduced-motion: reduce)');
+  function drawArt() {
+    const low = bands ? bands.slice(0, 12).reduce((a, b) => a + b, 0) / (12 * 255) : 0;
+    [...$('art').querySelectorAll('circle')].forEach((c, i) => {
+      if (!playing || calm.matches) { c.removeAttribute('transform'); return; }
+      const turn = cycles * (i % 2 ? -36 : 36) / (1 + i * 0.4);
+      const size = 1 + low * 0.1;
+      c.setAttribute('transform', `translate(50 50) rotate(${turn.toFixed(2)}) scale(${size.toFixed(3)}) translate(-50 -50)`);
+    });
+  }
+
   function drawLoop() {
     requestAnimationFrame(drawLoop);
     if (document.hidden) return;
@@ -313,6 +325,7 @@
       $('clock').textContent = mmss(s);
       $('bar').textContent = `${Math.max(1, Math.floor(cycles) + 1)}마디`;
     }
+    drawArt();
     const phase = cycles - Math.floor(cycles);
     for (const row of $('tracks').children) {
       const cv = row.querySelector('canvas'), x = cv.getContext('2d');
@@ -387,7 +400,7 @@
     scale.value = db.scale || 100;
     scale.onchange = () => { db.scale = +scale.value; applyScale(); touched(); };
     dlg.append(row('글자 크기', scale));
-    dlg.append(row(aiEnabled ? 'AI 연결됨 (Gemini)' : 'AI 연결 안 됨: 서버의 GEMINI_API_KEY와 STUDIO_PASSWORD를 확인해 줘.'));
+    dlg.append(row(aiEnabled ? `AI 연결됨 (${engineName})` : 'AI 연결 안 됨: 서버의 GEMINI_API_KEY와 STUDIO_PASSWORD를 확인해 줘.'));
     dlg.append(row('자동 개선 한도: 개선 3회, 재수정 2회, 호출 5회, 5분, 회당 최대 16초 듣기'));
     dlg.append(heading('h3', '고급 코드'));
     const pick = document.createElement('select'); pick.setAttribute('aria-label', '트랙 선택');

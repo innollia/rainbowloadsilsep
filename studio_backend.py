@@ -14,6 +14,7 @@ import math
 import os
 import queue
 import re
+import subprocess
 import tempfile
 import threading
 import time
@@ -86,6 +87,8 @@ def redact(text: str, secret: str = "") -> str:
 
 
 class Gemini:
+    name = "Gemini"
+
     def __init__(self, key: str, model: str = "", base_url: str = ""):
         self.key = key
         self.model = model or DEFAULT_MODEL
@@ -127,6 +130,69 @@ class Gemini:
             {"inlineData": {"mimeType": "audio/wav", "data": base64.b64encode(wav).decode()}},
             {"text": prompt},
         ], LISTEN_SCHEMA)
+
+
+def plain_schema(schema):
+    """Gemini spells types in capitals; agy expects standard JSON schema."""
+    if isinstance(schema, dict):
+        return {k: v.lower() if k == "type" else plain_schema(v) for k, v in schema.items()}
+    return [plain_schema(v) for v in schema] if isinstance(schema, list) else schema
+
+
+class AgyCli:
+    """Local test engine using the logged-in Antigravity CLI. It runs tool-free in an empty
+    temp folder and cannot hear: listen fails openly so nothing is reported as heard."""
+
+    name = "Antigravity CLI"
+    TIMEOUT = 180
+
+    def __init__(self, executable: str = "agy"):
+        self.executable = executable
+        self.process = None
+
+    def edit(self, prompt: str) -> dict:
+        if os.name == "nt" and len(prompt) > 24000:
+            raise ModelError("곡이 너무 길어 CLI 명령줄에 들어가지 않아.")
+        text = SYSTEM + "\nDo not use any tools. Reply only with the JSON object.\n\n" + prompt
+        with tempfile.TemporaryDirectory(prefix="ddalkkak-agy-") as folder:
+            schema = os.path.join(folder, "schema.json")
+            with open(schema, "w", encoding="utf-8") as stream:
+                json.dump(plain_schema(EDIT_SCHEMA), stream)
+            args = [self.executable, "--output-format", "json", "--json-schema", schema, "--disable-slash-commands",
+                    "--sandbox", "--print-timeout", f"{self.TIMEOUT}s", "-p", text]
+            flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+            try:
+                self.process = subprocess.Popen(args, cwd=folder, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                                stderr=subprocess.PIPE, creationflags=flags)
+                out, err = self.process.communicate(timeout=self.TIMEOUT + 20)
+            except OSError:
+                raise ModelError("Antigravity CLI를 찾지 못했어.") from None
+            except subprocess.TimeoutExpired:
+                self.stop()
+                raise ModelError("Antigravity CLI가 시간 안에 끝나지 않았어.") from None
+        return self.parse(out, err)
+
+    @staticmethod
+    def parse(out: bytes, err: bytes = b"") -> dict:
+        try:
+            data = json.loads(out.decode("utf-8", "replace"))
+        except ValueError:
+            raise ModelError("Antigravity CLI 응답을 읽지 못했어: " + redact(err.decode("utf-8", "replace"))) from None
+        result = data.get("structured_output")
+        if data.get("status") != "SUCCESS" or not isinstance(result, dict):
+            raise ModelError(f"Antigravity CLI 실패: {redact(data.get('status'))}")
+        return result
+
+    def stop(self):
+        process = self.process
+        if process and process.poll() is None:
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True, check=False)
+            else:
+                process.kill()
+
+    def listen(self, wav: bytes, prompt: str) -> dict:
+        raise ModelError("Antigravity CLI는 오디오를 듣지 못해. 듣기는 Gemini 키가 있어야 해.")
 
 
 def clean_tracks(tracks) -> list[dict]:
@@ -324,6 +390,7 @@ class Jobs:
         if job:
             job.cancelled.set()
             job.feedback.put(None)
+            getattr(self.model, "stop", lambda: None)()
             if job.view["status"] == "running":
                 job.update(status="cancelled", stage="done")
                 job.say("status", "중단했어. 마지막 정상 버전을 유지해.")

@@ -195,3 +195,21 @@ def test_gemini_sends_audio_and_keeps_key_out_of_url_and_errors():
     assert "KEY123" not in seen["path"] and seen["key"] == "KEY123"
     assert seen["body"]["contents"][0]["parts"][0]["inlineData"]["mimeType"] == "audio/wav"
     assert "[redacted]" in sb.redact("bad AIza" + "x" * 30)
+
+
+def test_agy_reads_structured_output_and_rejects_failure():
+    ok = json.dumps({"status": "SUCCESS", "structured_output": {"summary": "x"}}).encode()
+    assert sb.AgyCli.parse(ok) == {"summary": "x"}
+    with pytest.raises(sb.ModelError):
+        sb.AgyCli.parse(json.dumps({"status": "ERROR"}).encode())
+
+
+def test_agy_never_claims_to_hear():
+    jobs = sb.Jobs(sb.AgyCli()); jobs.model.edit = Fake().edit
+    jobs.submit("o", request(auto=True))
+    snap = drive(jobs)
+    assert snap["status"] == "failed" and not [m for m in snap["messages"] if m["kind"] == "heard"]
+
+
+def test_plain_schema_lowercases_types_only():
+    assert sb.plain_schema({"type": "OBJECT", "enum": ["DRUMS"]}) == {"type": "object", "enum": ["DRUMS"]}
