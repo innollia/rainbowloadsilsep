@@ -336,24 +336,48 @@
   }
   function switchTo(id) { stop(); db.current = id; selected = null; editorDirty = false; touched(); render(); renderChat(); if (dlg.open) dlg.close(); }
 
+  // Plays a saved version without touching the project. Closing the dialog returns to what was playing.
+  let audition = null;
+  function endAudition() { if (audition) audition.button.textContent = '듣기'; audition = null; }
+  async function listenTo(v, b) {
+    if (audition?.id === v.id) { const back = audition.back; endAudition(); back ? await play() : stop(); return; }
+    const back = audition ? audition.back : playing;
+    endAudition();
+    await engines.live.whenReady;
+    pushMix();
+    const r = await ask('live', { type: 'apply', code: compose(v, true) }, 'applied', 8000);
+    if (!r.ok) { b.textContent = '재생 실패'; return; }
+    if (!playing) startedAt = performance.now();
+    playing = true; renderPlay();
+    b.textContent = '정지'; audition = { id: v.id, button: b, back };
+  }
+  dlg.addEventListener('close', () => {
+    if (!audition) return;
+    const back = audition.back; audition = null;
+    if (back) play(); else stop();
+  });
+
   function projectDialog() {
     const p = project(); dlg.textContent = '';
     dlg.append(heading('h2', '프로젝트'));
     const name = document.createElement('input'); name.type = 'text'; name.value = p.name; name.setAttribute('aria-label', '곡 이름');
     name.oninput = () => { p.name = name.value.slice(0, 80) || '이름 없는 곡'; touched(); render(); };
     dlg.append(name);
-    dlg.append(row('앨범 아트', button('새로 뽑기', () => { p.artSeed = Math.floor(Math.random() * 2 ** 32); touched(); render(); })));
+    dlg.append(row('앨범 아트', button('그림 다시 뽑기', () => { p.artSeed = Math.floor(Math.random() * 2 ** 32); touched(); render(); })));
     for (const x of db.projects) if (x !== p) dlg.append(row(x.name, button('열기', () => switchTo(x.id))));
-    dlg.append(row('', button('새 곡', () => { const n = newProject('새 곡'); db.projects.push(n); switchTo(n.id); }),
+    dlg.append(row('', button('새 곡 만들기', () => { const n = newProject('새 곡'); db.projects.push(n); switchTo(n.id); }),
       button('파일 불러오기', importFile), button('프로젝트 내보내기', () => saveFile(`${p.name}.ddalkkak.json`, JSON.stringify(p)))));
     dlg.append(heading('h3', '이전 버전'));
     for (const v of [...p.versions].reverse().slice(0, 30)) {
       const b = button('복구', async () => {
+        endAudition();
         p.bpm = v.bpm; p.head = v.head || ''; p.tracks = v.tracks.map((t) => ({ ...t })); addVersion(p, `복구: ${v.summary}`, 'user');
         touched(); render(); dlg.close(); if (playing) await play();
       });
       if (v.id === p.versionId) b.disabled = true;
-      dlg.append(row(`${new Date(v.at).toLocaleString('ko-KR')} · ${v.summary}`, b));
+      const hear = button('듣기', () => listenTo(v, hear));
+      hear.disabled = job?.status === 'running'; // auto-improve captures the live output
+      dlg.append(row(`${new Date(v.at).toLocaleString('ko-KR')} · ${v.summary}`, hear, b));
     }
     dlg.append(button('닫기', () => dlg.close()));
     dlg.showModal();
@@ -469,8 +493,10 @@
   function submit() {
     const text = $('ask').value.trim(); const p = project();
     if (!text || !aiEnabled || job?.status === 'running') return;
+    const history = p.chat.filter((m) => ['user', 'reply', 'change', 'heard', 'measured'].includes(m.kind)).slice(-10)
+      .map((m) => ({ role: m.kind === 'user' ? 'user' : 'assistant', text: m.text }));
     say('user', text); $('ask').value = '';
-    send('generate', { text, tracks: p.tracks, bpm: p.bpm, target: selected, auto: autoMode, base_version: p.versionId });
+    send('generate', { text, tracks: p.tracks, bpm: p.bpm, target: selected, auto: autoMode, base_version: p.versionId, history });
   }
   $('askForm').onsubmit = (e) => { e.preventDefault(); submit(); };
   $('ask').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); } };

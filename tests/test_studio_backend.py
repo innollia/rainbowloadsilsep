@@ -265,3 +265,20 @@ def test_claude_listen_uses_measurements_and_is_not_hearing():
     model = sb.Claude("k", client=client)
     assert model.hears is False and model.listen(wav(), "p")["goal_met"] is True
     assert "측정 템포" in client.calls[0]["messages"][0]["content"]
+
+
+def test_talk_turn_changes_nothing_and_replies():
+    fake = Fake(edits=[{"intent": "talk", "reply": "지금 곡은 어두운 편이야.", "summary": "", "bpm": 120, "changes": []}])
+    jobs = sb.Jobs(fake)
+    jobs.submit("o", request(auto=True))
+    snap = drive(jobs)
+    assert snap["status"] == "done" and snap["candidate"] is None and fake.listen_calls == 0
+    assert [m["text"] for m in snap["messages"] if m["kind"] == "reply"] == ["지금 곡은 어두운 편이야."]
+
+
+def test_history_reaches_the_prompt_and_is_bounded():
+    items = [{"role": "user", "text": f"말{i}"} for i in range(15)] + ["bad", {"role": "x", "text": ""}]
+    clean = sb.clean_history(items)
+    assert len(clean) <= sb.MAX_HISTORY and sb.clean_history("nope") == []
+    prompt = sb.edit_prompt({"bpm": 120, "tracks": []}, "안녕", "", None, clean)
+    assert "user: 말14" in prompt and prompt.index("Recent conversation") < prompt.index("User message:")

@@ -117,6 +117,14 @@ try:
           return { same: JSON.stringify(back.tracks.map(t=>t.code)) === JSON.stringify(song.tracks.map(t=>t.code)) && back.bpm === 100,
                    tempo: c.parseSong('setcps(0.5)\\n$a: s("bd")', prev).bpm === 120, plainOk: c.parseSong('s("bd")', prev).tracks[0].raw === true }; }""")
         frame.locator("#codeBtn").click()
+        tracks_before = inner.evaluate("JSON.stringify(JSON.parse(localStorage.getItem('strudel-ddalkkak-v1')).projects[0].tracks)")
+        frame.locator("#projectBtn").click()
+        hear = frame.locator("#dialog").get_by_role("button", name="듣기", exact=True).first
+        hear.click()
+        frame.locator("#dialog").get_by_role("button", name="정지", exact=True).wait_for(timeout=10000)
+        frame.locator("#dialog").get_by_role("button", name="닫기").click()
+        time.sleep(1)
+        audition_ok = inner.evaluate("JSON.stringify(JSON.parse(localStorage.getItem('strudel-ddalkkak-v1')).projects[0].tracks)") == tracks_before
         frame.locator("#settingsBtn").click()
         frame.get_by_role("button", name="게임하기").click()
         page.get_by_text("음악 작업실로 돌아가기").wait_for(timeout=15000)
@@ -140,6 +148,7 @@ try:
         "edited code applied as version": len(edited["versions"]) == before + 1 and edited["tracks"][0]["code"].endswith("// 킥"),
         "text round trip": all(trip.values()),
         "art follows playback": art_moves,
+        "version audition leaves project alone": audition_ok,
     }
     print(calls, errors[:3])
     for name, ok in checks.items():

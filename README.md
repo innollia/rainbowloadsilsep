@@ -150,4 +150,4 @@ python -m pytest -q
 
 ## 내 PC에서 공개
 
-`run_public.ps1`은 `~/.all-tomorrow/key-pool.env`의 키와 `STUDIO_PASSWORD`로 서버를 띄우고 Cloudflare 임시 터널을 연다. 주소는 실행할 때마다 바뀌고, PC가 켜져 있고 이 터미널이 살아 있는 동안만 접속된다. 일일 호출 한도는 200회다.
+`run_public.ps1`은 `~/.all-tomorrow/key-pool.env`의 키와 `STUDIO_PASSWORD`로 서버를 띄우고 Cloudflare 임시 터널을 연다. 주소는 실행할 때마다 바뀌고, PC가 켜져 있고 이 터미널이 살아 있는 동안만 접속된다. 일일 호출 한도는 200회다. 코드를 고친 뒤 주소를 유지하려면 `run_public.ps1 -ServerOnly`로 앱만 재시작한다.
