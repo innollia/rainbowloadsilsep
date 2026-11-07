@@ -449,3 +449,99 @@ def test_lang_picks_message_language_and_falls_back_to_english():
 
 def test_browser_cannot_charge_someone_else():
     assert "account" not in sb.validate_request(request(account="victim@example.com"))
+
+
+def openrouter_server(status=200, reply=None, finish="stop", content=None, seen=None):
+    """A stand-in for https://openrouter.ai/api/v1 that answers one request."""
+    seen = {} if seen is None else seen
+
+    class H(BaseHTTPRequestHandler):
+        def do_POST(self):
+            seen["path"], seen["auth"] = self.path, self.headers["Authorization"]
+            seen["body"] = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            text = content if content is not None else json.dumps(reply or {"summary": "x", "changes": []})
+            out = {"id": "gen-1", "model": seen["body"]["model"], "provider": "P",
+                   "choices": [{"finish_reason": finish, "message": {"content": text}}],
+                   "usage": {"prompt_tokens": 100, "completion_tokens": 50, "cost": 0.0012,
+                             "completion_tokens_details": {"reasoning_tokens": 20}}}
+            body = json.dumps(out if status == 200 else {"error": {"message": "no sk-or-v1-abcdefabcdef123 here"}}).encode()
+            self.send_response(status); self.end_headers(); self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=server.handle_request, daemon=True).start()
+    return f"http://127.0.0.1:{server.server_port}", seen
+
+
+def test_openrouter_sends_strict_schema_and_records_cost():
+    url, seen = openrouter_server(reply={"summary": "ok", "changes": []})
+    client = sb.OpenRouter("sk-or-v1-secretsecret", "anthropic/claude-haiku-5.5", "medium", base_url=url)
+    assert client.edit("p") == {"summary": "ok", "changes": []}
+    body = seen["body"]
+    assert seen["path"] == "/chat/completions" and seen["auth"] == "Bearer sk-or-v1-secretsecret"
+    assert body["response_format"]["json_schema"]["strict"] is True
+    assert body["response_format"]["json_schema"]["schema"]["additionalProperties"] is False
+    assert body["provider"] == {"require_parameters": True} and body["reasoning"] == {"effort": "medium"}
+    assert "models" not in body  # no silent fallback to another model
+    assert body["messages"][0]["content"][0]["cache_control"] == {"type": "ephemeral"}
+    assert client.last_usage["cost"] == 0.0012 and client.last_usage["reasoning"] == 20
+
+
+def test_openrouter_listen_is_measurement_not_hearing():
+    url, seen = openrouter_server(reply={"heard": "x"})
+    client = sb.OpenRouter("k", "qwen/qwen3.8-flash", base_url=url)
+    assert client.listen(wav(), "goal") == {"heard": "x"} and client.hears is False
+    assert "You have no audio input" in seen["body"]["messages"][-1]["content"]
+    assert isinstance(seen["body"]["messages"][0]["content"], str)
+
+
+@pytest.mark.parametrize("status,key", [(402, "openrouter_credits"), (429, "openrouter_quota"), (401, "openrouter_key"),
+                                        (500, "openrouter_http")])
+def test_openrouter_status_errors(status, key):
+    url, _ = openrouter_server(status=status)
+    with pytest.raises(sb.ModelError) as err:
+        sb.OpenRouter("k", "m", base_url=url).edit("p")
+    assert err.value.key == key and "sk-or-v1-abcdef" not in err.value.text("en")
+
+
+def test_openrouter_cut_and_broken_replies_fail():
+    url, _ = openrouter_server(finish="length")
+    with pytest.raises(sb.ModelError) as err:
+        sb.OpenRouter("k", "m", base_url=url).edit("p")
+    assert err.value.key == "openrouter_cut"
+    url, _ = openrouter_server(content="not json {")
+    with pytest.raises(sb.ModelError) as err:
+        sb.OpenRouter("k", "m", base_url=url).edit("p")
+    assert err.value.key == "openrouter_parse"
+
+
+def test_openrouter_key_is_redacted():
+    assert "sk-or-" not in sb.redact("key sk-or-v1-0123456789abcdef leaked")
+
+
+def test_bakeoff_models_hidden_on_the_public_server(monkeypatch):
+    monkeypatch.delenv("STRUDEL_LOCAL_AI", raising=False)
+    router = sb.Router(gemini_key="g", openrouter_key="or")
+    ids = [m["id"] for m in router.choices()["models"]]
+    assert ids == ["gemini-3.8-flash"]
+    assert isinstance(router.engine("qwen/qwen3.8-flash"), sb.Gemini)
+    assert sb.validate_request(request(model="qwen/qwen3.8-flash"))["model"] == ""
+
+
+def test_bakeoff_models_offered_locally_only_with_a_key(monkeypatch):
+    monkeypatch.setenv("STRUDEL_LOCAL_AI", "1")
+    assert "qwen/qwen3.8-flash" not in [m["id"] for m in sb.Router(gemini_key="g").choices()["models"]]
+    router = sb.Router(gemini_key="g", openrouter_key="or")
+    assert "qwen/qwen3.8-flash" in [m["id"] for m in router.choices()["models"]]
+    engine = router.engine("qwen/qwen3.8-flash", "low")
+    assert isinstance(engine, sb.OpenRouter) and engine.model == "qwen/qwen3.8-flash" and engine.effort == "low"
+    assert sb.validate_request(request(model="qwen/qwen3.8-flash"))["model"] == "qwen/qwen3.8-flash"
+
+
+def test_agy_falls_back_to_the_json_in_its_response():
+    out = json.dumps({"status": "SUCCESS", "response": 'thinking\n{"summary": "y", "changes": []}\n'}).encode()
+    assert sb.AgyCli.parse(out) == {"summary": "y", "changes": []}
+    with pytest.raises(sb.ModelError):
+        sb.AgyCli.parse(json.dumps({"status": "SUCCESS", "response": "no json here"}).encode())

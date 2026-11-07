@@ -6,3 +6,5 @@ node_modules/
 artifacts/
 *.log
 artifacts-e2e.png
+bakeoff/results/
+static/bakeoff/

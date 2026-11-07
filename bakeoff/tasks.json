@@ -1,0 +1,48 @@
+{
+  "settings": {"rounds": 2, "effort": "medium", "lang": "ko", "auto": true},
+  "fixed_song": {
+    "bpm": 100,
+    "tracks": [
+      {"id": "drums", "name": "드럼", "role": "drums", "code": "stack(s(\"bd ~ ~ bd ~ ~ bd ~\").gain(.55), s(\"~ sd ~ sd\").gain(.4), s(\"hh*8\").gain(.2))"},
+      {"id": "bass", "name": "베이스", "role": "bass", "code": "note(\"<c2 a1 f1 g1>\").s(\"sawtooth\").lpf(500).gain(.45)"},
+      {"id": "chords", "name": "코드", "role": "pad", "code": "note(\"<[c3,e3,g3] [a2,c3,e3] [f2,a2,c3] [g2,b2,d3]>\").s(\"triangle\").attack(.2).release(.8).gain(.25)"},
+      {"id": "melody", "name": "멜로디", "role": "melody", "code": "note(\"<[e4 g4 c5 g4] [e4 c4 a3 c4] [f4 a4 c5 a4] [g4 d5 b4 g4]>\").s(\"square\").lpf(2500).gain(.22)"}
+    ]
+  },
+  "tasks": [
+    {"id": "1", "star": true, "genre": "하우스", "start": "empty",
+     "text": "120BPM 하우스. 4박 킥, 오프비트 하이햇, 통통 튀는 베이스"},
+    {"id": "2", "star": true, "genre": "로파이 힙합", "start": "empty",
+     "text": "비 오는 밤 공부할 때 듣는 로파이. 느슨한 드럼, 따뜻한 재즈 코드"},
+    {"id": "3", "star": false, "genre": "앰비언트", "start": "empty",
+     "text": "드럼 없이 천천히 숨 쉬듯 변하는 앰비언트 패드와 멀리서 들리는 종소리"},
+    {"id": "4", "star": true, "genre": "신스팝", "start": "empty",
+     "text": "80년대 신스팝. 밝은 아르페지오와 귀에 남는 4마디 멜로디"},
+    {"id": "5", "star": false, "genre": "테크노", "start": "empty",
+     "text": "어두운 미니멀 테크노, 반복되며 조금씩 필터가 열리는 신스"},
+    {"id": "6", "star": false, "genre": "칩튠", "start": "empty",
+     "text": "8비트 게임 배경음악. 모험을 떠나는 느낌"},
+    {"id": "7", "star": true, "genre": "편집(트랙 지정)", "start": "fixed", "target": "bass",
+     "text": "베이스를 더 그루비하게, 다른 트랙은 건드리지 마"},
+    {"id": "8", "star": false, "genre": "편집(전체)", "start": "fixed",
+     "text": "이 곡을 반으로 느린 템포의 슬픈 발라드로 바꿔"}
+  ],
+  "models": [
+    {"id": "nvidia/nemotron-3.5-super-vl:free", "via": "openrouter", "tier": "무료", "tasks": "all", "reps": 3, "job_max_usd": 0},
+    {"id": "deepseek/deepseek-v4.1-flash", "via": "openrouter", "tier": "초저가", "tasks": "all", "reps": 3, "job_max_usd": 0.017},
+    {"id": "qwen/qwen3.8-flash", "via": "openrouter", "tier": "초저가", "tasks": "all", "reps": 3, "job_max_usd": 0.020},
+    {"id": "z-ai/glm-5.3", "via": "openrouter", "tier": "초저가", "tasks": "all", "reps": 2, "job_max_usd": 0.105},
+    {"id": "gpt-5.6-luna", "via": "codex", "tier": "초저가", "tasks": "all", "reps": 3, "job_max_usd": 0},
+    {"id": "minimax/minimax-m3", "via": "openrouter", "tier": "중가", "tasks": "all", "reps": 3, "job_max_usd": 0.046},
+    {"id": "anthropic/claude-haiku-5.5", "via": "openrouter", "tier": "중가", "tasks": "all", "reps": 3, "job_max_usd": 0.018},
+    {"id": "moonshotai/kimi-k2.7-code", "via": "openrouter", "tier": "중가", "tasks": "all", "reps": 1, "job_max_usd": 0.20},
+    {"id": "gemini-3.8-flash", "via": "agy", "agy_model": "gemini-3.8-flash-medium", "tier": "중가", "tasks": "all", "reps": 3, "job_max_usd": 0},
+    {"id": "anthropic/claude-sonnet-5.5", "via": "openrouter", "tier": "고가", "tasks": "star", "reps": 2, "job_max_usd": 0.35},
+    {"id": "gpt-5.6-terra", "via": "codex", "tier": "고가", "tasks": "all", "reps": 3, "job_max_usd": 0}
+  ],
+  "referees": [
+    {"name": "A", "via": "agy", "agy_model": "gemini-3.8-flash-medium"},
+    {"name": "B", "via": "openrouter", "id": "qwen/qwen3.8-flash", "job_max_usd": 0.0007}
+  ],
+  "budget": {"over_factor": 1.3, "openrouter_floor_usd": 0.2}
+}

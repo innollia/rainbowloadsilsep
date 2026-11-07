@@ -1,8 +1,15 @@
 # 모델 대결 계획 (가격대별로 누가 음악을 잘 만드나)
 
-olmuse 작업실의 편집 루프(편집 → 브라우저 실행 → 녹음 → 듣기/측정 → 다음 라운드)를 그대로 쓰고, 그 안의 모델만 바꿔 가며 같은 과제를 풀린다. 이 문서는 무엇을 쓰고 어떻게 잴지만 정한다. 구현·실험은 아직 하지 않았다.
+olmuse 작업실의 편집 루프(편집 → 브라우저 실행 → 녹음 → 듣기/측정 → 다음 라운드)를 그대로 쓰고, 그 안의 모델만 바꿔 가며 같은 과제를 풀린다. 이 문서는 무엇을 쓰고 어떻게 잴지 정한다. 도구는 `bakeoff/`에 구현됐다(3.3, 10절).
 
-**총예산: 2만원(결제 수수료를 빼고 실사용 약 $13).** 후보 수·반복 수·과제 수는 이 상한에 맞춰 줄였다(8절).
+> **2026-11-07 사용자 결정으로 바뀐 점** (아래 본문은 이 결정에 맞춰 고쳤다)
+> - OpenRouter 키는 `~/.all-tomorrow/key-pool.env`의 `OPENROUTER_API_KEY`. 이미 충전돼 잔액 약 **$9.8**이고, 이번 실험에 다 써도 된다. 값은 출력·로그·커밋하지 않는다.
+> - **Gemini 모델은 이 PC의 agy CLI(Antigravity)**, **GPT 모델은 이 PC의 codex CLI(OpenAI Codex, 구독)**로 부른다. CLI 모델 원가는 $0으로 적고 보고서에 "구독"으로 구분한다. CLI 모델은 비싼 등급(gpt-5.6-terra)도 반복을 줄이지 않고 같은 배정(8과제 × 3회)으로 돌린다.
+> - OpenRouter 돈은 나머지 모델(무료·초저가·중가, Claude Haiku/Sonnet)에 쓰고, 남는 예산만큼 반복을 늘렸다(4절).
+> - 사람 블라인드 청취는 `https://olmuse.app/listen`(pages/listen.py) 페이지로 여러 명이 한다(6절).
+> - Gemini 직접 API 지갑은 쓰지 않는다. 그래서 Gemini도 소리를 직접 듣지 않고 측정 분석으로 판단한다.
+
+**총예산: OpenRouter 잔액 약 $9.8 + CLI 구독.** 원래 상한 2만원(실사용 약 $13)에 맞춘 배정을 위 결정대로 다시 짰다(8절).
 
 가격과 모델 이름은 2026-11-07에 `https://openrouter.ai/api/v1/models`에서 받은 목록(460개)을 기준으로 했다. 실행 직전에 같은 API로 다시 받아 표를 갱신한다.
 
@@ -33,10 +40,11 @@ Hugging Face를 주력으로 하지 않는 이유: 기준선(Claude·Gemini)과 
 
 같은 편집 프롬프트·같은 생각 강도(`medium`)·같은 라운드 수로 돌린다. 가격은 1M 토큰당 USD(OpenRouter 표시가).
 
-예산 때문에 정한 연결 방식:
-- **Gemini 3.8 Flash만 직접 연결**로 돌린다. 제품에서 유일하게 소리를 직접 듣는 엔진이라 그 경로를 그대로 재야 한다.
-- **Claude Haiku·Sonnet은 OpenRouter 경유**로 돌린다. 같은 모델·같은 프롬프트라 결과 비교에는 문제가 없고, 크레딧을 OpenRouter 한 곳에 모아 충전 수수료를 한 번만 낸다. 원가는 OpenRouter `usage.cost`로 잰다.
-- **Opus 5.5는 뺀다.** 작업당 최대 약 $0.70이라 4작업만 돌려도 예산의 20%를 넘는다. 비싼 쪽 천장은 Sonnet·GPT-5.6 Terra로 본다.
+연결 방식(사용자 결정 반영):
+- **Gemini 3.8 Flash는 agy CLI**(`--model gemini-3.8-flash-medium`)로 돌린다. 구독이라 원가 $0. agy에는 오디오 입력이 없어 듣기는 다른 후보와 같은 측정 분석이다.
+- **GPT-5.6 Luna·Terra는 codex CLI**(`codex exec -m <모델> -c model_reasoning_effort="medium" --output-schema`)로 돌린다. 구독이라 원가 $0. 토큰 수는 codex의 `turn.completed` 사용량으로 남긴다.
+- **나머지는 OpenRouter 경유**. Claude Haiku·Sonnet도 같은 모델·같은 프롬프트라 비교에 문제가 없다. 원가는 OpenRouter `usage.cost`로 잰다.
+- **Opus 5.5는 뺀다.** 작업당 최대 약 $0.70. 비싼 쪽 천장은 Sonnet·GPT-5.6 Terra로 본다.
 
 | 가격대 | 모델 (연결 / id) | 입력 | 출력 | 고른 이유 |
 |---|---|---|---|---|
@@ -44,13 +52,13 @@ Hugging Face를 주력으로 하지 않는 이유: 기준선(Claude·Gemini)과 
 | 초저가 | OR `deepseek/deepseek-v4.1-flash` | 0.051 | 0.567 | 가장 싼 축의 최신 코딩 강자 |
 | 초저가 | OR `qwen/qwen3.8-flash` | 0.15 | 0.47 | Qwen 최신 Flash |
 | 초저가 | OR `z-ai/glm-5.3` | 0.07 | 1.4 | 코딩 평판이 좋은 GLM 최신판. 생각이 필수(`mandatory`)라 출력이 길 수 있음 |
-| 초저가 | OR `openai/gpt-5.6-luna` | 0.2 | 1.2 | OpenAI 저가 줄 |
+| 초저가 | codex `gpt-5.6-luna` (구독) | (0.2) | (1.2) | OpenAI 저가 줄. 괄호는 API 정가, 실제 원가 $0 |
 | 중가 | OR `minimax/minimax-m3` | 0.3 | 1.2 | 에이전트·코딩 특화 중가 |
 | 중가 | OR `anthropic/claude-haiku-5.5` (기준선) | 0.1 | 0.5 | 지금 작업실의 싼 선택지 |
 | 중가 | OR `moonshotai/kimi-k2.7-code` | 0.6 | 3.5 | 코드 전용 Kimi. 생각 필수 |
-| 중가 | 직접 `gemini-3.8-flash` (기준선, 현재 기본값) | 0.825 | 4.125 | 소리를 직접 들음 |
+| 중가 | agy `gemini-3.8-flash` (기준선, 현재 기본값, 구독) | (0.825) | (4.125) | 제품 기본 모델 |
 | 고가 | OR `anthropic/claude-sonnet-5.5` (기준선) | 2 | 10 | 지금 1크레딧 기준 모델 |
-| 고가 | OR `openai/gpt-5.6-terra` | 2 | 12 | OpenAI 상위 줄 |
+| 고가 | codex `gpt-5.6-terra` (구독) | (2) | (12) | OpenAI 상위 줄 |
 
 빠진 것과 이유: `claude-opus-5-5`(예산), `gemma-4-31b-it:free`(무료지만 `json_schema` 미지원), `cohere/north-mini-code:free`(구조화 출력 표시 없음), `gpt-5.5-pro` 계열(출력 1M당 $180), `claude-fable-*`(사용자 지시 없이 쓰지 않음), DeepSeek V4 Pro·Qwen 3.8 Max 등 같은 회사의 상위 모델(예산 안에서 회사당 한 줄만).
 
@@ -82,18 +90,22 @@ Hugging Face를 주력으로 하지 않는 이유: 기준선(Claude·Gemini)과 
    - `redact()`에 `sk-or-` 로 시작하는 키 무늬를 추가한다.
 2. **`Router`**: `openrouter_key` 인자를 받아 `self.keys["openrouter"]`에 넣고, `engine()`에 `provider == "openrouter"` 갈래를 추가한다. 모델 id는 OpenRouter 이름 그대로(`deepseek/deepseek-v4.1-flash`) 쓰고 `MODEL_CHOICES` 항목의 `provider`로 구분한다.
 3. **대결 모델은 공개 서버에 안 보이게**: `BAKEOFF_CHOICES`를 따로 두고 `STRUDEL_LOCAL_AI=1`일 때만 `MODEL_CHOICES`에 합친다(공개 서버는 이 값을 켜지 않는다는 app.py 주석과 같은 원칙). 대결이 끝나 공개할 모델을 고르면 그 모델만 `MODEL_CHOICES`로 옮긴다.
-4. **app.py `choose_model()`**: `openrouter_key = secret("OPENROUTER_API_KEY")`를 더해 `Router`에 넘긴다. 키는 `~/.all-tomorrow/key-pool.env`에 `OPENROUTER_API_KEY` 이름으로 들어갈 예정이다. 코드·문서·로그 어디에도 값을 적지 않는다.
+4. **app.py `choose_model()`**: `openrouter_key = secret("OPENROUTER_API_KEY")`를 `STRUDEL_LOCAL_AI=1`일 때만 읽어 `Router`에 넘긴다. 키는 `~/.all-tomorrow/key-pool.env`에 `OPENROUTER_API_KEY` 이름으로 들어 있다. 코드·문서·로그 어디에도 값을 적지 않는다.
 5. **credits.py `MODEL_COST`**: 대결 중에는 로컬이라 장부를 쓰지 않으므로 손대지 않는다. 공개할 모델이 정해지면 대결에서 잰 "작업당 평균 원가"를 Sonnet 원가와 비교해 크레딧 값을 정한다(1크레딧 = Sonnet 한 호출이라는 기존 기준 유지).
 6. **Gemini도 `last_usage`**: 직접 연결 원가를 같은 방식으로 재려고 `Gemini._call`은 `usageMetadata`를 `self.last_usage`에 남긴다(Claude 직접 연결도 같은 모양으로 맞춰 둔다). 동작은 바뀌지 않는다.
 7. 단위 시험(tests/test_studio_backend.py): 가짜 HTTP 서버로 OpenRouter 성공·402·429·잘린 응답·스키마 깨진 응답, `Router`가 키 없을 때 OpenRouter 모델을 내주지 않는 것, 공개 모드에서 `BAKEOFF_CHOICES`가 안 보이는 것.
 
 ### 3.3 대결 도구 (새 파일, 제품 코드와 분리)
 
-- `bakeoff/tasks.json`: 고정 과제와 모델별 배정(4절).
-- `bakeoff/run.py`: `tests/e2e_studio.py`처럼 앱을 로컬에서 띄우고(Playwright + 헤드리스 Chrome) 실제 작업실 화면으로 과제를 보낸다. 실행·녹음은 진짜 브라우저 Strudel이 한다. 엔진을 `Recorder`로 감싸 호출마다 시각, 걸린 시간, `last_usage`, 받은 JSON, 녹음 WAV(라운드별)를 `bakeoff/results/<모델>/<과제>-<반복>.jsonl`·`.wav`로 저장한다. 예산 멈춤(8절)도 여기서 한다.
-- `bakeoff/referee.py`: 끝난 작업의 최종 WAV(되돌림이 있으면 가장 좋았던 라운드의 WAV)를 심판 모델에 고정 프롬프트로 채점시킨다(5절).
-- `bakeoff/report.py`: 지표 표·그래프(점수 대 원가)를 만든다.
-- `bakeoff/listen.html`: 사람 블라인드 청취 페이지(6절).
+- `bakeoff/tasks.json`: 고정 과제, 고정 4트랙 곡, 모델별 연결·배정·작업당 최대 원가, 심판, 예산 규칙(4·8절).
+- `bakeoff/core.py`: 설정·결과 파일 읽기, 키 읽기(값은 어디에도 쓰지 않음), `CodexCli` 엔진, 호출을 기록하는 `Recorder`, 성공·실패·기반 실패 판정.
+- `bakeoff/harness.py` + `harness_app.py`: 진짜 `app.py`를 그대로 띄우되 엔진만 `Recorder`로 감싼 대결 엔진으로 바꾼다. 제품의 작업 루프·한도·프롬프트는 그대로이고, 벽시계 한도만 모든 모델에 똑같이 15분으로 늘렸다(CLI 시작 시간은 모델 탓이 아니므로). 작업이 끝나면 상태·메시지·고치기 수·최종 곡을 끝 줄로 남긴다.
+- `bakeoff/run.py`: `python bakeoff/run.py --models ... --tasks ... --reps N --workers N`. 작업실 서버를 일꾼 수만큼 띄우고(Playwright + 헤드리스 Chrome) 실제 작업실 화면으로 과제를 보낸다. 실행·녹음은 진짜 브라우저 Strudel이 한다. 호출마다 시각, 걸린 시간, `last_usage`, 받은 JSON, 녹음 WAV(라운드별)를 `bakeoff/results/<모델>/<과제>-<반복>.jsonl`·`-r<라운드>.wav`로 저장한다. 끝 줄이 있는 작업은 건너뛰고(이어 하기), 기반 실패는 한 번만 다시 돌린다(이전 시도는 `old/`에 남아 원가에 계속 잡힌다). 예산 멈춤(8.4절)도 여기서 한다. `--dry-run`은 남은 작업과 모델별 상한만 보여 준다.
+- `bakeoff/referee.py`: 성공한 작업의 최종 WAV(되돌림이 있으면 가장 좋았던 라운드의 WAV)를 심판 모델에 고정 프롬프트로 채점시킨다(5절). `results/referee.jsonl`, 이미 채점한 곡은 건너뜀.
+- `bakeoff/report.py`: 지표 표(`results/report.md`, `report.json`)와 점수 대 원가 그림(`score_vs_cost.svg`), 결선 6모델.
+- `bakeoff/clips.py`: 결선 모델의 ★ 공통 과제 곡을 같은 길이·같은 음량(-16 LUFS)으로 맞춰 무작위 이름의 mp3로 `static/bakeoff/`에 둔다(`/app/static/bakeoff/`로 제공). 모델 대응표는 이 PC의 `results/listen/manifest.json`에만 있다.
+- `pages/listen.py` + `bakeoff/listen_store.py`: 사람 블라인드 청취 페이지(6절).
+- `results/`와 `static/bakeoff/`는 커밋하지 않는다(.gitignore).
 - 긴 실행은 본 세션에서 백그라운드로 돌리고, 결과 분석만 따로 맡긴다.
 
 ---
@@ -117,12 +129,14 @@ Hugging Face를 주력으로 하지 않는 이유: 기준선(Claude·Gemini)과 
 
 | 묶음 | 모델 | 과제 | 반복 | 작업 수 |
 |---|---|---|---|---|
-| 싼 모델 | nemotron free, deepseek v4.1 flash, qwen3.8 flash, gpt-5.6 luna, minimax m3, haiku 5.5 | 8개 전부 | 2 | 각 16 |
-| 생각이 긴·비싼 중가 | glm-5.3, kimi k2.7 code, gemini 3.8 flash | 8개 전부 | 1 | 각 8 |
-| 고가 | sonnet 5.5, gpt-5.6 terra | ★ 공통 4개 | 1 | 각 4 |
-| **합계** | | | | **128작업** |
+| CLI(구독, 원가 $0) | gemini 3.8 flash(agy), gpt-5.6 luna·terra(codex) | 8개 전부 | 3 | 각 24 |
+| OpenRouter 싼 모델 | nemotron free, deepseek v4.1 flash, qwen3.8 flash, minimax m3, haiku 5.5 | 8개 전부 | 3 | 각 24 |
+| OpenRouter 생각이 긴 모델 | glm-5.3 | 8개 전부 | 2 | 16 |
+| OpenRouter 비싼 중가 | kimi k2.7 code | 8개 전부 | 1 | 8 |
+| OpenRouter 고가 | sonnet 5.5 | ★ 공통 4개 | 2 | 8 |
+| **합계** | | | | **224작업** |
 
-반복이 1~2회라 통계 구간이 넓다. 이 대결은 "후보를 거르는 1차 선별"이고, 차이가 작으면 동점으로 본다(7절). 결선에 오른 모델을 더 돌릴 필요가 생기면 예비비(8절) 안에서 공통 과제 반복만 늘린다.
+남는 OpenRouter 예산으로 싼 모델 반복을 2 → 3, glm 1 → 2, sonnet 1 → 2로 늘렸다(8절). 반복이 1~3회라 통계 구간이 넓다. 이 대결은 "후보를 거르는 1차 선별"이고, 차이가 작으면 동점으로 본다(7절). 결선에 오른 모델을 더 돌릴 필요가 생기면 예비비(8절) 안에서 공통 과제 반복만 늘린다.
 
 ---
 
@@ -137,7 +151,7 @@ Hugging Face를 주력으로 하지 않는 이유: 기준선(Claude·Gemini)과 
 | 고치기 횟수 | 작업당 실행 오류·형식 오류로 다시 부른 수의 평균 | `Progress.fixes` |
 | 형식 오류율 | 응답 JSON 파싱·스키마·`merge_candidate` 거절 비율 | Recorder 기록 |
 | 무음·클리핑 | 최종 곡의 `signal_report` 무음·클리핑 비율 | `signal_report()` |
-| 심판 점수 (주 지표) | 최종 WAV를 심판이 0~100으로 채점. 심판 A: `gemini-3.8-flash`(직접 연결)가 소리를 직접 듣고 채점. 심판 B: `qwen/qwen3.8-flash`(OpenRouter)가 `ear.describe` 측정표로 채점. 둘 다 짧은 고정 프롬프트(요청 문장 + "얼마나 요청을 만족하고 듣기 좋은가"), 모델 이름·자기 평가는 주지 않고 긴 `SYSTEM`도 붙이지 않음 | `referee.py` |
+| 심판 점수 (주 지표) | 최종 WAV를 심판이 0~100으로 채점. 심판 A: `gemini-3.8-flash`(agy CLI, 구독)가 `ear.describe` 측정표로 채점(직접 API를 쓰지 않기로 해서 소리를 직접 듣지 않음). 심판 B: `qwen/qwen3.8-flash`(OpenRouter)가 같은 측정표로 채점. 둘 다 짧은 고정 프롬프트(요청 문장 + "얼마나 요청을 만족하고 듣기 좋은가"), 모델 이름·자기 평가는 주지 않고 긴 `SYSTEM`도 붙이지 않음 | `referee.py` |
 | 자기 점수 | 모델이 자기 `listen`에서 매긴 점수. 순위에는 쓰지 않고 "자기 평가가 얼마나 후한가"(자기 점수 − 심판 점수)만 본다 | Recorder 기록 |
 | 걸린 시간 | 작업 전체 벽시계 시간, 모델 호출 시간 합 | Recorder 기록 |
 | 호출당·작업당 원가 | OpenRouter는 응답 `usage.cost` 합. Gemini 직접은 응답 토큰 × 직접 API 단가 | Recorder 기록 |
@@ -159,9 +173,11 @@ Hugging Face를 주력으로 하지 않는 이유: 기준선(Claude·Gemini)과 
 
 - 결선 6모델: 자동 지표에서 가격대별 1등(무료·초저가·중가·고가) + 현재 기본값 `gemini-3.8-flash` + `claude-sonnet-5.5`(겹치면 다음 순위로 채움).
 - ★ 공통 4과제 × 결선 6모델, 각 첫 번째 반복의 최종 곡 → 24개 클립. 클립은 같은 길이(녹음 구간 그대로)로 자르고 음량을 맞춘다(LUFS 정규화).
-- `bakeoff/listen.html`: 과제별로 6개 클립을 무작위 순서 A~F로만 보여 준다. 모델 이름·가격·심판 점수는 끝날 때까지 숨긴다. 청취자는 과제마다 순위(1~6)를 매기고, "요청과 안 맞음" 표시를 할 수 있다. 결과는 페이지 밖 JSON으로 저장.
-- 집계: 순위 → Bradley–Terry 점수(쌍대 비교로 바꿔). 청취자가 여럿이면 합친다.
-- 같은 클립을 몰래 한 번 더 넣어(2개) 청취자 일관성을 본다.
+- 만들기: `python bakeoff/clips.py`(결선은 `report.json`에서, 또는 `--models`로 지정). 무작위 이름의 mp3가 `static/bakeoff/`에 생기고, 다시 만들면 예전 클립은 지워진다.
+- 페이지: **`https://olmuse.app/listen`** (`pages/listen.py`). 로그인 없이 열리고, 사람마다 이름이나 별명만 적는다. 과제별로 클립을 사람마다 다른(같은 이름이면 늘 같은) 무작위 순서의 "곡 A~G"로만 보여 준다. 모델 이름·가격·심판 점수는 숨긴다. 청취자는 곡마다 1~10점을 고르고 "요청과 안 맞음"을 표시할 수 있다. 고르는 즉시 이 PC의 `.studio-data/listen.sqlite`에 저장된다(저장 단추 없음). 같은 이름으로 다시 오면 이어서 한다.
+- 결과: 같은 페이지 아래에 누가 몇 곡 들었는지는 늘 보이고, 모델 이름을 밝힌 결과는 `STUDIO_PASSWORD`를 넣어야 보인다. 모든 표가 모였는지는 그 진행표로 보고 연다.
+- 집계: 같은 청취자·같은 과제 안에서 점수를 쌍대 비교(이기면 1, 같으면 0.5)로 바꿔 Bradley–Terry 강도를 구한다. 청취자가 여럿이면 합친다. 평균 점수와 "안 맞음" 수도 함께 본다.
+- 과제마다 한 클립을 다른 이름으로 몰래 한 번 더 넣어 청취자 일관성(두 점수의 차)을 본다. 이 복제 클립은 모델 점수에 넣지 않는다.
 - 청취는 돈이 들지 않는다(이미 녹음된 WAV).
 
 ---
@@ -180,59 +196,46 @@ Hugging Face를 주력으로 하지 않는 이유: 기준선(Claude·Gemini)과 
 
 ---
 
-## 8. 예산 배분 (상한 2만원 ≈ 실사용 $13)
+## 8. 예산 배분 (OpenRouter 잔액 약 $9.8 + CLI 구독)
 
 ### 8.1 가정
 
 - 라운드 2 자동 작업 하나가 **최대** 편집 5회 + 듣기 3회 = 8호출. 호출당 입력 약 7천 토큰(시스템 프롬프트 약 1.4만 자 ≈ 4천 토큰 + 곡·대화), 출력 약 3천 토큰(생각 포함) → 작업당 최대 입력 56k, 출력 24k. 생각이 필수인 GLM-5.3은 출력 3배, Kimi K2.7 Code는 2배로 잡았다.
-- 아래 금액은 모두 이 **최대치**로 잡았다. 대부분의 작업은 일찍 끝나 실제로는 더 적다.
-- 심판 호출은 짧은 프롬프트(입력 약 3천 토큰, 30초 녹음 포함; 출력 약 500 토큰).
+- 아래 금액은 모두 이 **최대치**다. 대부분의 작업은 일찍 끝나 실제로는 더 적다. 시범 실측: qwen3.8-flash 과제 1 한 작업이 $0.014(편집 한 번이 생각으로 16k 토큰을 다 써 잘림), 호출당 50~150초.
+- 심판 호출은 짧은 프롬프트(측정표 포함 입력 약 3천 토큰, 출력 약 500 토큰).
 
-### 8.2 충전과 수수료
+### 8.2 지갑
 
-| 지갑 | 충전 | 수수료 | 실제 청구 | 이유 |
+| 지갑 | 금액 | 비고 |
+|---|---|---|
+| OpenRouter 크레딧 | 잔액 약 $9.80 (이미 충전) | `GET /api/v1/credits`. 키 자체 한도는 $50으로 잡혀 있고 이 키로는 바꿀 수 없어, 잔액이 사실상의 한도다 |
+| agy CLI (Gemini) | 구독, 원가 $0 | 후보 gemini-3.8-flash + 심판 A |
+| codex CLI (GPT) | 구독, 원가 $0 | 후보 gpt-5.6-luna, gpt-5.6-terra |
+
+### 8.3 모델별 예상 비용 (OpenRouter만)
+
+| 가격대 | 모델 | 작업당 최대 | 작업 수 | 최대 비용 |
 |---|---|---|---|---|
-| OpenRouter 크레딧 | $10 | $0.80 (5.5%가 최소 $0.80보다 작아 최소액 적용) | **$10.80** | 최소 충전 $5로는 모델 몫($7.78)을 못 덮음. $10 누적 구매로 무료 모델 하루 한도도 50 → 1,000회로 오름 |
-| Gemini 직접 API | 사용한 만큼 후불 | 없음 | **최대 $1.74** | 기준선 후보 + 심판 A |
-| **합계** | | | **최대 $12.54** | 상한 $13 안 |
+| 무료 | nemotron-3.5-super-vl:free | $0 | 24 | $0.00 |
+| 초저가 | deepseek-v4.1-flash | $0.017 | 24 | $0.41 |
+| 초저가 | qwen3.8-flash | $0.020 | 24 | $0.48 |
+| 초저가 | glm-5.3 | $0.105 | 16 | $1.68 |
+| 중가 | minimax-m3 | $0.046 | 24 | $1.10 |
+| 중가 | claude-haiku-5.5 | $0.018 | 24 | $0.43 |
+| 중가 | kimi-k2.7-code | $0.20 | 8 | $1.60 |
+| 고가 | claude-sonnet-5.5 | $0.35 | 8 | $2.80 |
+| 심판 | B: qwen3.8-flash 측정 판단 (성공한 곡 최대 224곡) | $0.0007 | 224 | $0.16 |
+| | **OpenRouter 합계(최대)** | | | **$8.66** |
+| | **예비비** (잔액 $9.80 − 최대 합계) | | | **$1.14** |
 
-### 8.3 모델별 예상 비용
+CLI 모델(gemini-3.8-flash 24, gpt-5.6-luna 24, gpt-5.6-terra 24작업)과 심판 A는 $0(구독). 구독 사용 한도에 걸리면 그 호출은 "기반 실패"로 한 번만 다시 돈다.
 
-| 가격대 | 모델 | 작업당 최대 | 작업 수 | 최대 비용 | 지갑 |
-|---|---|---|---|---|---|
-| 무료 | nemotron-3.5-super-vl:free | $0 | 16 | $0.00 | OR |
-| 초저가 | deepseek-v4.1-flash | $0.017 | 16 | $0.26 | OR |
-| 초저가 | qwen3.8-flash | $0.020 | 16 | $0.31 | OR |
-| 초저가 | glm-5.3 | $0.105 | 8 | $0.84 | OR |
-| 초저가 | gpt-5.6-luna | $0.040 | 16 | $0.64 | OR |
-| | **초저가 소계** | | | **$2.05** | |
-| 중가 | minimax-m3 | $0.046 | 16 | $0.73 | OR |
-| 중가 | claude-haiku-5.5 | $0.018 | 16 | $0.28 | OR |
-| 중가 | kimi-k2.7-code | $0.20 | 8 | $1.61 | OR |
-| 중가 | gemini-3.8-flash | $0.145 | 8 | $1.16 | Gemini 직접 |
-| | **중가 소계** | | | **$3.78** | |
-| 고가 | claude-sonnet-5.5 | $0.35 | 4 | $1.41 | OR |
-| 고가 | gpt-5.6-terra | $0.40 | 4 | $1.60 | OR |
-| | **고가 소계** | | | **$3.01** | |
-| 심판 | A: gemini-3.8-flash 듣기 (128곡) | $0.0045 | 128 | $0.58 | Gemini 직접 |
-| 심판 | B: qwen3.8-flash 측정 판단 (128곡) | $0.0007 | 128 | $0.09 | OR |
-| | **사용 합계(최대)** | | | **$9.52** | |
-| | 충전 수수료 | | | $0.80 | OR |
-| | **예비비** (OR에 남는 크레딧 $2.22 + 상한까지 여유 $0.46) | | | **$2.68** | |
-| | **총계** | | | **$13.00** | |
-
-지갑별: OpenRouter 사용 최대 $7.78 / 충전 $10 → 남는 $2.22가 예비비. Gemini 직접 최대 $1.74.
-
-시범 실행은 따로 돈을 쓰지 않는다: 본 실행의 첫 작업(모든 모델의 과제 1, 반복 1)을 먼저 돌려 시범으로 보고, 문제가 없으면 그대로 본 실행에 넣는다.
-
-예비비 쓰는 곳(순서대로): ① 기반 실패 재실행 ② 시범에서 실측 원가가 예상보다 크게 나온 모델의 부족분 ③ 동점 결선 모델의 공통 과제 반복 추가. 예비비로도 안 되면 고가 모델 작업부터 줄인다.
+예비비 쓰는 곳(순서대로): ① 기반 실패 재실행 ② 실측 원가가 예상보다 크게 나온 모델의 부족분 ③ 동점 결선 모델의 공통 과제 반복 추가.
 
 ### 8.4 넘침 방지
 
-- OpenRouter 키 자체에 지출 한도 **$10**를 건다. 한도에 닿으면 402가 나고 `openrouter_credits`로 멈춘다(재시도 없음).
-- `run.py`가 기록에서 모델별 누적 원가를 더해, 그 모델의 8.3 최대 비용 × 1.3을 넘으면 그 모델의 남은 작업을 멈추고 "예산 초과"로 표시한다.
-- Gemini 직접 누적이 $1.74를 넘으면 Gemini 후보·심판 A를 멈춘다.
-- 그래서 사용액은 OpenRouter $10 + Gemini $1.74 = $11.74를 넘을 수 없고, 수수료 $0.80을 더해도 청구는 최대 $12.54다.
+- 키 한도를 $10로 거는 대신(이 키로는 못 바꿈) 잔액 자체가 상한이다. 잔액이 바닥나면 402가 나고 `openrouter_credits`로 멈춘다(재시도 없음).
+- `run.py`는 OpenRouter 작업마다 시작 전에 ① 그 모델의 누적 원가(이전 시도 포함)가 8.3 최대 비용 × 1.3을 넘었으면 그 모델의 남은 작업을 멈추고 `results/budget_stops.jsonl`에 "예산 초과"로 남기고 ② 계정 잔액이 $0.20 밑이면 모든 OpenRouter 작업을 멈춘다. `referee.py`도 심판 B에 같은 규칙을 쓴다.
 
 ---
 
@@ -240,11 +243,11 @@ Hugging Face를 주력으로 하지 않는 이유: 기준선(Claude·Gemini)과 
 
 | 순서 | 할 일 | 끝난 기준 |
 |---|---|---|
-| 1 | OpenRouter 키 발급·$10 충전, 키 한도 $10, `key-pool.env`에 `OPENROUTER_API_KEY` 등록 | `GET /api/v1/key`가 200, 한도 $10, `free_model_daily_requests.limit`가 1,000 |
-| 2 | `OpenRouter` 엔진·`Router` 갈래·`BAKEOFF_CHOICES`·`last_usage` 추가와 단위 시험 | 단위 시험 통과, 공개 모드에서 대결 모델이 안 보임 |
-| 3 | `bakeoff/` 도구(tasks, run, referee, report)와 예산 멈춤 | 가짜 엔진으로 과제 2개가 끝까지 돌고 기록·WAV·누적 원가가 남음, 가짜 원가로 예산 멈춤이 걸림 |
-| 4 | 시범: 11모델 × 과제 1 × 반복 1 | 11모델 모두 작업이 끝까지 돌고(성공이든 실패든) 원가가 기록됨. 실측 원가로 8.3 표를 다시 계산해 총계가 $13 안이면 진행, 넘으면 고가·생각 긴 모델 작업 수를 줄여 맞춘 뒤 진행 |
-| 5 | 본 실행: 나머지 작업(백그라운드) | 128작업이 모두 성공·실패·기반 실패·예산 초과 중 하나로 끝남 |
+| 1 | OpenRouter 키 등록·충전 | 끝남: `key-pool.env`에 `OPENROUTER_API_KEY`, 잔액 약 $9.8 (`GET /api/v1/credits`). 키 한도는 $50으로 잡혀 있어 run.py의 예산 멈춤이 대신한다(8.4) |
+| 2 | `OpenRouter` 엔진·`Router` 갈래·`BAKEOFF_CHOICES`·`last_usage` 추가와 단위 시험 | 끝남: 단위 시험 통과, 공개 모드에서 대결 모델이 안 보임 |
+| 3 | `bakeoff/` 도구(tasks, run, referee, report, clips, 청취 페이지)와 예산 멈춤 | 끝남: 가짜 엔진으로 과제 2개가 끝까지 돌고 기록·WAV·누적 원가가 남음, 가짜 원가로 예산 멈춤이 걸림(tests/test_bakeoff.py) |
+| 4 | 시범: OpenRouter 1모델 + agy 1모델 + codex 1모델 × 과제 1 × 반복 1 | 세 연결 모두 실제 작업실로 끝까지 돌고 기록·WAV·원가가 남음. 나머지 모델의 첫 작업은 본 실행 앞부분이 시범을 겸한다 |
+| 5 | 본 실행(백그라운드): `python bakeoff/run.py --workers 4 --finish` | 224작업이 모두 성공·실패·기반 실패·예산 초과 중 하나로 끝나고, 이어서 심판 채점·보고서·청취 클립까지 만들어짐 |
 | 6 | 심판 채점·자동 보고서 | 모델별 지표 표, 점수 대 원가 그림, 결선 6모델, 지갑별 실제 지출 |
-| 7 | 사람 블라인드 청취 | 24클립 순위 입력 완료, 일관성 확인 클립 결과 포함 |
+| 7 | 사람 블라인드 청취(`https://olmuse.app/listen`) | 모든 청취자가 모든 클립에 점수를 매김(페이지 진행표), 일관성 확인 클립 결과 포함 |
 | 8 | 판정·반영 계획 | 7절 기준에 따른 결론(교체·추가·유지)과 `MODEL_COST` 제안 값이 결과 문서에 적힘 |

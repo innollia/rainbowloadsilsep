@@ -33,6 +33,24 @@ MODEL_CHOICES = (
     {"id": "claude-opus-5-5", "label": "Opus 5.5", "provider": "claude"},
     {"id": "gemini-3.8-flash", "label": "Gemini 3.8 Flash", "provider": "gemini"},
 )
+# Model bakeoff candidates through OpenRouter (docs/MODEL_BAKEOFF_PLAN.md). Offered only when STRUDEL_LOCAL_AI=1,
+# which the public server never sets, so a public URL can never spend the OpenRouter key.
+BAKEOFF_CHOICES = (
+    {"id": "nvidia/nemotron-3.5-super-vl:free", "label": "Nemotron 3.5 Super (free)", "provider": "openrouter"},
+    {"id": "deepseek/deepseek-v4.1-flash", "label": "DeepSeek V4.1 Flash", "provider": "openrouter"},
+    {"id": "qwen/qwen3.8-flash", "label": "Qwen 3.8 Flash", "provider": "openrouter"},
+    {"id": "z-ai/glm-5.3", "label": "GLM 5.3", "provider": "openrouter"},
+    {"id": "minimax/minimax-m3", "label": "MiniMax M3", "provider": "openrouter"},
+    {"id": "anthropic/claude-haiku-5.5", "label": "Haiku 5.5 (OpenRouter)", "provider": "openrouter"},
+    {"id": "moonshotai/kimi-k2.7-code", "label": "Kimi K2.7 Code", "provider": "openrouter"},
+    {"id": "anthropic/claude-sonnet-5.5", "label": "Sonnet 5.5 (OpenRouter)", "provider": "openrouter"},
+)
+
+
+def model_choices() -> tuple:
+    """What this server may offer. Bakeoff models join only on a local run."""
+    return MODEL_CHOICES + BAKEOFF_CHOICES if os.environ.get("STRUDEL_LOCAL_AI") == "1" else MODEL_CHOICES
+
 EFFORTS = ("low", "medium", "high")  # labels live in MSG as effort_<id>
 DEFAULT_EFFORT = "medium"
 MAX_ROUNDS = 5         # most extra fixes the slider can ask for
@@ -130,6 +148,13 @@ MSG = {
         "agy_timeout": "The Antigravity CLI didn't finish in time.",
         "agy_parse": "Couldn't read the Antigravity CLI reply: {detail}",
         "agy_failed": "Antigravity CLI failed: {detail}",
+        "openrouter_key": "Check your OpenRouter key.",
+        "openrouter_credits": "OpenRouter credits or key limit ran out.",
+        "openrouter_quota": "Hit the OpenRouter rate limit.",
+        "openrouter_http": "OpenRouter error {code}: {detail}",
+        "openrouter_conn": "Couldn't connect to OpenRouter: {detail}",
+        "openrouter_parse": "Couldn't read OpenRouter's reply.",
+        "openrouter_cut": "The OpenRouter reply was too long and got cut off.",
     },
     "ko": {
         "bad_payload": "요청 형식이 올바르지 않아.",
@@ -205,6 +230,13 @@ MSG = {
         "agy_timeout": "Antigravity CLI가 시간 안에 끝나지 않았어.",
         "agy_parse": "Antigravity CLI 응답을 읽지 못했어: {detail}",
         "agy_failed": "Antigravity CLI 실패: {detail}",
+        "openrouter_key": "OpenRouter 키를 확인해 줘.",
+        "openrouter_credits": "OpenRouter 크레딧이나 키 한도가 다 됐어.",
+        "openrouter_quota": "OpenRouter 속도 한도에 걸렸어.",
+        "openrouter_http": "OpenRouter 오류 {code}: {detail}",
+        "openrouter_conn": "OpenRouter 연결 실패: {detail}",
+        "openrouter_parse": "OpenRouter 응답을 읽지 못했어.",
+        "openrouter_cut": "OpenRouter 응답이 너무 길어 잘렸어.",
     },
 }
 
@@ -299,6 +331,7 @@ def redact(text: str, secret: str = "") -> str:
     text = str(text)
     if secret:
         text = text.replace(secret, "[redacted]")
+    text = re.sub(r"sk-or-[0-9A-Za-z_-]{10,}", "[redacted]", text)
     return re.sub(r"AIza[0-9A-Za-z_-]{20,}", "[redacted]", text)[:300]
 
 
@@ -311,6 +344,7 @@ class Gemini:
         self.model = model or DEFAULT_MODEL
         self.effort = effort
         self.base_url = (base_url or "https://generativelanguage.googleapis.com").rstrip("/")
+        self.last_usage: dict = {}  # read by the bakeoff tool, never by the product
 
     def _call(self, parts: list, schema: dict) -> dict:
         config = {"responseMimeType": "application/json", "responseSchema": schema}
@@ -337,6 +371,10 @@ class Gemini:
             raise ModelError("gemini_http", code=exc.code, detail=redact(detail, self.key)) from None
         except (OSError, ValueError) as exc:
             raise ModelError("gemini_conn", detail=redact(exc, self.key)) from None
+        meta = data.get("usageMetadata") or {} if isinstance(data, dict) else {}
+        self.last_usage = {"input": meta.get("promptTokenCount", 0), "output": meta.get("candidatesTokenCount", 0),
+                           "reasoning": meta.get("thoughtsTokenCount", 0), "cached": meta.get("cachedContentTokenCount", 0),
+                           "model": self.model, "provider": "google"}
         try:
             text = "".join(p.get("text", "") for p in data["candidates"][0]["content"]["parts"])
             return json.loads(text)
@@ -391,6 +429,7 @@ class Claude:
         self.model = model or DEFAULT_CLAUDE_MODEL
         self.client = client
         self.effort = effort
+        self.last_usage: dict = {}
 
     def _sdk(self):
         if self.client is None:
@@ -424,6 +463,10 @@ class Claude:
             raise ModelError("claude_http", code=exc.status_code, detail=redact(exc.message, self.key)) from None
         except anthropic.APIConnectionError:
             raise ModelError("claude_conn") from None
+        usage = getattr(response, "usage", None)
+        self.last_usage = {"input": getattr(usage, "input_tokens", 0), "output": getattr(usage, "output_tokens", 0),
+                           "cached": getattr(usage, "cache_read_input_tokens", 0) or 0, "model": self.model,
+                           "provider": "anthropic"}
         if response.stop_reason == "refusal":
             raise ModelError("claude_refused")
         if response.stop_reason == "max_tokens":
@@ -440,16 +483,114 @@ class Claude:
         return self._call(measured_prompt(wav, prompt), LISTEN_SCHEMA)
 
 
+class OpenRouter:
+    """One key for many hosted models (bakeoff). No audio input, so listening is measurement analysis.
+
+    No fallback models and no retries: quietly answering with another model would void the comparison."""
+
+    name = "OpenRouter"
+    hears = False
+    URL = "https://openrouter.ai/api/v1"
+
+    def __init__(self, key: str, model: str, effort: str = "", base_url: str = "", system: str | None = None,
+                 timeout: int = 300):
+        self.key, self.model, self.effort = key, model, effort
+        self.base_url = (base_url or self.URL).rstrip("/")
+        self.system = SYSTEM if system is None else system
+        self.timeout = timeout
+        self.last_usage: dict = {}  # read by the bakeoff tool, never by the product
+
+    def request_body(self, prompt: str, schema: dict, name: str) -> dict:
+        system = self.system
+        if self.model.startswith("anthropic/"):
+            # Same cache benefit as the direct Claude connection: the long system prompt repeats on every call.
+            system = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
+        body = {
+            "model": self.model,
+            "messages": ([{"role": "system", "content": system}] if self.system else []) + [{"role": "user", "content": prompt}],
+            "response_format": {"type": "json_schema", "json_schema": {
+                "name": name, "strict": True, "schema": strict_schema(plain_schema(schema))}},
+            "provider": {"require_parameters": True},
+            "max_tokens": 16000,
+        }
+        if self.effort:
+            body["reasoning"] = {"effort": self.effort}
+        return body
+
+    def ask(self, prompt: str, schema: dict, name: str = "reply") -> dict:
+        req = urllib.request.Request(
+            f"{self.base_url}/chat/completions", data=json.dumps(self.request_body(prompt, schema, name)).encode(),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.key}",
+                     "HTTP-Referer": "https://olmuse.app", "X-Title": "olmuse"},
+        )
+        self.last_usage = {}
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as res:
+                data = json.load(res)
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", "replace")
+            raise self._status_error(exc.code, detail) from None
+        except (OSError, ValueError) as exc:
+            raise ModelError("openrouter_conn", detail=redact(exc, self.key)) from None
+        if not isinstance(data, dict):
+            raise ModelError("openrouter_parse")
+        usage = data.get("usage") or {}
+        self.last_usage = {
+            "input": usage.get("prompt_tokens", 0), "output": usage.get("completion_tokens", 0),
+            "reasoning": (usage.get("completion_tokens_details") or {}).get("reasoning_tokens", 0),
+            "cached": (usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0),
+            "cost": float(usage.get("cost") or 0), "model": data.get("model", ""), "provider": data.get("provider", ""),
+            "id": data.get("id", ""),
+        }
+        if isinstance(data.get("error"), dict):  # an upstream failure can arrive inside a 200
+            error = data["error"]
+            raise self._status_error(error.get("code") if isinstance(error.get("code"), int) else 502,
+                                     str(error.get("message", "")))
+        try:
+            choice = data["choices"][0]
+            finish = choice.get("finish_reason")
+            text = choice["message"]["content"] or ""
+        except (KeyError, IndexError, TypeError):
+            raise ModelError("openrouter_parse") from None
+        if finish == "length":
+            raise ModelError("openrouter_cut")
+        try:
+            reply = json.loads(text)
+        except ValueError:
+            raise ModelError("openrouter_parse") from None
+        if not isinstance(reply, dict):
+            raise ModelError("openrouter_parse")
+        return reply
+
+    def _status_error(self, code: int, detail: str) -> ModelError:
+        if code in (401, 403):
+            return ModelError("openrouter_key")
+        if code == 402:
+            return ModelError("openrouter_credits")
+        if code == 429:
+            return ModelError("openrouter_quota")
+        return ModelError("openrouter_http", code=code, detail=redact(detail, self.key))
+
+    def edit(self, prompt: str) -> dict:
+        return self.ask(prompt, EDIT_SCHEMA, "edit")
+
+    def listen(self, wav: bytes, prompt: str) -> dict:
+        return self.ask(measured_prompt(wav, prompt), LISTEN_SCHEMA, "listen")
+
+
 class Router:
     """Holds the keys and builds the engine each request asked for. Keys never leave this object."""
 
     def __init__(self, gemini_key: str = "", claude_key: str = "", gemini_model: str = "", gemini_url: str = "",
-                 claude_model: str = "", default: str = "", clients=None):
-        self.keys = {"gemini": gemini_key, "claude": claude_key}
+                 claude_model: str = "", default: str = "", clients=None, openrouter_key: str = ""):
+        self.keys = {"gemini": gemini_key, "claude": claude_key, "openrouter": openrouter_key}
         self.gemini_url = gemini_url
         self.clients = clients or {}
-        self.first = default if default in self.keys and self.keys[default] else "gemini" if gemini_key else "claude"
-        self.named = {"gemini": gemini_model or DEFAULT_MODEL, "claude": claude_model or DEFAULT_CLAUDE_MODEL}
+        ready = [p for p in self.keys if self.keys[p]] or ["claude"]
+        self.first = default if default in self.keys and self.keys[default] else ready[0]
+        offered = [m["id"] for m in model_choices() if m["provider"] == "openrouter"]
+        self.named = {"gemini": gemini_model or DEFAULT_MODEL, "claude": claude_model or DEFAULT_CLAUDE_MODEL,
+                      "openrouter": offered[0] if offered else ""}
 
     @property
     def name(self) -> str:
@@ -457,19 +598,21 @@ class Router:
 
     def choices(self, lang: str = DEFAULT_LANG) -> dict:
         efforts = [{"id": e, "label": msg(lang, "effort_" + e)} for e in EFFORTS]
-        models = [{"id": m["id"], "label": m["label"]} for m in MODEL_CHOICES if self.keys[m["provider"]]]
+        models = [{"id": m["id"], "label": m["label"]} for m in model_choices() if self.keys[m["provider"]]]
         known = {m["id"] for m in models}
         named = self.named[self.first]
-        return {"models": models, "efforts": efforts, "model": named if named in known else models[0]["id"],
-                "effort": DEFAULT_EFFORT}
+        return {"models": models, "efforts": efforts,
+                "model": named if named in known else (models[0]["id"] if models else ""), "effort": DEFAULT_EFFORT}
 
     def engine(self, model: str = "", effort: str = ""):
-        choice = next((m for m in MODEL_CHOICES if m["id"] == model and self.keys[m["provider"]]), None)
+        choice = next((m for m in model_choices() if m["id"] == model and self.keys[m["provider"]]), None)
         provider = choice["provider"] if choice else self.first
         name = choice["id"] if choice else self.named[provider]
         effort = effort or DEFAULT_EFFORT
         if provider == "gemini":
             return Gemini(self.keys["gemini"], name, self.gemini_url, effort)
+        if provider == "openrouter":
+            return OpenRouter(self.keys["openrouter"], name, effort)
         return Claude(self.keys["claude"], name, self.clients.get("claude"), effort)
 
 
@@ -482,22 +625,27 @@ class AgyCli:
     hears = False
     TIMEOUT = 180
 
-    def __init__(self, executable: str = "agy"):
+    def __init__(self, executable: str = "agy", model: str = "", system: str | None = None):
         self.executable = executable
+        self.model = model  # agy's own model id, for example gemini-3.8-flash-medium; empty uses agy's default
+        self.system = system  # None keeps the studio SYSTEM prompt
         self.process = None
+        self.last_usage: dict = {}
 
     def _run(self, prompt: str, schema_def: dict) -> dict:
         if os.name == "nt" and len(prompt) > 24000:
             raise ModelError("agy_too_long")
         # Windows caps a command line near 32000 characters; the skill is what can be dropped.
         system = BASE_SYSTEM if os.name == "nt" and len(SYSTEM) + len(prompt) > 30000 else SYSTEM
+        if self.system is not None:
+            system = self.system
         text = system + "\nDo not use any tools. Reply only with the JSON object.\n\n" + prompt
         with tempfile.TemporaryDirectory(prefix="ddalkkak-agy-") as folder:
             schema = os.path.join(folder, "schema.json")
             with open(schema, "w", encoding="utf-8") as stream:
                 json.dump(plain_schema(schema_def), stream)
             args = [self.executable, "--output-format", "json", "--json-schema", schema, "--disable-slash-commands",
-                    "--sandbox", "--print-timeout", f"{self.TIMEOUT}s", "-p", text]
+                    "--sandbox", "--print-timeout", f"{self.TIMEOUT}s"] + (["--model", self.model] if self.model else []) + ["-p", text]
             flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
             try:
                 self.process = subprocess.Popen(args, cwd=folder, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
@@ -508,7 +656,17 @@ class AgyCli:
             except subprocess.TimeoutExpired:
                 self.stop()
                 raise ModelError("agy_timeout") from None
+        self.last_usage = self.usage_of(out)
         return self.parse(out, err)
+
+    @staticmethod
+    def usage_of(out: bytes) -> dict:
+        try:
+            data = json.loads(out.decode("utf-8", "replace"))
+        except ValueError:
+            return {}
+        usage = data.get("usage") if isinstance(data, dict) else None
+        return usage if isinstance(usage, dict) else {}
 
     def edit(self, prompt: str) -> dict:
         return self._run(prompt, EDIT_SCHEMA)
@@ -520,9 +678,27 @@ class AgyCli:
         except ValueError:
             raise ModelError("agy_parse", detail=redact(err.decode("utf-8", "replace"))) from None
         result = data.get("structured_output")
+        if data.get("status") == "SUCCESS" and not isinstance(result, dict):
+            result = AgyCli.last_object(str(data.get("response") or ""))  # agy sometimes answers without the schema tool
         if data.get("status") != "SUCCESS" or not isinstance(result, dict):
             raise ModelError("agy_failed", detail=redact(data.get("status")))
         return result
+
+    @staticmethod
+    def last_object(text: str):
+        """The last line of a reply that is a whole JSON object, or None."""
+        for line in reversed(text.strip().splitlines()):
+            try:
+                value = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(value, dict):
+                return value
+        try:
+            value = json.loads(text)
+        except ValueError:
+            return None
+        return value if isinstance(value, dict) else None
 
     def stop(self):
         process = self.process
@@ -596,7 +772,7 @@ def validate_request(payload: dict) -> dict:
     return {
         "text": text.strip(), "tracks": tracks, "bpm": valid_bpm(payload.get("bpm"), lang), "lang": lang,
         "target": target, "auto": payload.get("auto") is True, "rounds": rounds_from(payload),
-        "model": model if model in {m["id"] for m in MODEL_CHOICES} else "",
+        "model": model if model in {m["id"] for m in model_choices()} else "",
         "effort": effort if effort in EFFORTS else "",
         "history": clean_history(payload.get("history")),
     }

@@ -1,0 +1,150 @@
+"""Blind listening: the clip manifest, the votes (sqlite on this PC) and their tally.
+
+Used by pages/listen.py (https://olmuse.app/listen) and by tests. Model names stay in the manifest on this
+PC; the page shows them only after the STUDIO_PASSWORD unlock.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import random
+import sqlite3
+import statistics
+import time
+from itertools import combinations
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+MANIFEST = ROOT / "bakeoff" / "results" / "listen" / "manifest.json"
+DB = ROOT / ".studio-data" / "listen.sqlite"
+MAX_NAME = 40
+
+
+def load_manifest(path: Path = MANIFEST) -> dict | None:
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def clean_name(name: str) -> str:
+    return " ".join(str(name or "").split())[:MAX_NAME]
+
+
+def order_for(voter: str, task: dict) -> list[dict]:
+    """Each listener hears a task's clips in an order of their own, the same every visit."""
+    clips = list(task["clips"])
+    seed = int(hashlib.sha256(f"{voter}|{task['id']}".encode()).hexdigest()[:12], 16)
+    random.Random(seed).shuffle(clips)
+    return clips
+
+
+class Votes:
+    def __init__(self, path: Path = DB):
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        self.path = str(path)
+        with self._db() as db:
+            db.execute("CREATE TABLE IF NOT EXISTS votes (voter TEXT NOT NULL, task TEXT NOT NULL, clip TEXT NOT NULL,"
+                       " score INTEGER, mismatch INTEGER NOT NULL DEFAULT 0, at REAL NOT NULL,"
+                       " PRIMARY KEY (voter, task, clip))")
+
+    def _db(self):
+        return sqlite3.connect(self.path, timeout=10)
+
+    def save(self, voter: str, task: str, clip: str, score=None, mismatch=None):
+        voter = clean_name(voter)
+        if not voter:
+            raise ValueError("name required")
+        if score is not None and not (isinstance(score, int) and 1 <= score <= 10):
+            raise ValueError("score must be 1-10")
+        with self._db() as db:
+            db.execute("INSERT INTO votes (voter, task, clip, score, mismatch, at) VALUES (?, ?, ?, ?, ?, ?)"
+                       " ON CONFLICT(voter, task, clip) DO UPDATE SET"
+                       " score = CASE WHEN ? THEN excluded.score ELSE score END,"
+                       " mismatch = CASE WHEN ? THEN excluded.mismatch ELSE mismatch END, at = excluded.at",
+                       (voter, task, clip, score, int(bool(mismatch)), time.time(), score is not None, mismatch is not None))
+
+    def mine(self, voter: str) -> dict:
+        with self._db() as db:
+            rows = db.execute("SELECT task, clip, score, mismatch FROM votes WHERE voter = ?", (clean_name(voter),)).fetchall()
+        return {(t, c): {"score": s, "mismatch": bool(m)} for t, c, s, m in rows}
+
+    def all(self) -> list[dict]:
+        with self._db() as db:
+            rows = db.execute("SELECT voter, task, clip, score, mismatch FROM votes").fetchall()
+        return [{"voter": v, "task": t, "clip": c, "score": s, "mismatch": bool(m)} for v, t, c, s, m in rows]
+
+
+def progress(manifest: dict, votes: list[dict]) -> list[dict]:
+    total = sum(len(t["clips"]) for t in manifest["tasks"])
+    by = {}
+    for v in votes:
+        if v["score"] is not None:
+            by[v["voter"]] = by.get(v["voter"], 0) + 1
+    return [{"voter": name, "rated": n, "total": total} for name, n in sorted(by.items())]
+
+
+def bradley_terry(pairs: list[tuple[str, str, float]], iterations: int = 200) -> dict:
+    """Strengths from (a, b, a's result: 1 win, 0.5 tie, 0 loss). Minorization-maximization with a small prior."""
+    players = sorted({p for a, b, _ in pairs for p in (a, b)})
+    if not players:
+        return {}
+    wins = {p: 0.5 for p in players}  # prior: half a win against an average opponent keeps everyone finite
+    games: dict[tuple, float] = {}
+    for a, b, r in pairs:
+        wins[a] += r
+        wins[b] += 1 - r
+        key = tuple(sorted((a, b)))
+        games[key] = games.get(key, 0) + 1
+    strength = {p: 1.0 for p in players}
+    for _ in range(iterations):
+        new = {}
+        for p in players:
+            denom = 1.0 / (strength[p] + 1.0)  # the prior's average opponent
+            for (a, b), n in games.items():
+                if p in (a, b):
+                    other = b if p == a else a
+                    denom += n / (strength[p] + strength[other])
+            new[p] = wins[p] / denom
+        scale = statistics.fmean(new.values())
+        strength = {p: v / scale for p, v in new.items()}
+    return strength
+
+
+def tally(manifest: dict, votes: list[dict]) -> dict:
+    """Per model: mean score, Bradley-Terry strength from score comparisons, mismatch marks; per listener: consistency."""
+    clip_model, dup_of = {}, {}
+    for task in manifest["tasks"]:
+        for clip in task["clips"]:
+            clip_model[clip["clip"]] = clip["model"]
+            if clip.get("dup_of"):
+                dup_of[clip["clip"]] = clip["dup_of"]
+    scores = {}
+    for v in votes:
+        if v["score"] is not None and v["clip"] in clip_model:
+            scores[(v["voter"], v["task"], v["clip"])] = v["score"]
+    models: dict[str, dict] = {}
+    for (voter, task, clip), s in scores.items():
+        if clip in dup_of:
+            continue
+        models.setdefault(clip_model[clip], {"scores": [], "mismatch": 0})["scores"].append(s)
+    for v in votes:
+        if v["mismatch"] and v["clip"] in clip_model and v["clip"] not in dup_of:
+            models.setdefault(clip_model[v["clip"]], {"scores": [], "mismatch": 0})["mismatch"] += 1
+    pairs = []
+    groups: dict[tuple, list] = {}
+    for (voter, task, clip), s in scores.items():
+        if clip not in dup_of:
+            groups.setdefault((voter, task), []).append((clip_model[clip], s))
+    for items in groups.values():
+        for (ma, sa), (mb, sb) in combinations(items, 2):
+            pairs.append((ma, mb, 1.0 if sa > sb else 0.0 if sa < sb else 0.5))
+    strength = bradley_terry(pairs)
+    table = sorted(({"model": m, "mean": statistics.fmean(d["scores"]) if d["scores"] else None, "n": len(d["scores"]),
+                     "bt": strength.get(m), "mismatch": d["mismatch"]} for m, d in models.items()),
+                   key=lambda r: -(r["bt"] or 0))
+    consistency = []
+    for (voter, task, clip), s in scores.items():
+        if clip in dup_of and (voter, task, dup_of[clip]) in scores:
+            consistency.append({"voter": voter, "task": task, "gap": abs(s - scores[(voter, task, dup_of[clip])])})
+    return {"models": table, "consistency": consistency, "voters": len({k[0] for k in scores})}
