@@ -428,11 +428,15 @@ def decode_capture(payload: dict) -> tuple[bytes, dict]:
     return wav, {"id": hashlib.sha256(wav).hexdigest()[:12], "span": str(payload.get("span", ""))[:40]}
 
 
-def edit_prompt(state: dict, instruction: str, error: str, target: str | None, history=()) -> str:
+def edit_prompt(state: dict, instruction: str, error: str, target: str | None, history=(), goal="", tried=()) -> str:
     parts = ["Current song:", json.dumps({"bpm": state["bpm"], "tracks": state["tracks"]}, ensure_ascii=False)]
     if history:
         parts += ["Recent conversation:", *(f"{m['role']}: {m['text']}" for m in history)]
-    parts += ["User message:", instruction]
+    if goal:
+        parts += ["Original request, which remains the goal of every round:", goal]
+    if tried:
+        parts += ["Earlier rounds. Do not repeat what did not raise the score:", *tried]
+    parts += ["Next step:" if goal else "User message:", instruction]
     if target:
         parts.append(f'Change only track "{target}". Keep bpm exactly {state["bpm"]}.')
     if error:
@@ -556,18 +560,31 @@ class Jobs:
                 job.update(status="failed", stage="done")
                 job.say("error", "작업 중 내부 오류가 났어. 이전 버전을 유지해.")
 
+    def _keep_best(self, job: Job, seq: int, state: dict, best_state, best_round: int) -> int:
+        """A later round can sound worse, so the song ends on the round that scored highest."""
+        if best_state is None or best_state is state:
+            return seq
+        seq += 1
+        summary = f"{best_round}회차가 가장 나아서 그 버전으로 되돌렸어."
+        job.update(stage="verifying", candidate={"seq": seq, "listen": False, "summary": summary, **best_state})
+        if self._wait(job, seq).get("ok"):
+            job.say("change", summary)
+        return seq
+
     def _loop(self, job: Job):
         req = job.request
         state = {"tracks": req["tracks"], "bpm": req["bpm"]}
         instruction, error = req["text"], ""
         seq, edits, fixes, best, stale = 0, 0, 0, -1, 0
+        tried, best_state, best_round = [], None, 0
         while True:
             job.update(stage="editing", listen=None)
             if edits >= MAX_EDIT_CALLS:
                 raise Stop("limit", "코드 수정 호출 한도(5회)에 닿아 멈췄어.")
             self._spend(job)
             edits += 1
-            reply = self.model.edit(edit_prompt(state, instruction, error, req["target"], req.get("history", ())))
+            reply = self.model.edit(edit_prompt(state, instruction, error, req["target"], req.get("history", ()),
+                                                goal=req["text"] if tried else "", tried=tried))
             if isinstance(reply, dict) and reply.get("intent") == "talk":
                 job.say("reply", str(reply.get("reply") or reply.get("summary") or "무슨 말인지 다시 알려 줘.")[:MAX_REPLY])
                 job.update(status="done", stage="done")
@@ -606,6 +623,7 @@ class Jobs:
             self._spend(job)
             prompt = ("Listen to this capture of the song. Goal: " + req["text"]
                       + "\nMeasured signal: " + json.dumps(report, ensure_ascii=False)
+                      + ("\nPrevious " + tried[-1] + "\nSay in heard whether this version is better than that one." if tried else "")
                       + "\nJudge how well the audio meets the goal, score 0-100. Answer in Korean."
                       + " Put concrete fixes in next_instruction, following the measurement table in your instructions.")
             try:
@@ -622,12 +640,15 @@ class Jobs:
                 job.say("status", "목표에 닿아서 멈췄어.")
                 return
             round_now = job.view["iteration"]
-            if round_now >= MAX_IMPROVEMENTS:
-                raise Stop("limit", "개선 3회를 다 써서 멈췄어.")
             score = verdict.get("score", 0)
-            stale = 0 if isinstance(score, (int, float)) and score > best else stale + 1
-            best = max(best, score if isinstance(score, (int, float)) else best)
-            if stale >= 2:
-                raise Stop("done", "두 번 연속 나아지지 않아 멈췄어.")
+            numeric = isinstance(score, (int, float))
+            stale = 0 if numeric and score > best else stale + 1
+            if numeric and score > best:
+                best, best_state, best_round = score, state, round_now
+            tried.append(f"round {round_now}: changed: {candidate['summary'] or 'unknown'}; score {score}; problems: {'; '.join(problems) or 'none'}")
+            if round_now >= MAX_IMPROVEMENTS or stale >= 2:
+                seq = self._keep_best(job, seq, state, best_state, best_round)
+                raise Stop("limit" if round_now >= MAX_IMPROVEMENTS else "done",
+                           "개선 3회를 다 써서 멈췄어." if round_now >= MAX_IMPROVEMENTS else "두 번 연속 나아지지 않아 멈췄어.")
             job.update(iteration=round_now + 1)
             instruction = str(verdict.get("next_instruction") or req["text"])[:MAX_REQUEST]

@@ -844,7 +844,7 @@ ${specExample()}`;
       dlg.close(); renderBoard(); toast(`명세를 적용했어요. 새 에셋 ${added.length}개`);
     };
     run.onclick = () => apply(true); keep.onclick = () => apply(false);
-    row.append(run, keep); out.push(row);
+    row.append(keep, run); out.push(row);
     return out;
   }
   function toggleLint(on = !lintOpen) {
@@ -875,7 +875,7 @@ ${specExample()}`;
     LICENSES.forEach((l) => { const r = el('div', 'lineItem'); r.append(el('span', 'grow', `${l.name} · ${l.use}`), el('span', 'tag', l.license)); dlg.append(r); });
     const row = el('div', 'dlgRow'), go = el('button', 'primary', '묶음 내보내기'), lic = el('button', '', '저작권 전체 복사');
     go.id = 'exportGo'; go.onclick = () => { dlg.close(); stage = 'export'; renderHeader(); toast('껍데기라 실제 파일은 아직 만들지 않아요'); };
-    lic.onclick = copyLicenses; row.append(go, lic); dlg.append(row);
+    lic.onclick = copyLicenses; row.append(lic, go); dlg.append(row);
     dlg.showModal();
   }
   function gameDialog() {

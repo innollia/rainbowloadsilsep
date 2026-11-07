@@ -15,8 +15,6 @@
     <span id="saveState" role="status"></span>
     <span class="spacer"></span>
     <button id="codeBtn" class="iconBtn" data-icon="code" aria-pressed="false" aria-label="코드" title="코드 (Ctrl+E)"></button>
-    <button id="saveBtn" class="iconBtn" data-icon="save" aria-label="저장" title="저장"></button>
-    <button id="autoBtn" class="iconBtn" data-icon="auto" aria-pressed="false" aria-label="자동 개선"></button>
     <button id="settingsBtn" class="iconBtn" data-icon="settings" aria-label="설정" title="설정"></button>
     <button id="assetBtn" class="iconBtn" data-icon="game" aria-label="게임 소리" title="게임 소리"></button>
   </header>
@@ -42,10 +40,10 @@
       <div id="codePanel" hidden>
         <div class="codeBar">
           <button id="codeRun" class="iconBtn" data-icon="play" aria-label="실행" title="실행 (Ctrl+Enter)"></button>
-          <button id="codeExport" class="ghost iconBtn" data-icon="download" aria-label="코드 내보내기" title="코드 내보내기"></button>
-          <button id="codeImport" class="ghost iconBtn" data-icon="upload" aria-label="불러오기" title="불러오기"></button>
           <span id="codeNote" role="status"></span>
           <button id="codeReload" class="ghost" hidden>최신 곡 불러오기</button>
+          <button id="codeImport" class="ghost iconBtn" data-icon="upload" aria-label="불러오기" title="불러오기"></button>
+          <button id="codeExport" class="ghost iconBtn" data-icon="download" aria-label="코드 내보내기" title="코드 내보내기"></button>
         </div>
         <div id="codeHost"></div>
       </div>
@@ -55,6 +53,10 @@
       <div id="log" aria-live="polite"></div>
       <div id="progress" hidden><span id="progressText"></span><button id="stopAi" class="iconBtn" data-icon="stop" aria-label="중단" title="중단"></button></div>
       <div id="targetChip" hidden></div>
+      <div id="askTools">
+        <button id="autoBtn" type="button" class="ghost" aria-pressed="false"><span data-icon="auto" aria-hidden="true"></span>자동 개선</button>
+        <span id="autoHint">켜면 결과를 듣고 최대 3번 더 고쳐</span>
+      </div>
       <form id="askForm">
         <textarea id="ask" rows="2" placeholder="바꿀 내용이나 궁금한 걸 말해 줘. 예: 베이스만 바꿔줘, 지금 곡 분위기 어때?" aria-label="AI에게 말하기"></textarea>
         <button id="send" class="iconBtn" data-icon="send" aria-label="보내기" title="보내기"></button>

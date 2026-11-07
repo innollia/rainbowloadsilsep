@@ -290,3 +290,22 @@ def test_history_reaches_the_prompt_and_is_bounded():
     assert len(clean) <= sb.MAX_HISTORY and sb.clean_history("nope") == []
     prompt = sb.edit_prompt({"bpm": 120, "tracks": []}, "안녕", "", None, clean)
     assert "user: 말14" in prompt and prompt.index("Recent conversation") < prompt.index("User message:")
+
+
+def test_later_rounds_keep_the_original_goal_and_earlier_tries():
+    fake = Fake(); jobs = sb.Jobs(fake)
+    jobs.submit("o", request(auto=True))
+    drive(jobs)
+    assert "베이스만" in fake.last_prompt and "round 2" in fake.last_prompt
+
+
+def test_song_ends_on_the_best_scoring_round():
+    verdict = lambda score: {"heard": "들림", "problems": [], "score": score, "goal_met": False, "next_instruction": "더"}
+    fake = Fake(verdicts=[verdict(30), verdict(80), verdict(40)])
+    fake.edits = [{"summary": str(i), "bpm": 120, "changes": [change(code=f'note("c{i}")')]} for i in range(3)]
+    jobs = sb.Jobs(fake)
+    jobs.submit("o", request(auto=True))
+    snap = drive(jobs)
+    last = snap["candidate"]
+    assert snap["status"] == "limit" and last["listen"] is False
+    assert any('note("c1")' in t["code"] for t in last["tracks"])

@@ -17,7 +17,6 @@
     stop: '<rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor" stroke="none"/>',
     folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
     code: '<path d="m8 8-4 4 4 4M16 8l4 4-4 4M14 5l-4 14"/>',
-    save: '<path d="M5 3h11l5 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M7 3v6h8V3M7 21v-7h10v7"/>',
     auto: '<path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/>',
     settings: '<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>',
     sound: '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 9a4 4 0 0 1 0 6M19 6.5a8 8 0 0 1 0 11"/>',
@@ -67,7 +66,7 @@
   function persist() {
     try {
       localStorage.setItem(STORE, JSON.stringify(db));
-      dirty = false; $('saveState').textContent = '저장됨'; $('saveState').style.color = 'var(--ok)';
+      dirty = false; $('saveState').textContent = '저장됨'; $('saveState').style.color = '';
       return true;
     } catch {
       $('saveState').textContent = '저장 실패 · 설정에서 내보내기'; $('saveState').style.color = 'var(--err)';
@@ -85,7 +84,7 @@
   const send = (action, payload) => toHost('streamlit:setComponentValue', { dataType: 'json', value: { event_id: uid(), action, payload } });
   function fit() {
     let h = 860;
-    try { h = Math.max(560, window.parent.innerHeight - Math.max(0, window.frameElement.getBoundingClientRect().top)); } catch { /* keeps default */ }
+    try { h = Math.max(560, window.parent.innerHeight - Math.max(0, window.frameElement.getBoundingClientRect().top) - 8); } catch { /* keeps default */ } // the 8px is what Streamlit adds under the frame
     if (h === fit.last) return;
     fit.last = h;
     toHost('streamlit:setFrameHeight', { height: h });
@@ -273,20 +272,47 @@
     if (p.artHistory.length > 30) p.artHistory.shift();
     touched(); render();
   }
+  // Past covers stand on a shelf; one comes out at a time, and pulling it out twice puts it on the song.
   function artDialog() {
-    const p = project(); openDialog('지난 그림');
-    const grid = document.createElement('div'); grid.className = 'artGrid';
-    const list = [...(p.artHistory || [seedOf(p)])].reverse();
-    list.forEach((seed, i) => {
-      const b = document.createElement('button');
+    const p = project(), list = [...(p.artHistory || [seedOf(p)])].reverse(), now = seedOf(p);
+    const make = (tag, cls) => { const e = document.createElement(tag); if (cls) e.className = cls; return e; };
+    const shelf = make('div', 'shelf'), rack = make('div', 'rack'), track = make('div', 'rackTrack'), plank = make('div', 'plank'), bar = make('div', 'shelfBar');
+    const label = make('span'), use = button('이 그림으로 바꾸기', () => { pickArt(p, list[at]); close(); });
+    use.className = 'primary'; use.id = 'shelfUse';
+    shelf.setAttribute('role', 'dialog'); shelf.setAttribute('aria-modal', 'true'); shelf.setAttribute('aria-label', '지난 그림');
+    let at = Math.max(0, list.indexOf(now));
+    const slot = 36, side = 24, lps = list.map((seed, i) => {
+      const b = make('button', 'lp');
       b.innerHTML = `<svg viewBox="0 0 100 100" aria-hidden="true">${albumArt.make(seed).svg}</svg>`;
       b.setAttribute('aria-label', `그림 ${list.length - i}`);
-      if (seed === seedOf(p)) b.setAttribute('aria-current', 'true');
-      b.style.animationDelay = `${Math.min(i, 24) * 35}ms`;
-      b.onclick = () => { pickArt(p, seed); dlg.close(); };
-      grid.append(b);
+      b.style.animationDelay = `${Math.min(i, 24) * 28}ms`;
+      b.onclick = () => { if (i === at) use.click(); else show(i); };
+      track.append(b);
+      return b;
     });
-    dlg.append(grid); dlg.showModal();
+    function show(i) {
+      at = Math.max(0, Math.min(list.length - 1, i));
+      lps.forEach((b, k) => { b.classList.toggle('out', k === at); b.classList.toggle('after', k > at); b.setAttribute('aria-current', String(k === at)); });
+      track.style.transform = `translateX(${rack.clientWidth / 2 - at * slot - side - 120}px)`;
+      label.textContent = `${at + 1} / ${list.length}`;
+      use.disabled = list[at] === now; use.textContent = list[at] === now ? '지금 커버' : '이 그림으로 바꾸기';
+      lps[at].focus({ preventScroll: true });
+    }
+    function close() { removeEventListener('resize', fitShelf); shelf.remove(); $('art').focus({ preventScroll: true }); }
+    const fitShelf = () => show(at);
+    shelf.onkeydown = (e) => {
+      if (e.key === 'Escape') close();
+      else if (e.key === 'ArrowRight') { e.preventDefault(); show(at + 1); } else if (e.key === 'ArrowLeft') { e.preventDefault(); show(at - 1); }
+    };
+    let wheelAt = 0;
+    shelf.onwheel = (e) => { e.preventDefault(); const t = performance.now(); if (t - wheelAt > 90) { wheelAt = t; show(at + Math.sign(e.deltaY || e.deltaX)); } };
+    shelf.onclick = (e) => { if (e.target === shelf) close(); };
+    const shut = iconButton('close', '닫기', close); shut.classList.add('ghost', 'shelfClose');
+    bar.append(label, use);
+    rack.append(track); shelf.append(shut, rack, plank, bar);
+    $('app').after(shelf);
+    addEventListener('resize', fitShelf);
+    show(at);
   }
   function renderPlay() { iconLabel($('play'), playing ? 'stop' : 'play', playing ? '정지' : '재생'); }
   function renderTracks(p) {
@@ -499,8 +525,16 @@
     scale.onchange = () => { db.scale = +scale.value; applyScale(); touched(); };
     dlg.append(row('글자 크기', scale));
     dlg.append(row(aiEnabled ? `AI 연결됨 (${engineName})` : 'AI 연결 안 됨: 서버 설정을 확인해 줘.'));
-    dlg.append(row('자동 개선 한도: 개선 3회, 재수정 2회, 호출 5회, 5분, 회당 최대 16초 듣기'));
-    dlg.append(row('코드는 상단의 코드 버튼에서 보고 고칠 수 있어.'));
+    dlg.append(heading('h3', '알아두면 좋은 기능'));
+    for (const [what, how] of [
+      ['앨범 커버 누르기', '새 그림으로 바뀌어.'],
+      ['앨범 커버 길게 누르기', '지난 그림 책장이 열려. 하나씩 꺼내 보고 고를 수 있어.'],
+      ['트랙 이름 누르기', '그 트랙만 AI가 고치도록 지정해.'],
+      ['자동 개선', '결과를 측정해 최대 3번 더 고치고, 가장 점수가 높았던 버전을 남겨. 호출 5회, 5분, 회당 16초까지 들어.'],
+      ['프로젝트 폴더', '곡 전환, 이전 버전 듣기와 복구, 파일 내보내기가 여기 있어.'],
+      ['코드 버튼 (Ctrl+E)', '곡의 코드를 보고 고쳐. Ctrl+Enter로 실행해.'],
+      ['저장', '바뀔 때마다 이 브라우저에 자동으로 저장돼.'],
+    ]) { const r = row(''); r.textContent = ''; const b = document.createElement('b'); b.textContent = what; r.append(b, how); dlg.append(r); }
     dlg.append(heading('h3', '기타'));
     dlg.append(row('', button('게임하기', () => { stop(); persist(); dlg.close(); send('game', {}); })));
     dlg.showModal();
@@ -591,10 +625,6 @@
   $('ask').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); } };
   $('stopAi').onclick = () => send('cancel', {});
   $('play').onclick = () => (playing ? stop() : play());
-  $('saveBtn').onclick = async () => { // autosave already ran, so the visible job is unapplied code and a fresh stamp
-    if (editorDirty) await applyCode();
-    if (persist()) $('saveState').textContent = `저장됨 · ${new Date().toLocaleTimeString('ko-KR')}`;
-  };
   $('autoBtn').onclick = () => { autoMode = !autoMode; render(); };
   $('projectBtn').onclick = projectDialog;
   $('settingsBtn').onclick = settingsDialog;

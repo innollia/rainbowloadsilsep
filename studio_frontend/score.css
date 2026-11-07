@@ -1,10 +1,10 @@
 .score { display:flex; flex-direction:column; gap:12px; min-width:0; }
 .score-bar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
-.score-bar select { height:48px; padding:0 12px; background:var(--raised); color:var(--text); border:0; border-radius:8px; max-width:220px; }
+.score-bar select { height:48px; padding:0 12px; background:var(--raised); color:var(--text); border:0; border-radius:11px; max-width:220px; }
 .score-gap { flex:1; }
 .score-range { color:var(--text2); font-size:.89rem; font-variant-numeric:tabular-nums; white-space:nowrap; }
 .score-save { position:relative; }
-.score-menu { position:absolute; top:calc(100% + 6px); right:0; z-index:5; min-width:190px; padding:6px; background:var(--raised); border:1px solid var(--divider); border-radius:10px; display:flex; flex-direction:column; gap:2px; }
+.score-menu { position:absolute; top:calc(100% + 6px); right:0; z-index:5; min-width:190px; padding:6px; background:var(--raised); border:1px solid var(--divider); border-radius:14px; display:flex; flex-direction:column; gap:2px; }
 .score-menu button { display:flex; align-items:center; justify-content:space-between; gap:16px; width:100%; min-height:44px; padding:0 10px; background:none; font-weight:500; text-align:left; }
 .score-menu button:hover, .score-menu button:focus-visible { background:var(--divider); }
 .score-menu small { color:var(--text3); font-size:.78rem; }
@@ -12,6 +12,6 @@
 .score-paper .score-on, .score-paper .score-on * { fill:#E5484D; stroke:#E5484D; }
 .score-note { margin:0; color:var(--text2); }
 .score-note:empty { display:none; }
-.score-paper { box-sizing:border-box; background:#fff; color:#111; border-radius:8px; padding:12px; overflow-x:auto; }
+.score-paper { box-sizing:border-box; background:#fff; color:#111; border-radius:11px; padding:12px; overflow-x:auto; }
 .score-paper svg { display:block; }
 .score-legend { margin:0; color:var(--text2); font-size:.89rem; }
