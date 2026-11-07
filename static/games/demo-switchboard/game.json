@@ -1,0 +1,10 @@
+{
+  "title": "CIRCUIT / 09",
+  "description": "한 칸을 누르면 주변 회로도 뒤집혀. 모든 회로를 켜는 최소 조작을 찾아봐.",
+  "genre": "논리 퍼즐",
+  "tags": ["퍼즐", "규칙", "단일 HTML"],
+  "entry": "index.html",
+  "cover": "cover.svg",
+  "height": 730,
+  "order": 1
+}

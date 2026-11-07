@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img" aria-label="CIRCUIT 09 cover art">
+<defs><radialGradient id="g"><stop stop-color="#284C3A"/><stop offset="1" stop-color="#0C171B"/></radialGradient><filter id="blur"><feGaussianBlur stdDeviation="18"/></filter></defs>
+<rect width="960" height="540" fill="url(#g)"/>
+<g fill="none" stroke="#295447" stroke-width="5"><path d="M0 110h310v125h110M960 380H670v-85H545M0 395h236V270h160M960 70H710v105H555"/></g>
+<g transform="translate(365,110)" >
+<rect x="-25" y="-25" width="270" height="270" rx="30" fill="#16352A" opacity=".55"/>
+<g fill="#182E2B" stroke="#426757" stroke-width="5"><rect x="0" y="0" width="61" height="61" rx="11"/><rect x="82" y="0" width="61" height="61" rx="11"/><rect x="164" y="0" width="61" height="61" rx="11"/><rect x="0" y="82" width="61" height="61" rx="11"/><rect x="82" y="82" width="61" height="61" rx="11"/><rect x="164" y="82" width="61" height="61" rx="11"/><rect x="0" y="164" width="61" height="61" rx="11"/><rect x="82" y="164" width="61" height="61" rx="11"/><rect x="164" y="164" width="61" height="61" rx="11"/></g>
+<g fill="#B3F36A"><circle cx="30" cy="30" r="19"/><circle cx="194" cy="30" r="19"/><circle cx="112" cy="112" r="19"/><circle cx="30" cy="194" r="19"/><circle cx="194" cy="194" r="19"/></g>
+<g fill="#A4FD80" opacity=".40" filter="url(#blur)"><circle cx="30" cy="30" r="25"/><circle cx="194" cy="30" r="25"/><circle cx="112" cy="112" r="25"/><circle cx="30" cy="194" r="25"/><circle cx="194" cy="194" r="25"/></g>
+</g><text x="56" y="483" fill="#D7FBE1" font-family="monospace" font-size="48" letter-spacing="7" font-weight="bold">CIRCUIT / 09</text>
+</svg>

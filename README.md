@@ -1,33 +1,90 @@
-# BLACK BOX 09 — 규칙 추론 실험실
+# YOUR ARCADE — Godot HTML 게임 자동 등록 Streamlit 앱
 
-**9칸의 입력을 실험해 숨겨진 변환 법칙을 알아내는 관찰형 퍼즐 게임.**
+GitHub의 `static/games/` 밑에 게임 폴더를 통째로 넣으면 사이트에서 자동 검색해서 목록에 띄웁니다. 업로드 UI나 DB는 없습니다. **BLACK BOX 09** 규칙 추론 게임도 사이드바에서 계속 플레이할 수 있습니다.
 
-![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB) ![Streamlit](https://img.shields.io/badge/Streamlit-App-FF4B4B)
+## 게임 추가 방법 (이것만 하면 됩니다)
 
-## 무엇을 할 수 있나
+1. Godot에서 **Web(HTML5)** 형식으로 내보냅니다. 가능하면 `Thread Support`를 끈 **싱글 스레드** 빌드를 사용하세요.
+2. 생성된 HTML, JS, WASM, PCK, PNG 등 파일을 **이름을 바꾸지 않고** 한 폴더 안에 넣습니다.
+3. 폴더 통째로 `static/games/내게임이름/`에 복사한 후 GitHub에 커밋/푸시합니다.
+4. Streamlit Community Cloud의 배포가 완료되면 게임 카드가 자동으로 생깁니다. 앱 소스 수정은 필요 없습니다.
 
-- **3×3 입력·출력 격자**를 직접 조작하는 블랙박스 실험
-- 회전/반사/확산/이웃 XOR/생명 게임 등 **16가지 독립적인 법칙**
-- 관측 결과와 모순되는 가설을 자동 제거하는 **추론 엔진**
-- 현재 남은 후보를 가장 잘 구분하는 입력을 찾는 **최대 정보량 실험 추천**
-- 총 4단계, 점수, 포기/정답 공개, 반례 비교, JSON 관측 기록 다운로드
-- 서버, 계정, 외부 API, 데이터베이스 및 별도 비밀키 **불필요**
+```text
+your-repository/
+├── app.py                     # Streamlit 진입점
+├── arcade_page.py             # 게임 목록 + 플레이어
+├── blackbox_page.py           # BLACK BOX 09 (기존 게임)
+├── catalog.py                 # 자동 파일 탐색 로직
+├── engine.py                  # BLACK BOX 09 추론 엔진
+├── requirements.txt
+├── .streamlit/
+│   └── config.toml            # [server] enableStaticServing=true
+└── static/
+    └── games/
+        ├── demo-switchboard/  # 포함된 HTML 테스트 게임, 삭제 가능
+        │   ├── index.html
+        │   ├── cover.svg
+        │   └── game.json
+        ├── 내첫번째게임/
+        │   ├── index.html
+        │   ├── index.js
+        │   ├── index.wasm
+        │   ├── index.pck
+        │   └── index.png
+        └── 내두번째게임/
+            ├── MyGame.html
+            ├── MyGame.js
+            ├── MyGame.wasm
+            └── MyGame.pck
+```
 
-## 로컬 실행
+**중요:** `index.html`이 아니라 `MyGame.html`처럼 다른 이름이어도 자동으로 찾습니다. 폴더 안에 `build/` 같은 한 단계 더 깊은 내보내기 경로가 있어도 찾습니다. 원본 내보내기 파일명이나 위치를 임의로 바꾸지 마세요.
 
-Python 3.11 이상 권장.
+### 선택 사항: 게임명, 소개, 커버 지정
+
+`static/games/내게임이름/game.json` 파일을 추가하면 메타데이터를 표시할 수 있습니다. 없어도 폴더명으로 카드가 자동 생성됩니다.
+
+```json
+{
+  "title": "나의 게임",
+  "description": "두 명이 협력하여 물건을 찾는 퍼즐 게임",
+  "genre": "협동 퍼즐",
+  "tags": ["2인", "퍼즐"],
+  "entry": "index.html",
+  "cover": "cover.png",
+  "height": 720,
+  "order": 10
+}
+```
+
+- `entry`: **선택**. HTML이 여럿일 때 사용할 진입점. 생략 시 자동 선택.
+- `cover`: **선택**. 폴더 내부의 이미지 파일. 생략 시 `cover.png`, `thumbnail.jpg`, `icon.png` 등을 탐색하거나 기본 커버 사용.
+- `height`: 임베드 높이(px), 기본 700 / 420~1200으로 제한.
+- `order`: 정렬 순서, 숫자가 작을수록 먼저 나옴.
+- `hidden: true`: 폴더를 남겨 두고 목록에서만 숨김.
+
+## Streamlit Community Cloud 배포
+
+1. GitHub 저장소에 이 프로젝트의 모든 파일을 올립니다 (숨김 폴더 `.streamlit/` 포함).
+2. https://share.streamlit.io/ 에서 저장소를 연결합니다.
+3. **Main file path** 를 `app.py`로 지정합니다.
+4. 배포되면 `/`는 자동 아케이드, 사이드바에서 `BLACK BOX 09`로 전환할 수 있습니다.
+
+로컬 실행:
 
 ```bash
 python -m pip install -r requirements.txt
 streamlit run app.py
 ```
 
-## Streamlit Community Cloud 배포
+## 기술적 주의사항
 
-1. 이 폴더의 **내용물**을 새 GitHub 저장소의 최상위에 올린다 (`app.py`, `engine.py`, `requirements.txt`, `.streamlit/config.toml`).
-2. [share.streamlit.io](https://share.streamlit.io/)에서 GitHub 계정으로 로그인하고 **Create app**을 선택한다.
-3. Repository와 Branch를 선택하고 **Main file path를 `app.py`**로 지정한 다음 Deploy 한다.
-4. 발급된 `*.streamlit.app` 주소에서 게임을 즐길 수 있다.
+- **Godot 4.3 이상 싱글 스레드 Web 내보내기를 권장합니다.** 멀티스레드 빌드나 웹 GDExtension 활성화 빌드에는 COOP/COEP 교차 출처 격리 헤더가 필요할 수 있습니다. Streamlit의 기본 정적 파일 서버가 이를 직접 설정하는 방식은 제공하지 않으므로 그런 빌드는 별도 호스팅이나 Godot PWA 서비스워커 우회 설정이 필요할 수 있습니다.
+- HTML을 실행하는 서버와 WASM/PCK/JS가 같은 출처 및 같은 경로 계층에 있어야 합니다. 이 프로젝트는 Streamlit의 **정적 파일 서빙** 기능(`/app/static/games/...`)을 사용해 해결합니다.
+- 큰 `.wasm`/`.pck` 파일을 많이 GitHub에 넣으면 GitHub 용량 및 Streamlit Community Cloud 리소스 제한에 걸릴 수 있습니다. 이 방법은 소수~중간 규모의 게임 보관함에 적합합니다.
+- **게임 파일은 신뢰할 수 있는 것만 올리세요.** 같은 출처에서 실행되는 HTML/JS이므로 공개된 앱의 정적 페이지에서 실행됩니다.
+- 저장소에 파일을 커밋/푸시해야 영구적으로 배포됩니다. 로컬 파일을 Streamlit 앱에 단순 업로드하는 방식은 아닙니다.
+- 개발 중 문제가 있으면 게임을 새 창으로 열어 브라우저 개발자 도구의 Network/Console에서 404, WASM MIME, SharedArrayBuffer 오류를 확인하세요.
 
 ## 검증
 
@@ -36,21 +93,6 @@ python -m pip install pytest
 python -m pytest -q
 ```
 
-## 프로젝트 구조
-
-```
-blackbox09/
-├── app.py                   # UI + 각 세션의 진행 상황
-├── engine.py                # 부작용 없는 법칙, 일관성 검사, 정보량 연산
-├── requirements.txt         # Streamlit 버전 범위
-├── .streamlit/config.toml   # 다크 테마
-├── tests/test_engine.py     # 법칙·추론 검증
-└── README.md
-```
-
-## 운영 메모
-
-- 진행 상황과 실험 기록은 Streamlit의 `st.session_state`에 보관된다. **새로고침/연결 종료 시 사라질 수 있으며 서버 간 공유되지 않는다.**
-- 사용자가 제출한 입력은 원격 API에 전송되지 않는다. 기본 Streamlit 서비스의 표준 연결 외에 앱 자체의 별도 데이터 수집은 없다.
-- 숨은 법칙은 시드를 이용해 정해져 같은 시드/라운드 조합으로 재현할 수 있다. 왼쪽 패널의 **재현할 세계선 번호**에 입력해 동일한 과제를 다시 시작할 수 있다.
-- 외부 Google Fonts가 로드되지 않으면 시스템 글꼴을 사용한다. 게임 동작에는 영향을 주지 않는다.
+공식 문서:
+- Streamlit static file serving: https://docs.streamlit.io/develop/concepts/configuration/serving-static-files
+- Godot 4.5 Web export: https://docs.godotengine.org/en/4.5/tutorials/export/exporting_for_web.html
