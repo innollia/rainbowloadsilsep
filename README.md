@@ -1,3 +1,45 @@
+# strudel 딸깍이
+
+코드를 보지 않고 자연어로 Strudel 음악을 만드는 작업실이다. 기존 아케이드와 BLACK BOX 09는 설정 → 게임하기에 있다.
+
+## 실행
+
+```powershell
+pip install -r requirements.txt
+$env:GEMINI_API_KEY = '내 키'
+.un_local.ps1
+```
+
+키가 없어도 재생, 믹서, 저장은 동작한다.
+
+## Streamlit Cloud 배포
+
+share.streamlit.io에서 이 저장소의 `main`, `app.py`를 연결하고 Secrets에 아래를 넣는다.
+
+```toml
+GEMINI_API_KEY = "..."
+STUDIO_PASSWORD = "..."
+```
+
+`STUDIO_PASSWORD`가 없으면 공개 URL에서 키가 쓰이지 않도록 AI가 꺼진다. 선택 값은 `GEMINI_MODEL`, `STRUDEL_DAILY_CALLS`다.
+
+프로젝트는 브라우저에 저장되므로 다른 기기로 옮길 때는 프로젝트 내보내기와 파일 불러오기를 쓴다.
+
+## 시험
+
+```powershell
+python -m pytest -q tests
+python tests/e2e_studio.py
+```
+
+## 라이선스
+
+`studio_frontend/vendor/strudel.js`는 [Strudel](https://codeberg.org/uzu/strudel)의 번들이며 AGPL-3.0이다(`STRUDEL-LICENSE`). 배포 시 소스 공개 조건이 적용된다. 샘플은 실행할 때 tidalcycles/dirt-samples에서 불러오며 저장소에 포함하지 않는다.
+
+---
+
+# 기존 게임 안내
+
 # YOUR ARCADE — Godot HTML 게임 자동 등록 Streamlit 앱
 
 GitHub의 `static/games/` 밑에 게임 폴더를 통째로 넣으면 사이트에서 자동 검색해서 목록에 띄웁니다. 업로드 UI나 DB는 없습니다. **BLACK BOX 09** 규칙 추론 게임도 사이드바에서 계속 플레이할 수 있습니다.

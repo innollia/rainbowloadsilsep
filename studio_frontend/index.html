@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>strudel 딸깍이</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header>
+    <strong class="brand">strudel 딸깍이</strong>
+    <button id="projectBtn" class="ghost" aria-haspopup="dialog"></button>
+    <span id="saveState" role="status"></span>
+    <span class="spacer"></span>
+    <button id="saveBtn">저장</button>
+    <button id="autoBtn" aria-pressed="false">자동 개선 OFF</button>
+    <button id="settingsBtn">설정</button>
+  </header>
+  <main>
+    <section id="stage">
+      <div class="hero">
+        <svg id="art" viewBox="0 0 100 100" role="img" aria-label="앨범 아트"></svg>
+        <div class="heroText">
+          <h1 id="songTitle"></h1>
+          <p id="songMeta"></p>
+          <canvas id="viz" height="110" aria-label="실제 출력 시각화"></canvas>
+          <div id="listenBand" hidden></div>
+        </div>
+      </div>
+      <h2>트랙</h2>
+      <div id="tracks"></div>
+    </section>
+    <div id="divider" role="separator" aria-orientation="vertical" aria-label="채팅 너비" tabindex="0"></div>
+    <aside id="chat">
+      <div class="chatHead"><h2>AI와 만들기</h2><button id="chatFold" class="ghost">접기</button></div>
+      <div id="log" aria-live="polite"></div>
+      <div id="progress" hidden><span id="progressText"></span><button id="stopAi">중단</button></div>
+      <div id="targetChip" hidden></div>
+      <form id="askForm">
+        <textarea id="ask" rows="2" placeholder="어떻게 바꿀까? 예: 드럼은 그대로 두고 베이스만 바꿔줘" aria-label="수정 요청"></textarea>
+        <button id="send" aria-label="보내기">↑</button>
+      </form>
+    </aside>
+    <button id="chatOpen" hidden>AI 열기</button>
+  </main>
+  <footer>
+    <span id="footTitle" class="footTitle"></span>
+    <button id="play" aria-label="재생">▶</button>
+    <span id="clock" class="num">00:00</span>
+    <span id="bar" class="num">1마디</span>
+    <label class="bpm num"><input id="bpm" type="number" min="20" max="400" aria-label="BPM"> BPM</label>
+    <label class="vol">음량 <input id="volume" type="range" min="0" max="1" step="0.01" value="0.8"></label>
+  </footer>
+</div>
+<dialog id="dialog"></dialog>
+<script src="app.js"></script>
+</body>
+</html>

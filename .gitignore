@@ -1,0 +1,8 @@
+__pycache__/
+.pytest_cache/
+.streamlit/secrets.toml
+.studio-data/
+node_modules/
+artifacts/
+*.log
+artifacts-e2e.png
