@@ -31,13 +31,14 @@
   const stems = ['#E8AE72', '#87B9E8', '#8CCDB2', '#C7A0E8', '#F3C978'];
 
   /* ---------- state ---------- */
-  const assets = ASSETS.map((d) => ({ ...d, status: d.sample ? 'draft' : 'pending', versions: [], current: 0, next: null, showNext: false, chat: [], progress: 0 }));
+  const assets = ASSETS.map((d) => ({ ...d, status: d.sample ? 'draft' : 'pending', versions: [], current: 0, drafts: [], pick: -1, chat: [], progress: 0 }));
   const byId = (id) => assets.find((a) => a.id === id);
   let stage = 'sample', filter = { cat: null, status: null }, focused = null, anchor = null, openAsset = null, detailTab = 'chat';
   const selected = new Set();
+  let drafts = 1;
 
   /* ---------- AI self-check: nothing reaches the user before it has been through this ---------- */
-  const MAX_CHECKS = 3;
+  const MAX_CHECKS = 6;
   const rules = RULES.map((r) => ({ ...r }));
   const rule = (id) => rules.find((r) => r.id === id);
   const broken = (a, m) => rules.filter((r) => (!r.applies || r.applies(a)) && (r.text ? !r.read(m, a) : r.bad(r.read(m, a), r)));
@@ -54,13 +55,22 @@
     }
     return next;
   }
+  // Stands in for the AI renaming the file and recording its sources.
+  function repaired(a, left) {
+    if (left.some((r) => r.id === 'name')) {
+      const old = a.id; a.id = `sfx_${old.replace(/_sfx$/, '')}`;
+      if (focused === old) focused = a.id;
+    }
+    if (left.some((r) => r.id === 'lic')) a.noLicense = false;
+    return left.some((r) => r.text);
+  }
   function checked(a, change, note) {
     let v = build(a, change, note);
     for (let i = 0; i < MAX_CHECKS; i++) {
       const left = broken(a, v.measure);
       if (!left.length) break;
-      const next = reworked(v.measure, v.change, left);
-      if (JSON.stringify(next) === JSON.stringify(v.change)) break;
+      const named = repaired(a, left), next = reworked(v.measure, v.change, left);
+      if (!named && JSON.stringify(next) === JSON.stringify(v.change)) break;
       v = build(a, next, note);
     }
     return v;
@@ -70,11 +80,9 @@
     a.current = a.versions.length - 1;
   }
   const version = (a) => a.versions[a.current];
-  const heard = (a) => (a.next && a.showNext ? a.next : version(a));
+  const heard = (a) => (a.pick >= 0 && a.drafts[a.pick]) || version(a);
   const issues = (a) => (a.versions.length ? broken(a, heard(a).measure) : []);
-  const stuck = () => assets.filter((a) => a.status !== 'working' && issues(a).length);
   const approve = (a) => { a.status = 'approved'; };
-  const fixLeft = (list) => request(list, '남은 문제를 고쳐 줘', true);
   assets.filter((a) => a.sample).forEach((a) => make(a));
 
   /* ---------- audio ---------- */
@@ -95,17 +103,17 @@
   function play(a, opts = {}) {
     if (!a.versions.length) return;
     audio(); stopSound();
-    const v = heard(a), sound = v.sound, nodes = [], gains = {};
+    const v = heard(a), sound = v.sound, nodes = [], gains = {}, loop = opts.loop ?? !!a.loop;
     for (const s of sound.stems) {
       const buffer = ctx.createBuffer(1, s.data.length, sound.rate); buffer.copyToChannel(s.data, 0);
       const src = ctx.createBufferSource(), gain = ctx.createGain();
-      src.buffer = buffer; src.loop = !!opts.loop; src.connect(gain); gain.connect(master);
+      src.buffer = buffer; src.loop = loop; src.connect(gain); gain.connect(master);
       gain.gain.value = stemLevel(s.name); gains[s.name] = gain;
       nodes.push(src);
     }
     const at = ctx.currentTime + 0.01;
     nodes.forEach((n) => n.start(at, opts.from || 0));
-    player = { asset: a, nodes, gains, at: at - (opts.from || 0), length: sound.seconds, loop: !!opts.loop };
+    player = { asset: a, nodes, gains, at: at - (opts.from || 0), length: sound.seconds, loop, hover: !!opts.hover };
     nodes[0].onended = () => { if (player?.nodes[0] === nodes[0]) { player = null; markPlaying(); opts.done?.(); } };
     markPlaying();
   }
@@ -151,31 +159,35 @@
     if (a.versions.length) t.append(el('canvas'));
     if (a.status === 'working') { const bar = el('div', 'bar'); bar.style.setProperty('--p', a.progress); t.append(bar); }
     if (a.status === 'review') {
-      const row = el('div', 'ab');
-      const old = el('button', '', '이전'), fresh = el('button', '', '새 버전');
-      const pick = (next) => (e) => { e.stopPropagation(); a.showNext = next; drawTile(a); play(a); old.setAttribute('aria-pressed', String(!next)); fresh.setAttribute('aria-pressed', String(next)); };
-      old.onclick = pick(false); fresh.onclick = pick(true);
-      old.setAttribute('aria-pressed', String(!a.showNext)); fresh.setAttribute('aria-pressed', String(a.showNext));
-      const keep = iconButton('check', '채택', (e) => { e.stopPropagation(); settle(a, true); }, 'keep');
-      const drop = iconButton('close', '버림', (e) => { e.stopPropagation(); settle(a, false); }, 'drop');
-      row.append(old, fresh, keep, drop); t.append(row);
+      t.append(reviewRow(a, () => { drawTile(a); play(a); }));
     }
     const meta = el('div', 'meta'), name = el('span', 'name', a.name), sub = el('div', 'sub');
     const v = a.versions.length ? heard(a) : null;
     sub.append(el('span', '', v ? seconds(v.measure.seconds) : STATUS[a.status]), el('span', '', a.status === 'working' ? '수정 중' : v && a.versions.length > 1 ? `v${a.current + 1}` : ''));
     meta.append(name, sub); t.append(meta, el('i', 'state'));
-    if (issues(a).length) { const mark = el('span', 'stuckMark', '!'); mark.title = 'AI가 고치지 못한 문제가 있어요'; t.append(mark); }
-    if (a.versions.length) {
-      t.append(iconButton('check', `${a.name} 선택`, (e) => { e.stopPropagation(); toggle(a); anchor = a.id; }, 'tileBtn tileCheck'), iconButton('expand', `${a.name} 자세히`, (e) => { e.stopPropagation(); openDetail(a); }, 'tileBtn tileOpen'));
-      t.querySelector('.tileCheck').addEventListener('dblclick', (e) => e.stopPropagation());
-      t.querySelector('.tileOpen').addEventListener('dblclick', (e) => e.stopPropagation());
-    }
     t.addEventListener('pointerenter', () => hoverStart(a));
     t.addEventListener('pointerleave', hoverEnd);
     t.addEventListener('click', (e) => clickTile(a, e));
-    t.addEventListener('dblclick', () => a.versions.length && openDetail(a));
+    t.addEventListener('pointerdown', (e) => hold(a, t, e));
+    t.addEventListener('contextmenu', (e) => e.preventDefault());
     t.addEventListener('focus', () => { focused = a.id; syncDock(); });
     return t;
+  }
+  // Pick the previous version or one of the drafts, then keep or drop.
+  function reviewRow(a, picked) {
+    const row = el('div', 'ab');
+    const option = (label, i) => {
+      const b = el('button', '', label); b.dataset.pick = i; b.setAttribute('aria-pressed', String(a.pick === i));
+      b.onclick = (e) => {
+        e.stopPropagation(); a.pick = i;
+        row.querySelectorAll('[data-pick]').forEach((x) => x.setAttribute('aria-pressed', String(+x.dataset.pick === i)));
+        picked();
+      };
+      return b;
+    };
+    row.append(option('이전', -1), ...a.drafts.map((_, i) => option(a.drafts.length > 1 ? String(i + 1) : '새 버전', i)));
+    row.append(iconButton('check', '채택', (e) => { e.stopPropagation(); settle(a, true); }, 'keep'), iconButton('close', '버림', (e) => { e.stopPropagation(); settle(a, false); }, 'drop'));
+    return row;
   }
   const drawTile = (a) => { const c = tileOf(a)?.querySelector('canvas'); if (c) drawPeaks(c, heard(a).peaks, resolved(color(a.cat))); };
 
@@ -203,26 +215,21 @@
     renderSide(); renderHeader(); syncDock();
   }
   function banner() {
-    const unchecked = assets.filter((a) => a.status === 'draft'), left = stuck(), notes = [];
-    if (left.length) {
-      const box = el('div', 'note'), text = el('span', '', `AI가 고치지 못한 문제가 에셋 ${left.length}개에 남았어요.`), fix = el('button', 'primary', '고쳐 줘');
-      box.style.cssText = 'display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px'; text.style.flex = '1'; fix.id = 'fixLeft'; fix.onclick = () => fixLeft(left);
-      box.append(text, fix); notes.push(box);
-    }
+    const unchecked = assets.filter((a) => a.status === 'draft');
     const box = el('div', 'note'); box.style.cssText = 'display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px';
     const all = el('button', 'ghost', '전부 승인'); all.id = 'approveAll'; all.onclick = () => { unchecked.forEach(approve); renderBoard(); };
     if (stage !== 'sample') {
-      if (!unchecked.length) return notes;
+      if (!unchecked.length) return [];
       const text = el('span', '', `확인할 에셋 ${unchecked.length}개가 남았어요.`); text.style.flex = '1';
       box.append(text, all);
-      return [...notes, box];
+      return [box];
     }
     const samples = assets.filter((a) => a.sample), done = samples.filter((a) => a.status === 'approved').length, rest = assets.filter((a) => a.status === 'pending').length;
     const text = el('span', '', done === samples.length ? `샘플 ${samples.length}개를 모두 승인했어요. 이 스타일로 나머지 ${rest}개를 만듭니다.` : `샘플 ${samples.length}개 중 ${done}개 승인. 들어 보고 승인하면 나머지 ${rest}개를 같은 스타일로 만듭니다.`);
     text.style.flex = '1';
     const go = el('button', 'primary', '나머지 만들기'); go.id = 'expandBtn'; go.disabled = done !== samples.length; go.onclick = expand;
     box.append(text, all, go);
-    return [...notes, box];
+    return [box];
   }
   function renderSide() {
     const side = $('side'); side.textContent = '';
@@ -254,7 +261,6 @@
     const count = selected.size, target = focused && byId(focused);
     $('selCount').hidden = !count; $('selCount').textContent = `${count}개 선택`;
     $('selAll').hidden = $('selApprove').hidden = $('selClear').hidden = !count;
-    $('detailBtn').hidden = !!count || !target?.versions.length;
     document.body.classList.toggle('selecting', !!count);
     $('ask').placeholder = count ? `선택한 ${count}개에 보낼 요청` : target?.versions.length ? `${target.name}에 보낼 요청` : '에셋을 골라 요청을 보내세요';
     $('send').disabled = !count && !target?.versions.length;
@@ -265,19 +271,33 @@
   function hoverStart(a) {
     if (lassoing || !$('hoverPlay').checked || !a.versions.length || queue) return;
     clearTimeout(hoverTimer);
-    hoverTimer = setTimeout(() => { if (player?.asset !== a) play(a); }, 140);
+    hoverTimer = setTimeout(() => { if (player?.asset !== a) play(a, { hover: true }); }, 140);
   }
-  function hoverEnd() { clearTimeout(hoverTimer); }
+  // A loop has no end of its own, so one started by hovering stops with the hover.
+  function hoverEnd() { clearTimeout(hoverTimer); if (player?.hover && player.loop) stopSound(); }
+  const HOLD_MS = 450;
+  let held = false;
+  function hold(a, t, e) {
+    held = false;
+    if (e.button || !a.versions.length || e.target.closest('.ab')) return;
+    const x0 = e.clientX, y0 = e.clientY;
+    const end = () => { clearTimeout(timer); t.classList.remove('pressing'); removeEventListener('pointerup', end); removeEventListener('pointercancel', end); removeEventListener('pointermove', move); };
+    const move = (ev) => { if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > 8) end(); };
+    const timer = setTimeout(() => { end(); held = true; openDetail(a); }, HOLD_MS);
+    t.classList.add('pressing');
+    addEventListener('pointerup', end); addEventListener('pointercancel', end); addEventListener('pointermove', move);
+  }
   function clickTile(a, e) {
-    if (a.status === 'pending') return;
-    if (e.ctrlKey || e.metaKey) { toggle(a); anchor = a.id; }
-    else if (e.shiftKey && anchor) {
+    if (held) { held = false; return; }
+    if (!a.versions.length) return;
+    if (e.shiftKey && anchor) {
       const list = visible(), from = list.indexOf(byId(anchor)), to = list.indexOf(a);
       list.slice(Math.min(from, to), Math.max(from, to) + 1).filter((x) => x.versions.length).forEach((x) => selected.add(x.id));
       refreshSelection();
     } else {
-      anchor = a.id; focused = a.id;
-      play(a);
+      const on = !selected.has(a.id);
+      toggle(a); anchor = a.id; focused = on ? a.id : null;
+      if (on) play(a); else if (player?.asset === a) stopSound();
     }
     syncDock();
   }
@@ -343,23 +363,34 @@
     const has = (...w) => w.some((x) => text.includes(x));
     return { shift: has('높', '밝', '가볍', '귀엽') ? 1.25 : has('낮', '묵직', '무겁', '어둡') ? 0.8 : 1.1, stretch: has('짧') ? 0.7 : has('길') ? 1.4 : 0.95, level: has('작', '조용', '낮춰') ? 0.6 : has('크', '세게') ? 1.2 : 0.85 };
   }
-  function request(list, text, repair = false) {
-    const change = repair ? {} : changeFrom(text);
+  const SPREAD = [[1, 1], [0.89, 1.15], [1.12, 0.88], [0.8, 1.3]];
+  const MAX_DRAFTS = SPREAD.length;
+  // "시안 3개" in the request wins over the picker, so it can be asked for in plain words.
+  function draftsWanted(text) {
+    const said = text.match(/(?:시안|후보)\D{0,3}([1-9])|([1-9])\s*(?:개|가지)\s*(?:의\s*)?(?:시안|후보|버전)/);
+    return Math.min(MAX_DRAFTS, said ? +(said[1] || said[2]) : drafts);
+  }
+  function draftPicker() {
+    const box = el('label', 'draftPick', '시안'), pick = el('select');
+    for (let i = 1; i <= MAX_DRAFTS; i++) pick.append(Object.assign(el('option', '', `${i}개`), { value: i }));
+    pick.value = drafts; pick.setAttribute('aria-label', '시안 개수');
+    pick.onchange = () => { drafts = +pick.value; };
+    box.append(pick); return box;
+  }
+  function request(list, text) {
+    const change = changeFrom(text), count = draftsWanted(text);
+    drafts = 1; $('draftSlot').replaceChildren(draftPicker());
     list.forEach((a, i) => {
       a.status = 'working'; a.progress = 0;
       a.chat.push({ me: true, text });
-      const total = 1100 + i * 420 + Math.random() * 900, begun = performance.now();
+      const total = 1100 + i * 420 + count * 300 + Math.random() * 900, begun = performance.now();
       const tick = () => {
         a.progress = Math.min(1, (performance.now() - begun) / total);
         tileOf(a)?.querySelector('.bar')?.style.setProperty('--p', a.progress);
         if (a.progress < 1) { setTimeout(tick, 120); return; }
-        if (repair) { // stands in for the AI renaming the file and recording its sources
-          const old = a.id; a.id = /^(sfx|amb|bgm)_/.test(old) ? old : `sfx_${old.replace(/_sfx$/, '')}`; a.noLicense = false;
-          if (focused === old) focused = a.id;
-        }
-        a.next = checked(a, change, text);
-        a.showNext = true; a.status = 'review';
-        a.chat.push({ text: '새 버전을 만들었어요. 이전과 비교해 보세요.' });
+        a.drafts = SPREAD.slice(0, count).map(([shift, stretch], k) => checked(a, { ...change, shift: change.shift * shift, stretch: change.stretch * stretch }, count > 1 ? `${text} · 시안 ${k + 1}` : text));
+        a.pick = 0; a.status = 'review';
+        a.chat.push({ text: count > 1 ? `시안 ${count}개를 만들었어요. 들어 보고 하나를 채택하세요.` : '새 버전을 만들었어요. 이전과 비교해 보세요.' });
         renderOpen(a);
       };
       tick();
@@ -368,8 +399,9 @@
   }
   function renderOpen(a) { if (openAsset && (!a || a === openAsset)) renderDetail(); else if (openAsset) renderHeader(); else renderBoard(); }
   function settle(a, keep) {
-    if (keep && a.next) { a.versions.push(a.next); a.current = a.versions.length - 1; }
-    a.next = null; a.showNext = false; a.status = keep ? 'approved' : 'draft';
+    const chosen = keep ? a.drafts[a.pick] : null;
+    if (chosen) { a.versions.push(...a.drafts.filter((v) => v !== chosen), chosen); a.current = a.versions.length - 1; } // the others stay in the history
+    a.drafts = []; a.pick = -1; a.status = keep ? 'approved' : 'draft';
     if (player?.asset === a) stopSound();
     renderOpen();
   }
@@ -378,8 +410,8 @@
     const rest = assets.filter((a) => a.status === 'pending');
     toast(`샘플 스타일로 ${rest.length}개를 만듭니다`);
     rest.forEach((a, i) => setTimeout(() => {
-      make(a); a.status = 'draft';
       const t = tileOf(a);
+      make(a); a.status = 'draft';
       if (t && !openAsset) { const fresh = makeTile(a); fresh.classList.add('arrive'); t.replaceWith(fresh); drawTile(a); renderSide(); renderHeader(); }
       if (i === rest.length - 1) renderOpen();
     }, 200 + i * 110));
@@ -412,7 +444,6 @@
   $('selAll').onclick = () => { ready(visible()).forEach((x) => selected.add(x.id)); renderBoard(); };
   $('selClear').onclick = () => { selected.clear(); renderBoard(); };
   $('selApprove').onclick = () => { [...selected].map(byId).filter((a) => a.status === 'draft' || a.status === 'flagged').forEach(approve); selected.clear(); renderBoard(); };
-  $('detailBtn').onclick = () => { const a = focused && byId(focused); if (a?.versions.length) openDetail(a); };
   $('acceptAll').onclick = () => { assets.filter((a) => a.status === 'review').forEach((a) => settle(a, true)); };
   $('rejectAll').onclick = () => { assets.filter((a) => a.status === 'review').forEach((a) => settle(a, false)); };
 
@@ -470,19 +501,10 @@
     wave.onclick = (e) => { const r = wave.getBoundingClientRect(); window.setTimeout(renderPlayButton); playFrom((e.clientX - r.left) / r.width * m.seconds); };
     if (a.status === 'review') {
       const row = el('div', 'tile'); row.style.cssText = 'height:auto;background:none;overflow:visible;margin-top:8px';
-      const ab = el('div', 'ab'); ab.style.position = 'static';
-      const old = el('button', '', '이전'), fresh = el('button', '', '새 버전');
-      old.onclick = () => { a.showNext = false; renderDetail(); }; fresh.onclick = () => { a.showNext = true; renderDetail(); };
-      old.setAttribute('aria-pressed', String(!a.showNext)); fresh.setAttribute('aria-pressed', String(a.showNext));
-      ab.append(old, fresh, iconButton('check', '채택', () => settle(a, true), 'keep'), iconButton('close', '버림', () => settle(a, false), 'drop'));
+      const ab = reviewRow(a, renderDetail); ab.style.position = 'static';
       row.append(ab); wave.after(row);
       main.append(head, facts, wave, row);
     } else main.append(head, facts, wave);
-    if (left.length) {
-      const row = el('div', 'note'), text = el('span', '', `AI가 고치지 못했어요: ${left.map((r) => r.name).join(', ')}`), fix = el('button', 'primary', '고쳐 줘');
-      row.style.cssText = 'display:flex;align-items:center;gap:12px;margin-top:8px'; text.style.flex = '1'; fix.onclick = () => fixLeft([a]);
-      row.append(text, fix); main.append(row);
-    }
     const spec = el('canvas', 'dSpec'); spec.id = 'dSpec'; spec.setAttribute('aria-label', '주파수'); main.append(spec);
     const th = el('div', 'dTrackHead'); th.append(el('h2', '', `트랙 ${v.sound.stems.length}개`)); main.append(th);
     v.sound.stems.forEach((s, i) => main.append(stemRow(s, i)));
@@ -510,6 +532,7 @@
   }
   function sourceOf(a) {
     return a.layers.map((l) => {
+      if (l.kind === 'bed') return `// ${l.stem}\nnoise() |> lp(%, ${Math.round(l.cutoff * 8000)}) * ${l.gain} |> out(%)`;
       if (l.kind === 'tone') return `// ${a.name}\nsweep(${l.from}, ${l.to}, ${l.len}) |> ${l.wave}(%) * adsr(0, ${l.len}, 0, 0) * ${l.gain} |> out(%)`;
       if (l.kind === 'noise') return `noise() |> lp(%, ${Math.round(l.cutoff * 8000)}) * ar(${l.attack}, ${l.len}) * ${l.gain} |> out(%)`;
       if (l.kind === 'drums') return `// ${l.stem}\nn"bd ~ bd ~" |> kick(@.trig) |> bus("drums")`;
@@ -541,7 +564,7 @@
     const dock = el('form', 'detailDock'), input = el('input'); input.placeholder = '이 에셋에 보낼 요청'; input.setAttribute('aria-label', '이 에셋에 보낼 요청');
     const send = iconButton('send', '보내기', null); send.type = 'submit';
     dock.onsubmit = (e) => { e.preventDefault(); const t = input.value.trim(); if (t && a.status !== 'working') request([a], t); };
-    dock.append(input, send);
+    dock.append(draftPicker(), input, send);
     side.append(tabs, body, dock);
     return side;
   }
@@ -617,8 +640,8 @@
   - id: 효과음 sfx_, 환경음 amb_, 음악 bgm_ 로 시작하는 소문자 영문. 코드에 이미 쓰는 이름이 있으면 그대로
   - name: 사람이 읽을 이름
   - category: ${CATEGORIES.map((c) => c.id).join(', ')} 중 하나
-  - length: 목표 길이(초). 효과음은 ${rule('dur').limit}초 이하
-  - loop: 반복 재생 여부
+  - length: 목표 길이(초). 효과음은 ${rule('dur').limit}초 이하, 환경음은 끊기지 않는 반복 구간 8초나 16초
+  - loop: 반복 재생 여부. 환경음은 언제나 true
   - when: 게임의 어떤 순간에 나는 소리인지
   - description: 어떤 소리인지
 - questions: 사용자가 정해야 할 것
@@ -669,7 +692,7 @@ ${specForm()}`;
     const apply = (remove) => {
       const target = PROFILES.find((f) => f.id === spec.platform);
       if (target) rule('loud').range = [...target.loud];
-      added.forEach((x) => { const a = { id: x.id, name: x.name, cat: x.category, music: false, layers: [{ kind: 'tone', from: 500, to: 700, len: Math.min(0.6, x.length || 0.3), wave: 'triangle', gain: 0.4, at: 0 }], status: 'draft', versions: [], current: 0, next: null, showNext: false, chat: [], progress: 0 }; assets.push(a); make(a, {}, '명세에서 생성'); });
+      added.forEach((x) => { const a = { id: x.id, name: x.name, cat: x.category, music: false, loop: !!x.loop || x.id.startsWith('amb_'), layers: x.id.startsWith('amb_') ? [STUDIO_DATA.bed(x.name, x.length >= 16 ? 16 : 8, 0.1, 0.4, [[1, 0.25, 0], [3, 0.15, 1]])] : [{ kind: 'tone', from: 500, to: 700, len: Math.min(0.6, x.length || 0.3), wave: 'triangle', gain: 0.4, at: 0 }], status: 'draft', versions: [], current: 0, drafts: [], pick: -1, chat: [], progress: 0 }; assets.push(a); make(a, {}, '명세에서 생성'); });
       changed.forEach((x) => { byId(x.id).name = x.name; });
       if (remove) gone.forEach((a) => assets.splice(assets.indexOf(a), 1));
       dlg.close(); renderBoard(); toast(`명세를 적용했어요. 새 에셋 ${added.length}개`);
@@ -682,12 +705,7 @@ ${specForm()}`;
     openDialog('내보내기');
     const going = assets.filter((a) => a.status === 'approved'), undone = assets.filter((a) => a.status !== 'approved');
     const left = going.filter((a) => issues(a).length);
-    if (left.length) {
-      const row = el('div', 'dlgRow'), fix = el('button', '', '고쳐 줘');
-      fix.onclick = () => { dlg.close(); fixLeft(left); };
-      dlg.append(el('p', 'note err', `AI가 고치지 못한 문제가 있는 에셋 ${left.length}개도 함께 나갑니다: ${left.map((a) => a.name).join(', ')}`));
-      row.append(fix); dlg.append(row);
-    }
+    if (left.length) dlg.append(el('p', 'note err', `규격 문제가 남은 에셋 ${left.length}개도 함께 나갑니다: ${left.map((a) => a.name).join(', ')}`));
     if (undone.length) dlg.append(el('p', 'note', `아직 승인되지 않은 에셋 ${undone.length}개는 빠집니다.`));
     dlg.append(el('h3', '', '묶음에 들어가는 것'));
     for (const t of ['승인한 소리 파일', '명세 game-audio.spec.json', 'CREDITS.md와 라이선스 원문']) dlg.append(Object.assign(el('div', 'lineItem'), { textContent: t }));
@@ -709,7 +727,7 @@ ${specForm()}`;
     ['명세 받기', '명세 버튼에서 프롬프트를 복사해 게임 기획서를 가진 AI에게 보내고, 돌아온 명세를 붙여 넣어요.'],
     ['샘플 확인', '대표 소리가 먼저 나와요. 타일에 마우스를 올려 듣고 승인하세요.'],
     ['나머지 만들기', '승인한 샘플의 스타일로 나머지를 한 번에 만들어요.'],
-    ['고치기', '타일의 체크 버튼으로 여러 개를 고르거나 하나를 확대해서, 바꿀 내용을 적어요.'],
+    ['고치기', '타일을 누르면 선택되고 소리가 나요. 여러 개를 고르고 바꿀 내용을 적으세요. 시안 개수를 늘리면 여러 안을 비교해 고를 수 있어요. 길게 누르면 크게 열려요.'],
     ['내보내기', '승인한 소리를 저작권 고지와 함께 묶어요. 규격 검사는 AI가 소리를 내놓기 전에 끝내요.'],
   ];
   function tutorial() {
@@ -734,6 +752,7 @@ ${specForm()}`;
   setIcon($('backBtn'), 'music'); setIcon($('send'), 'send'); setIcon($('playAll'), 'play'); setIcon($('gameName'), 'folder'); setIcon($('specBtn'), 'spec'); setIcon($('exportBtn'), 'download'); setIcon($('helpBtn'), 'help');
   $('helpBtn').onclick = tutorial; $('specBtn').onclick = specDialog; $('exportBtn').onclick = exportDialog; $('gameName').onclick = gameDialog;
   addEventListener('resize', () => { if (openAsset) renderDetail(); else assets.filter((a) => a.versions.length).forEach(drawTile); });
+  $('draftSlot').append(draftPicker());
   renderBoard(); liveLoop();
   let seen = false;
   try { seen = !!localStorage.getItem('asset-tutorial-seen'); localStorage.setItem('asset-tutorial-seen', '1'); } catch { /* shows again next time */ }

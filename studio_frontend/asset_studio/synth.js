@@ -1,6 +1,7 @@
 // Placeholder sound for the shell, synthesised from data.js so tiles, waveforms and measurements are real signals.
 (() => {
   const RATE = 22050;
+  const FOLD = 0.5; // seconds rendered past a loop and folded back onto its head
   const hz = (m) => 440 * 2 ** ((m - 69) / 12);
   const osc = (wave, phase) => {
     const t = phase % 1;
@@ -30,6 +31,19 @@
       out[start + i] += low * l.gain * env * (1 + (1 - l.cutoff));
     }
   }
+  // Ambience never fades: it runs for the whole buffer, and render() folds the overrun back onto the head.
+  function bed(out, l, shift, stretch, seed) {
+    const period = l.len * stretch * RATE, cutoff = Math.min(0.98, l.cutoff * shift);
+    let random = seed, low = 0;
+    const next = () => { random = (random * 16807) % 2147483647; return random / 1073741824 - 1; };
+    for (let i = 0; i < 2000; i++) low += (next() - low) * cutoff;
+    for (let i = 0; i < out.length; i++) {
+      low += (next() - low) * cutoff;
+      let swell = 1;
+      for (const [cycles, depth, phase] of l.swells) swell += depth * Math.sin(2 * Math.PI * cycles * i / period + phase);
+      out[i] += low * l.gain * swell * (1 + (1 - l.cutoff));
+    }
+  }
   function seq(out, l, shift, stretch) {
     l.notes.forEach((note, i) => {
       if (note == null) return;
@@ -55,18 +69,33 @@
       if (l.kind === 'drums') return 8 * l.kick.length * l.step / 4;
       return l.at + l.len * stretch;
     };
-    const seconds = Math.max(0.06, ...asset.layers.map(end));
+    const beds = asset.layers.filter((l) => l.kind === 'bed');
+    const seconds = beds.length ? Math.max(...beds.map((l) => l.len * stretch)) : Math.max(0.06, ...asset.layers.map(end));
     const length = Math.ceil((seconds + (asset.music || asset.loop ? 0 : 0.03)) * RATE);
+    const fold = beds.length ? Math.ceil(FOLD * RATE) : 0;
     const groups = [];
     asset.layers.forEach((l, i) => {
       const name = l.stem || (asset.layers.length > 1 ? (l.kind === 'noise' ? '잡음 층' : `음 층 ${i + 1}`) : '본체');
       let g = groups.find((x) => x.name === name);
-      if (!g) { g = { name, data: new Float32Array(length) }; groups.push(g); }
-      if (l.kind === 'tone') tone(g.data, l, shift, stretch);
+      if (!g) { g = { name, data: new Float32Array(length + fold) }; groups.push(g); }
+      if (l.kind === 'bed') bed(g.data, l, shift, stretch, 7919 + i * 131 + Math.round(shift * 100));
+      else if (l.kind === 'tone') tone(g.data, l, shift, stretch);
       else if (l.kind === 'noise') noise(g.data, l, stretch, 7919 + i * 131 + Math.round(shift * 100));
       else if (l.kind === 'seq') seq(g.data, l, shift, stretch);
       else drums(g.data, l, 104729 + i);
     });
+    // Equal power, because the two sides are unrelated noise. The first sample is the natural next sample after the last.
+    if (fold) {
+      for (const g of groups) {
+        for (let i = 0; i < fold; i++) {
+          const t = i / fold * Math.PI / 2;
+          g.data[i] = g.data[i] * Math.sin(t) + g.data[length + i] * Math.cos(t);
+        }
+        g.data = g.data.slice(0, length);
+        const mean = g.data.reduce((sum, v) => sum + v, 0) / length;
+        for (let i = 0; i < length; i++) g.data[i] -= mean;
+      }
+    }
     const mix = new Float32Array(length);
     for (const g of groups) for (let i = 0; i < length; i++) { g.data[i] *= level; mix[i] += g.data[i]; }
     if (change.ceiling) {
@@ -97,10 +126,19 @@
       if (v > 0.003) { if (lead < 0) lead = i; last = i; }
     }
     const db = (v) => 20 * Math.log10(Math.max(v, 1e-6));
+    const rms = (from, count) => { let e = 0; for (let i = from; i < from + count; i++) e += mix[i] * mix[i]; return Math.sqrt(e / count); };
+    const span = Math.min(Math.floor(0.25 * rate), Math.floor(mix.length / 2)), frames = [];
+    for (let i = 0; i + span <= mix.length; i += span) frames.push(rms(i, span));
+    // A seam is judged against how steeply this sound moves anyway, so noise is not punished for being noise.
+    const slopes = new Float32Array(mix.length - 1);
+    for (let i = 1; i < mix.length; i++) slopes[i - 1] = Math.abs(mix[i] - mix[i - 1]);
+    slopes.sort();
+    const steep = Math.max(slopes[Math.floor(slopes.length * 0.99)], 1e-4);
     return {
       peak: db(peak), loud: db(Math.sqrt(sum / mix.length)) - 0.7, seconds: sound.seconds, clips,
       lead: Math.max(0, lead) / rate * 1000, tail: (mix.length - 1 - last) / rate * 1000,
-      dc: Math.abs(total / mix.length), seam: Math.abs(mix[0] - mix[mix.length - 1]),
+      dc: Math.abs(total / mix.length), seam: Math.abs(mix[0] - mix[mix.length - 1]) / steep,
+      wrap: Math.abs(db(rms(0, span)) - db(rms(mix.length - span, span))), dip: db(Math.sqrt(sum / mix.length)) - db(Math.min(...frames)),
     };
   }
 

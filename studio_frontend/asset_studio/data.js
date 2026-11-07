@@ -4,6 +4,10 @@
   const noise = (len, cutoff = 0.5, gain = 0.5, attack = 0.002, at = 0) => ({ kind: 'noise', len, cutoff, gain, attack, at });
   const seq = (notes, wave, gain, step, len) => ({ kind: 'seq', notes, wave, gain, step, len });
   const drums = (kick, hat, gain, step) => ({ kind: 'drums', kick, hat, gain, step });
+  // An unbroken bed for ambience. Swells are [cycles per loop, depth, phase] so they meet themselves at the seam.
+  const bed = (stem, len, cutoff, gain, swells) => ({ kind: 'bed', stem, len, cutoff, gain, swells, at: 0 });
+  // Irregular placement that still repeats exactly, so a loop has no audible pulse of its own.
+  const scatter = (count, seconds, make) => Array.from({ length: count }, (_, i) => make(0.2 + ((i + 1) * 0.618034 % 1) * (seconds - 0.9), i));
 
   const sfx = (id, name, cat, layers, opts = {}) => ({ id, name, cat, layers, music: false, ...opts });
   const bgm = (id, name, tempo, root, mood, opts = {}) => {
@@ -50,10 +54,10 @@
     sfx('sfx_char_land', '착지', 'char', [noise(0.1, 0.2, 0.6), tone(100, 50, 0.14, 'sine', 0.7)]),
     sfx('sfx_char_dash', '대시', 'char', [noise(0.3, 0.5, 0.5, 0.08)]),
     sfx('sfx_char_pickup', '줍기', 'char', [tone(660, 1100, 0.14, 'triangle', 0.5)]),
-    sfx('amb_wind', '바람', 'env', [noise(3, 0.06, 0.5, 0.8)], { sample: true, loop: true }),
-    sfx('amb_rain', '빗소리', 'env', [noise(3, 0.7, 0.2, 0.3)], { loop: true }),
-    sfx('amb_fire', '모닥불', 'env', [noise(3, 0.1, 0.3, 0.4), noise(0.05, 0.9, 0.4, 0.002, 0.7), noise(0.05, 0.9, 0.3, 0.002, 1.9)], { loop: true }),
-    sfx('amb_cave', '동굴', 'env', [noise(3, 0.03, 0.6, 1), tone(1400, 1100, 0.2, 'sine', 0.2, 1.4)], { loop: true }),
+    sfx('amb_wind', '바람', 'env', [bed('바람', 8, 0.05, 0.75, [[1, 0.35, 0], [3, 0.2, 1.3]]), bed('바람결', 8, 0.22, 0.12, [[2, 0.6, 0.4], [5, 0.3, 2]])], { sample: true, loop: true }),
+    sfx('amb_rain', '빗소리', 'env', [bed('빗줄기', 8, 0.7, 0.16, [[1, 0.12, 0]]), bed('빗소리 바닥', 8, 0.12, 0.28, [[2, 0.15, 0.7]]), ...scatter(22, 8, (at, i) => ({ ...noise(0.03, 0.8, 0.14 + (i % 3) * 0.05, 0.001, at), stem: '빗방울' }))], { loop: true }),
+    sfx('amb_fire', '모닥불', 'env', [bed('불꽃 바닥', 8, 0.04, 0.6, [[1, 0.25, 0], [3, 0.15, 1]]), ...scatter(14, 8, (at, i) => ({ ...noise(0.03 + (i % 3) * 0.02, 0.9, 0.2 + (i % 4) * 0.08, 0.001, at), stem: '타닥' }))], { loop: true }),
+    sfx('amb_cave', '동굴', 'env', [bed('동굴 울림', 8, 0.025, 0.9, [[1, 0.3, 0]]), ...scatter(4, 8, (at, i) => ({ ...tone(1400 - i * 120, 1100 - i * 100, 0.2, 'sine', 0.14), at, stem: '물방울' }))], { loop: true }),
     sfx('sfx_env_drop', '물방울', 'env', [tone(900, 1700, 0.09, 'sine', 0.6)]),
     bgm('bgm_title', '타이틀', 92, 57, 'bright', { sample: true, loud: 1.7, loop: true }),
     bgm('bgm_town', '마을', 84, 60, 'bright', { loop: true }),
@@ -74,10 +78,12 @@
     { id: 'clip', name: '클리핑', unit: '개', limit: 0, level: 'error', fix: true, read: (m) => m.clips, bad: (v, r) => v > r.limit, hint: '찌그러진 샘플 수' },
     { id: 'loud', name: '음악 음량', unit: 'LUFS', range: [-20, -16], level: 'error', fix: true, applies: (a) => a.music, read: (m) => m.loud, bad: (v, r) => v < r.range[0] || v > r.range[1], hint: '곡 전체 평균 음량' },
     { id: 'dur', name: '길이', unit: '초', limit: 2, level: 'warn', applies: (a) => !a.music && !a.loop, read: (m) => m.seconds, bad: (v, r) => v > r.limit, hint: '효과음 최대 길이' },
-    { id: 'lead', name: '앞 무음', unit: 'ms', limit: 50, level: 'warn', fix: true, read: (m) => m.lead, bad: (v, r) => v > r.limit, hint: '눌렀을 때 늦게 들림' },
+    { id: 'lead', name: '앞 무음', unit: 'ms', limit: 50, level: 'warn', fix: true, applies: (a) => !a.loop, read: (m) => m.lead, bad: (v, r) => v > r.limit, hint: '눌렀을 때 늦게 들림' },
     { id: 'tail', name: '뒤 무음', unit: 'ms', limit: 200, level: 'warn', fix: true, applies: (a) => !a.loop, read: (m) => m.tail, bad: (v, r) => v > r.limit, hint: '쓸데없는 파일 길이' },
     { id: 'dc', name: 'DC', unit: '', limit: 0.002, level: 'warn', read: (m) => m.dc, bad: (v, r) => v > r.limit, hint: '파형 중심 치우침' },
-    { id: 'seam', name: '루프 이음새', unit: '', limit: 0.1, level: 'warn', applies: (a) => a.loop, read: (m) => m.seam, bad: (v, r) => v > r.limit, hint: '반복될 때 나는 튐' },
+    { id: 'seam', name: '루프 이음새', unit: '배', limit: 3, level: 'warn', applies: (a) => a.loop, read: (m) => m.seam, bad: (v, r) => v > r.limit, hint: '반복될 때 나는 튐' },
+    { id: 'wrap', name: '이음매 음량 차', unit: 'dB', limit: 3, level: 'warn', applies: (a) => a.loop && !a.music, read: (m) => m.wrap, bad: (v, r) => v > r.limit, hint: '끝과 처음의 음량이 다르면 반복이 들림' },
+    { id: 'steady', name: '끊김', unit: 'dB', limit: 12, level: 'warn', applies: (a) => a.loop && !a.music, read: (m) => m.dip, bad: (v, r) => v > r.limit, hint: '환경음은 중간에 잦아들면 안 됨' },
     { id: 'name', name: '이름', text: true, level: 'error', read: (m, a) => /^(sfx|amb|bgm)_[a-z0-9_]+$/.test(a.id), hint: 'sfx_, amb_, bgm_ 로 시작' },
     { id: 'lic', name: '저작권', text: true, level: 'error', read: (m, a) => !a.noLicense, hint: '사용 도구·음원 기록' },
   ];
@@ -88,5 +94,5 @@
     { name: 'Kenney Audio', license: 'CC0-1.0', holder: 'Kenney.nl', use: '효과음 재료' },
   ];
 
-  window.STUDIO_DATA = { GAME: '별빛 정원', BRIEF: '잔잔한 판타지 수집 게임. 귀엽고 따뜻하게.', CATEGORIES, ASSETS, PROFILES, RULES, LICENSES };
+  window.STUDIO_DATA = { bed, GAME: '별빛 정원', BRIEF: '잔잔한 판타지 수집 게임. 귀엽고 따뜻하게.', CATEGORIES, ASSETS, PROFILES, RULES, LICENSES };
 })();

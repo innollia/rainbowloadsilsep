@@ -300,7 +300,7 @@ def test_later_rounds_keep_the_original_goal_and_earlier_tries():
 
 
 def test_song_ends_on_the_best_scoring_round():
-    verdict = lambda score: {"heard": "들림", "problems": [], "score": score, "goal_met": False, "next_instruction": "더"}
+    verdict = lambda score: {"heard": "들림", "problems": ["약함"], "score": score, "goal_met": False, "next_instruction": "더"}
     fake = Fake(verdicts=[verdict(30), verdict(80), verdict(40)])
     fake.edits = [{"summary": str(i), "bpm": 120, "changes": [change(code=f'note("c{i}")')]} for i in range(3)]
     jobs = sb.Jobs(fake)
@@ -309,3 +309,43 @@ def test_song_ends_on_the_best_scoring_round():
     last = snap["candidate"]
     assert snap["status"] == "limit" and last["listen"] is False
     assert any('note("c1")' in t["code"] for t in last["tracks"])
+
+
+def _round(score, problems=("약함",), met=False):
+    return {"heard": "들림", "problems": list(problems), "score": score, "goal_met": met, "next_instruction": "더"}
+
+
+def _rounds(fake, rounds):
+    fake.edits = [{"summary": str(i), "bpm": 120, "changes": [change(code=f'note("c{i}")')]} for i in range(8)]
+    jobs = sb.Jobs(fake)
+    jobs.submit("o", request(auto=True, rounds=rounds))
+    return drive(jobs)
+
+
+def test_slider_sets_how_many_more_fixes_run():
+    fake = Fake(verdicts=[_round(10 + i * 10) for i in range(8)])
+    snap = _rounds(fake, 5)
+    assert snap["limit"] == 6 and fake.listen_calls == 6 and snap["status"] == "limit"
+
+
+def test_slider_is_capped_by_python():
+    fake = Fake(verdicts=[_round(10 + i * 10) for i in range(8)])
+    assert _rounds(fake, 99)["limit"] == sb.MAX_ROUNDS + 1
+
+
+def test_stops_as_soon_as_a_round_stops_paying():
+    fake = Fake(verdicts=[_round(60), _round(61), _round(90)])
+    snap = _rounds(fake, 5)
+    assert fake.listen_calls == 2 and snap["status"] == "done"
+
+
+def test_no_problems_left_ends_the_job_early():
+    fake = Fake(verdicts=[_round(50), _round(70, problems=())])
+    snap = _rounds(fake, 5)
+    assert fake.listen_calls == 2 and snap["status"] == "done"
+
+
+def test_good_score_ends_the_job_early():
+    fake = Fake(verdicts=[_round(sb.GOOD_SCORE)])
+    snap = _rounds(fake, 5)
+    assert fake.listen_calls == 1 and snap["status"] == "done"

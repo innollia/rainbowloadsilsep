@@ -24,10 +24,12 @@ import uuid
 
 DEFAULT_MODEL = "gemini-3.8-flash"
 DEFAULT_CLAUDE_MODEL = "claude-sonnet-5-5"
-MAX_IMPROVEMENTS = 3   # also the listen limit: one listen per improvement round
+MAX_ROUNDS = 5         # most extra fixes the slider can ask for
+DEFAULT_ROUNDS = 2     # an automatic request that names no count
+GOOD_SCORE = 85        # at or above this a round is good enough to stop
+MIN_GAIN = 3           # a round that gains less than this was not worth another call
 MAX_ERROR_FIXES = 2
-MAX_EDIT_CALLS = 5
-MAX_SECONDS = 300
+SECONDS_PER_ROUND = 100
 FEEDBACK_TIMEOUT = 60
 MAX_REQUEST = 2000
 MAX_REPLY = 1000
@@ -339,6 +341,14 @@ def clean_history(items) -> list:
     return out
 
 
+def rounds_from(payload: dict) -> int:
+    """Extra fixes after the first result. The browser's slider is only a request."""
+    rounds = payload.get("rounds")
+    if isinstance(rounds, bool) or not isinstance(rounds, int):
+        return DEFAULT_ROUNDS
+    return max(0, min(rounds, MAX_ROUNDS))
+
+
 def validate_request(payload: dict) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("요청 형식이 올바르지 않아.")
@@ -351,7 +361,7 @@ def validate_request(payload: dict) -> dict:
         raise ValueError("선택한 트랙을 찾지 못했어.")
     return {
         "text": text.strip(), "tracks": tracks, "bpm": valid_bpm(payload.get("bpm")),
-        "target": target, "auto": payload.get("auto") is True, "base_version": str(payload.get("base_version", ""))[:64],
+        "target": target, "auto": payload.get("auto") is True, "rounds": rounds_from(payload), "base_version": str(payload.get("base_version", ""))[:64],
         "history": clean_history(payload.get("history")),
     }
 
@@ -454,7 +464,7 @@ class Job:
         self.started = time.monotonic()
         self.lock = threading.Lock()
         self.view = {"id": self.id, "status": "running", "stage": "editing", "iteration": 1,
-                     "limit": MAX_IMPROVEMENTS, "auto": request["auto"], "candidate": None,
+                     "limit": request["rounds"] + 1, "auto": request["auto"], "candidate": None,
                      "messages": [], "listen": None}
 
     def update(self, **fields):
@@ -491,8 +501,9 @@ class Jobs:
     def _spend(self, job: Job):
         if job.cancelled.is_set():
             raise Stop("cancelled", "중단했어. 마지막 정상 버전을 유지해.")
-        if time.monotonic() - job.started > MAX_SECONDS:
-            raise Stop("limit", "시간 한도(5분)에 닿아 멈췄어.")
+        seconds = max(300, SECONDS_PER_ROUND * job.view["limit"])
+        if time.monotonic() - job.started > seconds:
+            raise Stop("limit", f"시간 한도({seconds // 60}분)에 닿아 멈췄어.")
         with self.lock:
             today = datetime.date.today().isoformat()
             if today != self.day:
@@ -578,12 +589,13 @@ class Jobs:
         req = job.request
         state = {"tracks": req["tracks"], "bpm": req["bpm"]}
         instruction, error = req["text"], ""
-        seq, edits, fixes, best, stale = 0, 0, 0, -1, 0
+        seq, edits, fixes, best = 0, 0, 0, -1
+        rounds, max_edits = job.view["limit"], job.view["limit"] + MAX_ERROR_FIXES
         tried, best_state, best_round = [], None, 0
         while True:
             job.update(stage="editing", listen=None)
-            if edits >= MAX_EDIT_CALLS:
-                raise Stop("limit", "코드 수정 호출 한도(5회)에 닿아 멈췄어.")
+            if edits >= max_edits:
+                raise Stop("limit", f"코드 수정 호출 한도({max_edits}회)에 닿아 멈췄어.")
             self._spend(job)
             edits += 1
             reply = self.model.edit(edit_prompt(state, instruction, error, req["target"], req.get("history", ()),
@@ -628,6 +640,9 @@ class Jobs:
                       + "\nMeasured signal: " + json.dumps(report, ensure_ascii=False)
                       + ("\nPrevious " + tried[-1] + "\nSay in heard whether this version is better than that one." if tried else "")
                       + "\nJudge how well the audio meets the goal, score 0-100. Answer in Korean."
+                      + " Set goal_met true as soon as the request is met; a matter of taste is not a reason to keep going."
+                      + " List in problems only faults a listener would clearly notice, and leave it empty when there are none."
+                      + " Do not invent work to fill the rounds."
                       + " Put concrete fixes in next_instruction, following the measurement table in your instructions.")
             try:
                 verdict = self.model.listen(wav, prompt)
@@ -640,20 +655,23 @@ class Jobs:
                     f"{label}: {verdict.get('score', 0)}점, " + (f"문제 {len(problems)}개" if problems else "문제 없음"),
                     f"{capture['span']} (캡처 {capture['id']}): {str(verdict.get('heard', ''))[:300]}"
                     + (" / 문제: " + "; ".join(problems) if problems else ""))
-            if verdict.get("goal_met") and not report["silent"]:
+            score = verdict.get("score", 0)
+            numeric = isinstance(score, (int, float))
+            good_enough = verdict.get("goal_met") or not problems or (numeric and score >= GOOD_SCORE)
+            if good_enough and not report["silent"]:
                 job.update(status="done", stage="done")
                 job.say("status", "목표에 닿아서 멈췄어.")
                 return
             round_now = job.view["iteration"]
-            score = verdict.get("score", 0)
-            numeric = isinstance(score, (int, float))
-            stale = 0 if numeric and score > best else stale + 1
+            gained = numeric and score >= best + MIN_GAIN
             if numeric and score > best:
                 best, best_state, best_round = score, state, round_now
             tried.append(f"round {round_now}: changed: {candidate['summary'] or 'unknown'}; score {score}; problems: {'; '.join(problems) or 'none'}")
-            if round_now >= MAX_IMPROVEMENTS or stale >= 2:
+            if round_now >= rounds:
                 seq = self._keep_best(job, seq, state, best_state, best_round)
-                raise Stop("limit" if round_now >= MAX_IMPROVEMENTS else "done",
-                           "개선 3회를 다 써서 멈췄어." if round_now >= MAX_IMPROVEMENTS else "두 번 연속 나아지지 않아 멈췄어.")
+                raise Stop("limit", f"고칠 횟수({rounds - 1}번)를 다 써서 멈췄어.")
+            if round_now > 1 and not gained:
+                seq = self._keep_best(job, seq, state, best_state, best_round)
+                raise Stop("done", "더 나아지지 않아 멈췄어.")
             job.update(iteration=round_now + 1)
             instruction = str(verdict.get("next_instruction") or req["text"])[:MAX_REQUEST]

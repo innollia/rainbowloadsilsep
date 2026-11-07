@@ -54,8 +54,8 @@
       <div id="progress" hidden><span id="progressText"></span><button id="stopAi" class="iconBtn" data-icon="stop" aria-label="중단" title="중단"></button></div>
       <div id="targetChip" hidden></div>
       <div id="askTools">
-        <button id="autoBtn" type="button" class="ghost" aria-pressed="false"><span data-icon="auto" aria-hidden="true"></span>자동 개선</button>
-        <span id="autoHint">켜면 결과를 듣고 최대 3번 더 고쳐</span>
+        <label id="autoLabel"><span data-icon="auto" aria-hidden="true"></span>자동 개선<input id="autoRounds" type="range" min="0" max="5" step="1" value="0" aria-label="자동 개선 최대 횟수"></label>
+        <span id="autoHint"></span>
       </div>
       <form id="askForm">
         <textarea id="ask" rows="2" placeholder="바꿀 내용이나 궁금한 걸 말해 줘. 예: 베이스만 바꿔줘, 지금 곡 분위기 어때?" aria-label="AI에게 말하기"></textarea>

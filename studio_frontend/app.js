@@ -237,11 +237,11 @@
     $('progress').hidden = !running;
     if (!running) return;
     const stage = localStage || STAGE[job.stage] || job.stage;
-    $('progressText').textContent = job.auto ? `${stage} · 개선 ${job.iteration}/${job.limit}` : stage;
+    $('progressText').textContent = job.auto ? `${stage} · ${job.iteration}/${job.limit}회차` : stage;
   }
 
   /* ---------- rendering ---------- */
-  let selected = null, autoMode = false;
+  let selected = null;
 
   function say(kind, text, detail) {
     const p = project();
@@ -364,8 +364,8 @@
     renderArt(p); renderTracks(p); syncEditor();
     const t = selected && p.tracks.find((x) => x.id === selected);
     $('targetChip').hidden = !t; if (t) $('targetChip').textContent = `대상: ${t.name} (나머지는 잠김)`;
-    $('autoBtn').title = `자동 개선 ${autoMode ? '켜짐 · 최대 3회' : '꺼짐'}`;
-    $('autoBtn').setAttribute('aria-pressed', String(autoMode));
+    $('autoRounds').value = db.autoRounds || 0;
+    $('autoHint').textContent = db.autoRounds ? `최대 ${db.autoRounds}번 더 고쳐` : '꺼짐';
     $('ask').placeholder = aiEnabled ? '바꿀 내용이나 궁금한 걸 말해 줘' : 'AI 연결 안 됨 · 재생과 믹서는 쓸 수 있어';
     if (tab === 'score' && scoreShown !== p.versionId) showScore();
   }
@@ -535,7 +535,7 @@
       ['앨범 커버 누르기', '새 그림으로 바뀌어.'],
       ['앨범 커버 길게 누르기', '지난 그림 책장이 열려. 하나씩 꺼내 보고 고를 수 있어.'],
       ['트랙 이름 누르기', '그 트랙만 AI가 고치도록 지정해.'],
-      ['자동 개선', '결과를 측정해 최대 3번 더 고치고, 가장 점수가 높았던 버전을 남겨. 호출 5회, 5분, 회당 16초까지 들어.'],
+      ['자동 개선', '막대를 끌어 최대 몇 번 더 고칠지 정해. 고칠 게 없거나 더 나아지지 않으면 그 전에 멈추고, 가장 점수가 높았던 버전을 남겨. 호출 5회, 5분, 회당 16초까지 들어.'],
       ['프로젝트 폴더', '곡 전환, 이전 버전 듣기와 복구, 파일 내보내기가 여기 있어.'],
       ['코드 버튼 (Ctrl+E)', '곡의 코드를 보고 고쳐. Ctrl+Enter로 실행해.'],
       ['저장', '바뀔 때마다 이 브라우저에 자동으로 저장돼.'],
@@ -624,13 +624,13 @@
     const history = p.chat.filter((m) => ['user', 'reply', 'change', 'heard', 'measured'].includes(m.kind)).slice(-10)
       .map((m) => ({ role: m.kind === 'user' ? 'user' : 'assistant', text: m.detail ? m.text + ' ' + m.detail : m.text }));
     say('user', text); $('ask').value = '';
-    send('generate', { text, tracks: p.tracks, bpm: p.bpm, target: selected, auto: autoMode, base_version: p.versionId, history });
+    send('generate', { text, tracks: p.tracks, bpm: p.bpm, target: selected, auto: !!db.autoRounds, rounds: db.autoRounds || 0, base_version: p.versionId, history });
   }
   $('askForm').onsubmit = (e) => { e.preventDefault(); submit(); };
   $('ask').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); } };
   $('stopAi').onclick = () => send('cancel', {});
   $('play').onclick = () => (playing ? stop() : play());
-  $('autoBtn').onclick = () => { autoMode = !autoMode; render(); };
+  $('autoRounds').oninput = (e) => { db.autoRounds = +e.target.value; touched(); render(); };
   $('projectBtn').onclick = projectDialog;
   $('settingsBtn').onclick = settingsDialog;
   $('codeBtn').onclick = () => toggleCode();

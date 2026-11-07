@@ -71,7 +71,7 @@ try:
         spin = "document.querySelector('#art [data-spin],#art [data-flow],#art [data-pulse]').getAttribute('transform')"
         first = inner.evaluate(spin); time.sleep(0.5); art_moves = bool(first) and inner.evaluate(spin) != first
         frame.locator('.track button.pick').nth(1).click()
-        frame.locator("#autoBtn").click()
+        frame.locator("#autoRounds").fill("3")
         frame.locator("#ask").fill("베이스만 더 세게")
         frame.locator("#ask").press("Enter")
         inner.wait_for_function("document.querySelector('.msg.status')&&/목표/.test(document.getElementById('log').textContent)", timeout=90000)

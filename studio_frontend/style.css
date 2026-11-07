@@ -37,7 +37,7 @@ button.ghost:hover { background:var(--raised); }
 header { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:12px; border-bottom:1px solid var(--divider); }
 .spacer { flex:1; }
 #saveState { color:var(--text3); font-size:.75rem; }
-#autoBtn[aria-pressed="true"], #codeBtn[aria-pressed="true"] { background:var(--text); color:#111; }
+#codeBtn[aria-pressed="true"] { background:var(--text); color:#111; }
 
 main { display:flex; min-height:0; }
 #stage { flex:1; min-width:0; overflow:auto; padding:20px 32px; }
@@ -93,9 +93,9 @@ input[type=range] { accent-color:var(--text); height:32px; }
 #progress { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 16px; border-top:1px solid var(--divider); }
 #targetChip { margin:0 16px; color:var(--text2); }
 #askTools { display:flex; align-items:center; gap:8px; padding:8px 16px 0; min-width:0; }
-#autoBtn { display:inline-flex; align-items:center; gap:6px; min-height:36px; padding:0 10px; font-size:.82rem; flex:none; color:var(--text2); }
-#autoBtn [data-icon] .ico { width:16px; height:16px; }
-#autoBtn[aria-pressed="true"] { background:var(--text); color:#111; }
+#autoLabel { display:inline-flex; align-items:center; gap:6px; min-height:36px; padding:0 2px; font-size:.82rem; flex:none; color:var(--text2); }
+#autoLabel [data-icon] .ico { width:16px; height:16px; }
+#autoRounds { width:96px; accent-color:var(--text); cursor:pointer; }
 #autoHint { color:var(--text3); font-size:.75rem; min-width:0; }
 #askForm { display:flex; gap:8px; padding:8px 16px 12px; }
 #ask { flex:1; resize:none; background:var(--raised); border:0; border-radius:11px; padding:10px 12px; min-width:0; }

@@ -80,16 +80,8 @@ header .iconBtn { width:48px; position:relative; }
 .tile.selected { box-shadow:inset 0 0 0 2px var(--text); background:var(--raised); }
 .tile.playing { box-shadow:inset 0 0 0 2px var(--c); }
 .tile.selected.playing { box-shadow:inset 0 0 0 2px var(--text); }
-.tile .stuckMark { position:absolute; top:9px; right:36px; background:var(--err); color:#111; font-size:.7rem; font-weight:700; line-height:16px; min-width:16px; text-align:center; border-radius:11px; }
-.tile .tileBtn { position:absolute; top:4px; min-height:0; width:26px; height:26px; padding:0; display:grid; place-items:center; background:rgba(0,0,0,.6); border-radius:10px; color:var(--text2); }
-.tile .tileBtn .ico { width:15px; height:15px; }
-.tile .tileBtn:hover { background:rgba(0,0,0,.9); color:var(--text); }
-.tile .tileCheck { left:4px; opacity:0; }
-.tile .tileOpen { right:4px; }
-.tile:hover .tileCheck, .tile:focus-within .tileCheck, .selecting .tile .tileCheck, .tile.selected .tileCheck { opacity:1; }
-.tile.selected .tileCheck { background:var(--text); color:#111; }
-.tile[data-status="review"] .tileBtn, .tile[data-status="pending"] .tileBtn { display:none; }
-@media (hover:none) { .tile .tileCheck { opacity:1; } }
+.tile { touch-action:manipulation; -webkit-touch-callout:none; transition:scale .45s ease-in; }
+.tile.pressing { scale:.96; }
 .group h2 button { min-height:28px; padding:0 8px; font-size:.75rem; font-weight:500; color:var(--text3); margin-left:4px; }
 .tile[data-status="pending"] { background:none; box-shadow:inset 0 0 0 1px var(--divider); cursor:default; color:var(--text3); }
 .tile[data-status="pending"] canvas { display:none; }
@@ -159,6 +151,9 @@ pre.code { margin:0; padding:10px; border-radius:11px; background:#111; font:400
 .rule small { color:var(--text3); }
 .detailDock { display:flex; gap:8px; padding:8px 12px; border-top:1px solid var(--divider); flex:none; }
 .detailDock input { flex:1; min-width:0; height:44px; background:var(--raised); border:0; border-radius:11px; padding:0 10px; }
+.draftPick { display:inline-flex; align-items:center; gap:6px; flex:none; color:var(--text2); font-size:.82rem; }
+.draftPick select { height:36px; background:var(--raised); color:var(--text); border:0; border-radius:10px; padding:0 6px; }
+#draftSlot { flex:none; }
 
 dialog { background:var(--surface); color:var(--text); border:1px solid var(--divider); border-radius:20px; width:min(680px,calc(100vw - 32px)); max-height:calc(100vh - 64px); padding:20px; }
 dialog::backdrop { background:rgba(0,0,0,.6); }
