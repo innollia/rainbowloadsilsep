@@ -68,7 +68,7 @@ try:
         time.sleep(4)
         frame.locator("#play").click()
         inner.wait_for_function("document.getElementById('clock').textContent!=='00:00'", timeout=15000)
-        spin = "document.querySelector('#art circle').getAttribute('transform')"
+        spin = "document.querySelector('#art [data-spin],#art [data-flow],#art [data-pulse]').getAttribute('transform')"
         first = inner.evaluate(spin); time.sleep(0.5); art_moves = bool(first) and inner.evaluate(spin) != first
         frame.locator('.track button.pick').nth(1).click()
         frame.locator("#autoBtn").click()

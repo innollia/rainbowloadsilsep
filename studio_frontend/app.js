@@ -238,15 +238,16 @@
     d.className = 'msg ' + m.kind; d.textContent = m.text;
     $('log').append(d); $('log').scrollTop = 1e9;
   }
-  function renderArt(p) {
+  function seedOf(p) {
+    if (p.artSeed != null) return p.artSeed;
     let h = 0; for (const c of p.id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-    const colors = ['#E8AE72', '#87B9E8', '#C7A0E8', '#8CCDB2'];
-    let s = '<rect width="100" height="100" fill="#191919"/>';
-    for (let i = 0; i < 5; i++) {
-      const c = colors[(h >> (i * 2)) & 3], r = 44 - i * 8;
-      s += `<circle cx="50" cy="50" r="${r}" fill="none" stroke="${c}" stroke-width="${1 + ((h >> (i * 3)) & 3)}" stroke-dasharray="${8 + i * 5} ${3 + ((h >> i) & 7)}"/>`;
-    }
-    $('art').innerHTML = s;
+    return h;
+  }
+  function renderArt(p) {
+    const seed = seedOf(p);
+    if (renderArt.seed === seed) return;
+    renderArt.seed = seed;
+    $('art').innerHTML = albumArt.make(seed).svg;
   }
   function renderPlay() {
     $('play').textContent = playing ? '■' : '▶';
@@ -295,17 +296,7 @@
   }
   function renderChat() { $('log').textContent = ''; project().chat.forEach(appendMsg); }
 
-  // Rings follow the song position and real output level, so silence and stop leave them still.
   const calm = matchMedia('(prefers-reduced-motion: reduce)');
-  function drawArt() {
-    const low = bands ? bands.slice(0, 12).reduce((a, b) => a + b, 0) / (12 * 255) : 0;
-    [...$('art').querySelectorAll('circle')].forEach((c, i) => {
-      if (!playing || calm.matches) { c.removeAttribute('transform'); return; }
-      const turn = cycles * (i % 2 ? -36 : 36) / (1 + i * 0.4);
-      const size = 1 + low * 0.1;
-      c.setAttribute('transform', `translate(50 50) rotate(${turn.toFixed(2)}) scale(${size.toFixed(3)}) translate(-50 -50)`);
-    });
-  }
 
   function drawLoop() {
     requestAnimationFrame(drawLoop);
@@ -325,7 +316,7 @@
       $('clock').textContent = mmss(s);
       $('bar').textContent = `${Math.max(1, Math.floor(cycles) + 1)}마디`;
     }
-    drawArt();
+    albumArt.move($('art'), cycles, bands, !playing || calm.matches);
     const phase = cycles - Math.floor(cycles);
     for (const row of $('tracks').children) {
       const cv = row.querySelector('canvas'), x = cv.getContext('2d');
@@ -359,6 +350,7 @@
     const name = document.createElement('input'); name.type = 'text'; name.value = p.name; name.setAttribute('aria-label', '곡 이름');
     name.oninput = () => { p.name = name.value.slice(0, 80) || '이름 없는 곡'; touched(); render(); };
     dlg.append(name);
+    dlg.append(row('앨범 아트', button('새로 뽑기', () => { p.artSeed = Math.floor(Math.random() * 2 ** 32); touched(); render(); })));
     for (const x of db.projects) if (x !== p) dlg.append(row(x.name, button('열기', () => switchTo(x.id))));
     dlg.append(row('', button('새 곡', () => { const n = newProject('새 곡'); db.projects.push(n); switchTo(n.id); }),
       button('파일 불러오기', importFile), button('프로젝트 내보내기', () => saveFile(`${p.name}.ddalkkak.json`, JSON.stringify(p)))));
