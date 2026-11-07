@@ -8,3 +8,4 @@ artifacts/
 artifacts-e2e.png
 bakeoff/results/
 static/bakeoff/
+bakeoff/results_archive/
