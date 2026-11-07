@@ -89,25 +89,47 @@ def google_login():
     st.login("google") if "google" in auth else st.login()
 
 
+CHROME = """<style>
+[data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stDecoration"], [data-testid="stStatusWidget"],
+[data-testid="InputInstructions"], footer, #MainMenu {display:none !important}
+</style>"""
+st.markdown(CHROME, unsafe_allow_html=True)
+
+TEXT = {
+    "en": {"google": "Continue with Google · {n} free credits", "password": "Password", "enter": "Enter", "wrong": "Wrong password."},
+    "ko": {"google": "구글 계정으로 시작하기 · 무료 {n} 크레딧", "password": "비밀번호", "enter": "입장하기", "wrong": "비밀번호가 맞지 않아요."},
+}
+lang = st.query_params.get("lang", st.session_state.get("lang", "en"))
+lang = lang if lang in TEXT else "en"
+st.session_state.lang = lang
+T = TEXT[lang]
+
 password = setting("STUDIO_PASSWORD")
 google = google_ready()
 teacher = bool(st.session_state.get("studio_authenticated"))
 member = google and bool(st.user.is_logged_in)
 if (password or google) and not (teacher or member):
-    st.title("olmuse")
-    st.write("말로 음악을 만들고, 게임에 쓸 소리까지 뽑아 주는 작업실이야.")
-    if google:
-        st.button(f"구글 계정으로 시작하기 · 무료 {FREE_CREDITS} 크레딧", type="primary", on_click=google_login)
-    if password:
-        with st.expander("선생님 비밀번호로 열기", expanded=not google):
-            with st.form("login"):
-                entered = st.text_input("작업실 비밀번호", type="password")
-                if st.form_submit_button("작업실 열기"):
+    _, middle, _ = st.columns([1, 2, 1])
+    with middle:
+        head, pick = st.columns([3, 2], vertical_alignment="center")
+        head.title("olmuse")
+        chosen = pick.segmented_control("lang", ["en", "ko"], default=lang, format_func={"en": "English", "ko": "한국어"}.get,
+                                        label_visibility="collapsed", key="lang_pick")
+        if chosen and chosen != lang:
+            st.query_params["lang"] = chosen
+            st.session_state.lang = chosen
+            st.rerun()
+        if google:
+            st.button(T["google"].format(n=FREE_CREDITS), type="primary", on_click=google_login, icon=":material/login:", use_container_width=True)
+        if password:
+            with st.form("login", border=False):
+                entered = st.text_input(T["password"], type="password")
+                if st.form_submit_button(T["enter"], icon=":material/arrow_forward:", use_container_width=True):
                     if hmac.compare_digest(entered.encode(), password.encode()):
                         st.session_state.studio_authenticated = True
                         st.rerun()
                     else:
-                        st.error("비밀번호를 확인해 줘.")
+                        st.error(T["wrong"])
     st.stop()
 email = str(st.user.get("email") or "").strip().lower() if member and not teacher else ""
 if not email and not google and not teacher and setting("STRUDEL_LOCAL_AI") == "1":
@@ -169,7 +191,7 @@ def render():
     snap = manager.snapshot(owner)
     if snap and "credits" in snap and "studio_account" in st.session_state:
         st.session_state.studio_account["credits"] = snap["credits"]
-    result = studio(ai_enabled=ai_ready, engine=manager.model.name if manager.model else "", choices=choices, job=snap,
+    result = studio(lang=lang, ai_enabled=ai_ready, engine=manager.model.name if manager.model else "", choices=choices, job=snap,
                     account=account_view(), signed_in=bool(email),
                     server_error=st.session_state.get("studio_error", ""), key="studio", default=None)
     if not isinstance(result, dict):

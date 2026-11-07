@@ -1,12 +1,14 @@
-# strudel 딸깍이 — 개발 계획서
+# olmuse (예전 이름 strudel 딸깍이) — 개발 계획서
 
-> **2026-11-07 구조 변경 (사용자 결정).** 이 문서의 Antigravity CLI·PC 작업기·Postgres 대기열은 쓰지 않는다.
-> 코드 수정과 듣기를 모두 Gemini API 키 하나로 처리하고, Streamlit 서버가 `studio_backend.py`에서 직접 호출한다.
-> PC가 꺼져 있어도 AI가 돈다. 프로젝트·버전·채팅은 브라우저 localStorage에 저장하고 파일로 내보낸다. 그래서 **다른 기기와 자동으로 공유되지 않는다.**
-> 기본 모델은 `gemini-3.8-flash`(`GEMINI_MODEL`로 변경). 한도는 Python에서 강제한다: 개선 3회, 재수정 2회, 수정 호출 5회, 5분, 하루 호출 200회(`STRUDEL_DAILY_CALLS`).
+> **현재 구현 (이 절이 아래 계획보다 앞선다).** 이 문서의 PC 작업기·Postgres 대기열은 쓰지 않는다.
+> Streamlit 서버가 `studio_backend.py`에서 모델 API를 직접 호출한다. 요청마다 키가 있는 모델(Haiku·Sonnet·Opus 5.5, Gemini 3.8 Flash)과 추론 수준(빠르게·보통·깊게)을 고른다. 키가 하나도 없으면 로컬에서 Antigravity CLI(`agy`)를 쓴다. Claude와 agy는 오디오 입력이 없어 `ear.py` 측정표로 판단하고 "측정 분석"으로 표시한다.
+> 프로젝트·버전·채팅은 브라우저 localStorage에 저장하고 파일로 내보낸다. 그래서 **다른 기기와 자동으로 공유되지 않는다.**
+> 한도는 Python에서 강제한다: 자동 개선은 입력창 옆 막대로 0~5회, 실행 오류 재수정 2회, 하루 호출 200회(`STRUDEL_DAILY_CALLS`). 구글 로그인 계정은 크레딧으로 과금한다(`docs/CREDITS.md`).
+> 공개는 이 PC에서 `run_public.ps1`이 이름 있는 cloudflared 터널 `olmuse`로 https://olmuse.app 에 연결한다(README). 내부 환경 변수 `STRUDEL_*`와 Lambda `strudel-credits`는 예전 이름 그대로다.
+> 코드는 트랙·악보 옆 코드 탭에서 직접 고칠 수 있다.
 > 아래의 Strudel 격리, 트랙 분리, 상태와 정지 규칙, 이스터에그, 최적화 절은 그대로 유효하다.
 
-작성: 2026-11-07 · 상태: 구현 전 계획 · 대상: innollia/rainbowloadsilsep
+작성: 2026-11-07 · 상태: 처음 세운 계획의 기록. 현재 구현은 위 요약과 README · 대상: innollia/rainbowloadsilsep
 
 ## 1. 제품과 이번 결정
 

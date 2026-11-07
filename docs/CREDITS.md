@@ -45,6 +45,8 @@
 
 ### 구글 로그인 준비 (사람이 할 일)
 
+아직 설정되지 않았다. 아래를 마치기 전에는 공개 서버에서 로그인과 크레딧이 동작하지 않는다.
+
 1. Google Cloud Console → API 및 서비스 → OAuth 동의 화면을 외부로 만든다.
 2. 사용자 인증 정보 → OAuth 클라이언트 ID → 웹 애플리케이션.
 3. 승인된 리디렉션 URI에 `https://olmuse.app/oauth2callback`을 넣는다. 로컬 시험이면 `http://localhost:8501/oauth2callback`도 넣는다.
@@ -59,7 +61,7 @@ client_secret = "<클라이언트 시크릿>"
 server_metadata_url = "https://accounts.google.com/.well-known/openid-configuration"
 ```
 
-공개 주소는 `https://olmuse.app`이다. 이 PC의 이름 있는 cloudflared 터널 `olmuse`(`~/.cloudflared/olmuse.yml`)가 `run_public.ps1`로 연결한다. 리디렉션 URI는 `https://olmuse.app/oauth2callback`.
+공개 주소는 `https://olmuse.app`이다. `run_public.ps1`이 이 PC의 이름 있는 cloudflared 터널 `olmuse`(`~/.cloudflared/olmuse.yml`)를 띄운다. 주소가 고정이라 리디렉션 URI는 한 번만 넣으면 된다.
 
 ### 로컬 시험
 

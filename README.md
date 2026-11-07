@@ -4,13 +4,16 @@ LLM으로만 음악을 만드는 작업실(only LLM music). 예전 이름은 str
 
 코드를 보지 않고 자연어로 Strudel 음악을 만드는 작업실이다. 기존 아케이드와 BLACK BOX 09는 설정 → 게임하기에 있다.
 
+공개 주소는 https://olmuse.app 이다(아래 "내 PC에서 공개"). 내부 환경 변수 `STRUDEL_*`와 장부 Lambda 이름 `strudel-credits`는 예전 이름 그대로 쓴다.
+
+주요 기능: 요청마다 모델(Haiku·Sonnet·Opus 5.5, Gemini 3.8 Flash 중 키가 있는 것)과 추론 수준(빠르게·보통·깊게) 선택, 입력창 옆 자동 개선 막대(0~5회), 트랙·악보 옆 코드 탭, 구글 로그인과 크레딧(`docs/CREDITS.md`), 게임 소리 화면(설정 옆 버튼, 시안 여러 개·환경음 루프, `docs/GAME_ASSET_PLAN.md`).
+
 ## 실행
 
 ```powershell
 pip install -r requirements.txt
 $env:GEMINI_API_KEY = '내 키'
-.
-un_local.ps1
+.\run_local.ps1
 ```
 
 키가 없으면 `run_local.ps1`은 로그인된 Antigravity CLI(`agy`)로 코드를 수정한다. CLI에는 오디오 입력이 없어서 `ear.py`가 실제 캡처를 측정한 템포·음·대역 표를 대신 넘긴다. 결과는 "측정 분석"으로 표시한다. `STRUDEL_ENGINE=agy`로 강제할 수 있다. AI 없이도 재생, 믹서, 저장은 동작한다.
@@ -152,4 +155,6 @@ python -m pytest -q
 
 ## 내 PC에서 공개
 
-`run_public.ps1`은 `~/.all-tomorrow/key-pool.env`의 키와 `STUDIO_PASSWORD`로 서버를 띄우고 Cloudflare 임시 터널을 연다. 주소는 실행할 때마다 바뀌고, PC가 켜져 있고 이 터미널이 살아 있는 동안만 접속된다. 일일 호출 한도는 200회다. 코드를 고친 뒤 주소를 유지하려면 `run_public.ps1 -ServerOnly`로 앱만 재시작한다.
+`run_public.ps1`은 `~/.all-tomorrow/key-pool.env`의 `STUDIO_PASSWORD`와 장부 주소(`STRUDEL_CREDITS_URL`)를 넣어 앱을 `127.0.0.1:8501`에 띄우고, 이 PC의 이름 있는 cloudflared 터널 `olmuse`(`~/.cloudflared/olmuse.yml`)로 https://olmuse.app 에 연결한다. 주소는 바뀌지 않는다. 터널이 끝나면 5초 뒤 다시 띄우고, 그때 앱이 죽어 있으면 앱도 다시 띄운다. PC가 켜져 있고 이 스크립트가 살아 있는 동안만 접속된다. 일일 호출 한도는 200회다. 코드를 고친 뒤에는 `run_public.ps1 -ServerOnly`로 앱만 다시 띄운다(터널은 그대로).
+
+구글 로그인(`[auth]` secrets)은 아직 설정되지 않았다. 사람이 OAuth 클라이언트를 만들고 리디렉션 URI `https://olmuse.app/oauth2callback`을 넣어야 한다. 절차는 `docs/CREDITS.md`.
