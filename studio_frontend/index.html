@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -11,80 +11,81 @@
 <body>
 <div id="app">
   <header>
-    <button id="projectBtn" class="ghost iconBtn" data-icon="folder" aria-haspopup="dialog" aria-label="프로젝트" title="프로젝트"></button>
+    <button id="projectBtn" class="ghost iconBtn" data-icon="folder" aria-haspopup="dialog" aria-label="Project" title="Project" data-i18n-aria="project" data-i18n-title="project"></button>
     <span id="saveState" role="status"></span>
     <span class="spacer"></span>
-    <button id="creditBtn" class="ghost" hidden aria-haspopup="dialog" title="크레딧"></button>
-    <button id="settingsBtn" class="iconBtn" data-icon="settings" aria-label="설정" title="설정"></button>
-    <button id="assetBtn" class="iconBtn" data-icon="game" aria-label="게임 소리" title="게임 소리"></button>
+    <button id="creditBtn" class="ghost" hidden aria-haspopup="dialog" title="Credits" data-i18n-title="credits_title"></button>
+    <select id="langPick" aria-label="Language" data-i18n-aria="language"><option value="en">English</option><option value="ko">한국어</option></select>
+    <button id="settingsBtn" class="iconBtn" data-icon="settings" aria-label="Settings" title="Settings" data-i18n-aria="settings" data-i18n-title="settings"></button>
+    <button id="assetBtn" class="iconBtn" data-icon="game" aria-label="Game sounds" title="Game sounds" data-i18n-aria="game_sounds" data-i18n-title="game_sounds"></button>
   </header>
   <main>
     <section id="stage">
       <div class="hero">
-        <svg id="art" viewBox="0 0 100 100" role="button" tabindex="0" aria-label="앨범 아트 바꾸기. 길게 누르면 지난 그림에서 고르기" title="눌러서 바꾸기 · 길게 눌러 지난 그림 고르기"></svg>
+        <svg id="art" viewBox="0 0 100 100" role="button" tabindex="0" aria-label="Change album art. Long-press to pick a past cover" title="Click to change · long-press for past covers" data-i18n-aria="art_aria" data-i18n-title="art_title"></svg>
         <div class="heroText">
           <h1 id="songTitle"></h1>
           <p id="songMeta"></p>
-          <canvas id="viz" height="110" aria-label="실제 출력 시각화"></canvas>
+          <canvas id="viz" height="110" aria-label="Live output visualizer" data-i18n-aria="viz_aria"></canvas>
           <div id="listenBand" hidden></div>
         </div>
       </div>
       <div class="tabs" role="tablist">
-        <button id="tabTracks" role="tab" aria-selected="true" aria-controls="tracks">트랙</button>
-        <button id="tabScore" role="tab" aria-selected="false" aria-controls="scorePanel">악보</button>
-        <button id="tabCode" role="tab" aria-selected="false" aria-controls="codePanel" title="코드 (Ctrl+E)">코드</button>
+        <button id="tabTracks" role="tab" aria-selected="true" aria-controls="tracks" data-i18n="tracks">Tracks</button>
+        <button id="tabScore" role="tab" aria-selected="false" aria-controls="scorePanel" data-i18n="score">Score</button>
+        <button id="tabCode" role="tab" aria-selected="false" aria-controls="codePanel" title="Code (Ctrl+E)" data-i18n="code" data-i18n-title="code_title">Code</button>
         <span class="spacer"></span>
-        <button id="allMute" class="ghost iconBtn" data-icon="sound" aria-label="전체 끄기" title="전체 끄기"></button>
+        <button id="allMute" class="ghost iconBtn" data-icon="sound" aria-label="Mute all" title="Mute all"></button>
       </div>
       <div id="tracks" role="tabpanel"></div>
       <div id="scorePanel" role="tabpanel" hidden></div>
       <div id="codePanel" role="tabpanel" hidden>
         <div class="codeBar">
-          <button id="codeRun" class="iconBtn" data-icon="play" aria-label="실행" title="실행 (Ctrl+Enter)"></button>
+          <button id="codeRun" class="iconBtn" data-icon="play" aria-label="Run" title="Run (Ctrl+Enter)" data-i18n-aria="run" data-i18n-title="run_title"></button>
           <span id="codeNote" role="status"></span>
-          <button id="codeReload" class="ghost" hidden>최신 곡 불러오기</button>
-          <button id="codeImport" class="ghost iconBtn" data-icon="upload" aria-label="불러오기" title="불러오기"></button>
-          <button id="codeExport" class="ghost iconBtn" data-icon="download" aria-label="코드 내보내기" title="코드 내보내기"></button>
+          <button id="codeReload" class="ghost" hidden data-i18n="reload_latest">Load latest song</button>
+          <button id="codeImport" class="ghost iconBtn" data-icon="upload" aria-label="Import" title="Import" data-i18n-aria="import" data-i18n-title="import"></button>
+          <button id="codeExport" class="ghost iconBtn" data-icon="download" aria-label="Export code" title="Export code" data-i18n-aria="export_code" data-i18n-title="export_code"></button>
         </div>
         <div id="codeHost"></div>
       </div>
     </section>
-    <div id="divider" role="separator" aria-orientation="vertical" aria-label="채팅 너비" tabindex="0"></div>
+    <div id="divider" role="separator" aria-orientation="vertical" aria-label="Chat width" data-i18n-aria="chat_width" tabindex="0"></div>
     <aside id="chat">
       <div id="log" aria-live="polite"></div>
-      <div id="progress" hidden><span id="progressText"></span><button id="stopAi" class="iconBtn" data-icon="stop" aria-label="중단" title="중단"></button></div>
+      <div id="progress" hidden><span id="progressText"></span><button id="stopAi" class="iconBtn" data-icon="stop" aria-label="Stop" title="Stop" data-i18n-aria="stop_ai" data-i18n-title="stop_ai"></button></div>
       <div id="targetChip" hidden></div>
       <div id="askTools">
-        <label id="autoLabel"><span data-icon="auto" aria-hidden="true"></span>자동 개선<input id="autoRounds" type="range" min="0" max="5" step="1" value="0" aria-label="자동 개선 최대 횟수"></label>
+        <label id="autoLabel"><span data-icon="auto" aria-hidden="true"></span><span data-i18n="auto">Auto-improve</span><input id="autoRounds" type="range" min="0" max="5" step="1" value="0" aria-label="Max auto-improve rounds" data-i18n-aria="auto_max"></label>
         <span id="autoHint"></span>
         <span id="costHint"></span>
         <span id="modelTools" hidden>
-          <select id="modelPick" aria-label="AI 모델"></select>
-          <select id="effortPick" aria-label="추론 수준"></select>
+          <select id="modelPick" aria-label="AI model" data-i18n-aria="ai_model"></select>
+          <select id="effortPick" aria-label="Reasoning level" data-i18n-aria="effort"></select>
         </span>
       </div>
       <form id="askForm">
-        <textarea id="ask" rows="2" placeholder="바꿀 내용이나 궁금한 걸 말해 줘. 예: 베이스만 바꿔줘, 지금 곡 분위기 어때?" aria-label="AI에게 말하기"></textarea>
-        <button id="send" class="iconBtn" data-icon="send" aria-label="보내기" title="보내기"></button>
+        <textarea id="ask" rows="2" placeholder="Tell me what to change, or ask anything" aria-label="Talk to the AI" data-i18n-aria="ask_aria"></textarea>
+        <button id="send" class="iconBtn" data-icon="send" aria-label="Send" title="Send" data-i18n-aria="send" data-i18n-title="send"></button>
       </form>
     </aside>
   </main>
   <footer>
-    <button id="play" class="iconBtn" data-icon="play" aria-label="재생"></button>
+    <button id="play" class="iconBtn" data-icon="play" aria-label="Play"></button>
     <span id="clock" class="num">00:00</span>
-    <span id="bar" class="num">1마디</span>
+    <span id="bar" class="num" data-i18n="bar_1">Bar 1</span>
     <span class="spacer"></span>
     <div class="bpm num">
-      <button id="bpmDown" class="ghost iconBtn" data-icon="minus" aria-label="BPM 10 내리기" title="10 내리기"></button>
+      <button id="bpmDown" class="ghost iconBtn" data-icon="minus" aria-label="Lower BPM by 10" title="Down 10" data-i18n-aria="bpm_down" data-i18n-title="bpm_down_t"></button>
       <input id="bpm" type="number" min="20" max="400" step="10" aria-label="BPM">
-      <button id="bpmUp" class="ghost iconBtn" data-icon="plus" aria-label="BPM 10 올리기" title="10 올리기"></button>
+      <button id="bpmUp" class="ghost iconBtn" data-icon="plus" aria-label="Raise BPM by 10" title="Up 10" data-i18n-aria="bpm_up" data-i18n-title="bpm_up_t"></button>
       <span>BPM</span>
     </div>
-    <label class="vol"><span data-icon="sound" aria-hidden="true"></span><input id="volume" type="range" min="0" max="1" step="0.01" value="0.8" aria-label="음량"></label>
+    <label class="vol"><span data-icon="sound" aria-hidden="true"></span><input id="volume" type="range" min="0" max="1" step="0.01" value="0.8" aria-label="Volume" data-i18n-aria="volume"></label>
   </footer>
 </div>
 <dialog id="dialog"></dialog>
-<iframe id="assetFrame" title="게임 소리 에셋" allow="autoplay; clipboard-write" hidden></iframe>
+<iframe id="assetFrame" title="Game sound assets" data-i18n-title="game_assets" allow="autoplay; clipboard-write" hidden></iframe>
 <div id="morph" aria-hidden="true" hidden></div>
 <script src="art.js"></script>
 <script src="song.js"></script>

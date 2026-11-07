@@ -139,7 +139,7 @@
       try {
         const pat = await repl.evaluate(code, false);
         if (evalError) throw new Error(evalError);
-        if (!pat || !pat.queryArc) throw new Error('패턴이 만들어지지 않았어');
+        if (!pat || !pat.queryArc) throw new Error(noPattern());
         const haps = pat.queryArc(0, 4);
         post({ type: 'probed', id, ok: true, events: haps.length });
       } catch (e) { post({ type: 'probed', id, ok: false, error: String(e.message || e) }); }
@@ -156,7 +156,7 @@
       try {
         const pat = await repl.evaluate(code, false);
         if (evalError) throw new Error(evalError);
-        if (!pat || !pat.queryArc) throw new Error('패턴이 만들어지지 않았어');
+        if (!pat || !pat.queryArc) throw new Error(noPattern());
         const tracks = {};
         for (const h of pat.queryArc(from, from + cycles)) {
           // Long notes come back once per cycle with the same whole; hasOnset keeps only the first piece.
@@ -188,9 +188,13 @@
     ping({ id }) { post({ type: 'pong', id }); },
   };
 
+  let lang = 'en';
+  const noPattern = () => (lang === 'ko' ? '패턴이 만들어지지 않았어' : 'No pattern was produced');
   addEventListener('message', async (e) => {
     if (e.source !== parent) return;
     const m = e.data;
+    if (m.lang === 'en' || m.lang === 'ko') lang = m.lang;
+    if (m.type === 'lang') return;
     if (m.type === 'boot') {
       const s = document.createElement('script');
       s.src = URL.createObjectURL(new Blob([m.strudel], { type: 'text/javascript' }));

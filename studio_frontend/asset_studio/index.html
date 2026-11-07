@@ -1,50 +1,50 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>게임 소리 에셋</title>
+<title>Game sound assets</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="app">
   <header>
-    <button id="gameName" class="ghost iconBtn" aria-haspopup="dialog" aria-label="게임 정보" title="게임 정보"></button>
+    <button id="gameName" class="ghost iconBtn" aria-haspopup="dialog" aria-label="Game info" title="Game info" data-i18n-aria="gameInfo" data-i18n-title="gameInfo"></button>
     <span id="gameTitle"></span>
-    <ol id="stages" aria-label="진행 단계"></ol>
+    <ol id="stages" aria-label="Progress" data-i18n-aria="stagesLabel"></ol>
     <span class="spacer"></span>
     <span id="counts"></span>
-    <button id="helpBtn" class="iconBtn" aria-label="사용법" title="사용법"></button>
-    <button id="specBtn" class="iconBtn" aria-label="명세" title="명세"></button>
-    <button id="exportBtn" class="iconBtn" aria-label="내보내기" title="내보내기"></button>
-    <button id="backBtn" class="iconBtn" aria-label="음악 작업실로" title="음악 작업실로"></button>
+    <button id="helpBtn" class="iconBtn" aria-label="How to use" title="How to use" data-i18n-aria="help" data-i18n-title="help"></button>
+    <button id="specBtn" class="iconBtn" aria-label="Spec" title="Spec" data-i18n-aria="spec" data-i18n-title="spec"></button>
+    <button id="exportBtn" class="iconBtn" aria-label="Export" title="Export" data-i18n-aria="export" data-i18n-title="export"></button>
+    <button id="backBtn" class="iconBtn" aria-label="To music studio" title="To music studio" data-i18n-aria="backToMusic" data-i18n-title="backToMusic"></button>
   </header>
 
   <main id="boardView">
-    <nav id="side" aria-label="분류"></nav>
-    <section id="board" tabindex="-1" aria-label="에셋 보드"></section>
+    <nav id="side" aria-label="Category" data-i18n-aria="category"></nav>
+    <section id="board" tabindex="-1" aria-label="Asset board" data-i18n-aria="board"></section>
   </main>
 
   <main id="detailView" hidden></main>
 
   <footer id="dock">
-    <button id="playAll" class="iconBtn" aria-label="전체 듣기" title="전체 듣기"></button>
-    <label class="toggle"><input id="hoverPlay" type="checkbox" checked> 올리면 듣기</label>
+    <button id="playAll" class="iconBtn" aria-label="Play all" title="Play all" data-i18n-aria="playAll" data-i18n-title="playAll"></button>
+    <label class="toggle"><input id="hoverPlay" type="checkbox" checked> <span data-i18n="hoverPlay">Play on hover</span></label>
     <span id="nowPlaying"></span>
     <div id="review" hidden>
       <span id="reviewText"></span>
-      <button id="acceptAll">모두 채택</button>
-      <button id="rejectAll" class="ghost">모두 버림</button>
+      <button id="acceptAll" data-i18n="acceptAll">Keep all</button>
+      <button id="rejectAll" class="ghost" data-i18n="rejectAll">Discard all</button>
     </div>
     <form id="askForm">
       <span id="selCount" hidden></span>
-      <button id="selAll" type="button" class="ghost" hidden>전체 선택</button>
-      <button id="selApprove" type="button" class="ghost" hidden>승인</button>
-      <button id="selClear" type="button" class="ghost" hidden>해제</button>
+      <button id="selAll" type="button" class="ghost" hidden data-i18n="selectAll">Select all</button>
+      <button id="selApprove" type="button" class="ghost" hidden data-i18n="approve">Approve</button>
+      <button id="selClear" type="button" class="ghost" hidden data-i18n="clear">Clear</button>
       <span id="draftSlot"></span>
-      <input id="ask" autocomplete="off" aria-label="수정 요청">
-      <button id="send" class="iconBtn" aria-label="보내기" title="보내기"></button>
+      <input id="ask" autocomplete="off" aria-label="Edit request" data-i18n-aria="ask">
+      <button id="send" class="iconBtn" aria-label="Send" title="Send" data-i18n-aria="send" data-i18n-title="send"></button>
     </form>
   </footer>
 </div>

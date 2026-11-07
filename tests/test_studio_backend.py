@@ -180,7 +180,8 @@ def test_second_request_refused_while_running():
 
 def test_signal_report_flags_silence_and_clipping():
     assert sb.signal_report(wav(0))["silent"]
-    assert any("클리핑" in f for f in sb.signal_report(wav(32767))["findings"])
+    assert any("clipping" in f for f in sb.signal_report(wav(32767))["findings"])
+    assert any("클리핑" in f for f in sb.signal_report(wav(32767), "ko")["findings"])
 
 
 def test_gemini_sends_audio_and_keeps_key_out_of_url_and_errors():
@@ -222,7 +223,7 @@ def test_agy_verdict_is_labelled_as_measurement_not_hearing():
     snap = drive(jobs)
     assert snap["status"] == "done"
     assert not [m for m in snap["messages"] if m["kind"] == "heard"]
-    assert any(m["kind"] == "measured" and "측정 분석" in m["text"] for m in snap["messages"])
+    assert any(m["kind"] == "measured" and "Measurement analysis" in m["text"] for m in snap["messages"])
     assert "측정 템포" in prompts[0] or "무음" in prompts[0]
 
 
@@ -422,6 +423,27 @@ def test_teacher_requests_are_not_charged():
     jobs.submit("o", sb.validate_request(request()))
     drive(jobs)
     assert ledger.history("x@example.com") == []
+
+
+def test_lang_picks_message_language_and_falls_back_to_english():
+    assert request()["lang"] == "en" and request(lang="xx")["lang"] == "en" and request(lang="ko")["lang"] == "ko"
+    with pytest.raises(ValueError, match="BPM must be"):
+        request(bpm=9999)
+    with pytest.raises(ValueError, match="BPM은"):
+        request(bpm=9999, lang="ko")
+    for lang, done in (("en", "Updated."), ("ko", "수정했어.")):
+        fake = Fake(edits=[{"summary": "", "bpm": 120, "changes": [change()]}])
+        jobs = sb.Jobs(fake)
+        jobs.submit("o", request(lang=lang))
+        assert [m["text"] for m in drive(jobs)["messages"]] == [done]
+        assert fake.last_prompt.endswith(sb.MSG[lang]["reply_lang"])
+    fake = Fake(); jobs = sb.Jobs(fake)
+    jobs.submit("o", request(auto=True, lang="ko"))
+    while not jobs.snapshot("o")["candidate"]:
+        time.sleep(0.005)
+    jobs.cancel("o")
+    assert jobs.snapshot("o")["messages"][-1]["text"] == "중단했어. 마지막 정상 버전을 유지해."
+    assert sb.ModelError("claude_key").text("ko") == "Claude 키를 확인해 줘." and str(sb.ModelError("x")) == "x"
 
 
 def test_browser_cannot_charge_someone_else():

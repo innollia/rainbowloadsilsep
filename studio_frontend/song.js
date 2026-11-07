@@ -20,7 +20,7 @@
 
   const rawSong = (text, prev) => ({
     bpm: prev.bpm, head: '',
-    tracks: [{ id: 'song', name: '전체 곡', role: 'other', code: text, raw: true, at: 0 }],
+    tracks: [{ id: 'song', name: window.studioLang?.() === 'ko' ? '전체 곡' : 'Whole song', role: 'other', code: text, raw: true, at: 0 }],
   });
 
   function guessRole(id, code) {

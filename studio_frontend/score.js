@@ -12,14 +12,30 @@
   const FLATS = [['C', 0], ['D', -1], ['D', 0], ['E', -1], ['E', 0], ['F', 0], ['G', -1], ['G', 0], ['A', -1], ['A', 0], ['B', -1], ['B', 0]];
   const PROGRAMS = { bass: 33, pad: 89, melody: 80 };
 
+  const ko = () => window.studioLang?.() === 'ko';
+  const TEXT = {
+    en: {
+      perc_of: '{name} perc', untitled: 'Untitled', track: 'Track', bars: 'Bars', bars_n: '{n} bars', save: 'Save score', file_failed: "Couldn't make the file.",
+      range: 'Bars {a}–{b}', all_tracks: 'All tracks', empty_all: 'No notes in this part.', empty_track: 'This track has no notes in this part.',
+      moved: 'Notes off the sixteenth grid were moved to the nearest step.', legend: 'Percussion: {list}',
+      draw_failed: "Couldn't draw the score. Saving files still works.", reading: 'Reading the score...', make_failed: "Couldn't make the score. Check that the song plays.",
+    },
+    ko: {
+      perc_of: '{name} 타악', untitled: '제목 없음', track: '트랙', bars: '마디 수', bars_n: '{n}마디', save: '악보 저장', file_failed: '파일을 만들지 못했어.',
+      range: '{a}~{b}마디', all_tracks: '전체 트랙', empty_all: '이 구간에는 음이 없어.', empty_track: '이 트랙은 이 구간에 음이 없어.',
+      moved: '16분음표에 맞지 않는 음은 가장 가까운 칸으로 옮겨 적었어.', legend: '타악 표기: {list}',
+      draw_failed: '악보를 그리지 못했어. 파일 저장은 그대로 쓸 수 있어.', reading: '악보를 읽는 중...', make_failed: '악보를 만들지 못했어. 곡이 소리 나는 상태인지 확인해 줘.',
+    },
+  };
+  const txt = (key, vars = {}) => TEXT[ko() ? 'ko' : 'en'][key].replace(/\{(\w+)\}/g, (_, n) => vars[n] ?? '');
   // gm is the General MIDI drum key; step/oct place it on the five-line percussion staff.
-  const drum = (key, label, gm, step, oct, head = 'normal') => ({ key, label, gm, step, oct, head });
+  const drum = (key, names, gm, step, oct, head = 'normal') => ({ key, get label() { return names[ko() ? 1 : 0]; }, gm, step, oct, head });
   const DRUMS = [
-    drum('bd', '킥', 36, 'F', 4), drum('sd', '스네어', 38, 'C', 5), drum('rim', '림샷', 37, 'B', 4, 'x'),
-    drum('cp', '클랩', 39, 'D', 5, 'x'), drum('hh', '하이햇', 42, 'G', 5, 'x'), drum('oh', '오픈 하이햇', 46, 'A', 5, 'x'),
-    drum('cr', '크래시', 49, 'B', 5, 'x'), drum('rd', '라이드', 51, 'F', 5, 'x'), drum('ht', '하이 탐', 50, 'E', 5),
-    drum('mt', '미드 탐', 47, 'B', 4), drum('lt', '로우 탐', 45, 'A', 4), drum('cb', '카우벨', 56, 'E', 5, 'x'),
-    drum('sh', '셰이커', 70, 'E', 4, 'x'), drum('tb', '탬버린', 54, 'D', 4, 'x'), drum('perc', '타악기', 76, 'G', 4, 'x'),
+    drum('bd', ['Kick', '킥'], 36, 'F', 4), drum('sd', ['Snare', '스네어'], 38, 'C', 5), drum('rim', ['Rimshot', '림샷'], 37, 'B', 4, 'x'),
+    drum('cp', ['Clap', '클랩'], 39, 'D', 5, 'x'), drum('hh', ['Hi-hat', '하이햇'], 42, 'G', 5, 'x'), drum('oh', ['Open hi-hat', '오픈 하이햇'], 46, 'A', 5, 'x'),
+    drum('cr', ['Crash', '크래시'], 49, 'B', 5, 'x'), drum('rd', ['Ride', '라이드'], 51, 'F', 5, 'x'), drum('ht', ['High tom', '하이 탐'], 50, 'E', 5),
+    drum('mt', ['Mid tom', '미드 탐'], 47, 'B', 4), drum('lt', ['Low tom', '로우 탐'], 45, 'A', 4), drum('cb', ['Cowbell', '카우벨'], 56, 'E', 5, 'x'),
+    drum('sh', ['Shaker', '셰이커'], 70, 'E', 4, 'x'), drum('tb', ['Tambourine', '탬버린'], 54, 'D', 4, 'x'), drum('perc', ['Percussion', '타악기'], 76, 'G', 4, 'x'),
   ];
   const DRUM_WORDS = [
     [/kick|bass ?drum/, 'bd'], [/snare/, 'sd'], [/clap/, 'cp'], [/open.*hat/, 'oh'], [/hat/, 'hh'],
@@ -75,7 +91,7 @@
       const tones = isDrums ? [] : events.filter((e) => e.note != null);
       const hits = isDrums ? events : events.filter((e) => e.note == null);
       add({ id, name: track.name, role: track.role, kind: 'pitched', clef: track.role === 'bass' ? 'bass' : 'treble' }, tones, pitchOf);
-      add({ id, name: tones.length ? `${track.name} 타악` : track.name, role: track.role, kind: 'perc', clef: 'perc' }, hits, hitOf);
+      add({ id, name: tones.length ? txt('perc_of', { name: track.name }) : track.name, role: track.role, kind: 'perc', clef: 'perc' }, hits, hitOf);
     }
     return parts;
   }
@@ -87,7 +103,7 @@
     const count = (...pcs) => classes.filter((pc) => pcs.includes(pc)).length;
     const picked = pick === 'all' ? null : song.tracks.find((t) => t.id === pick);
     return {
-      title: [song.name || '제목 없음', picked?.name].filter(Boolean).join(' - '),
+      title: [song.name || txt('untitled'), picked?.name].filter(Boolean).join(' - '),
       bpm: song.bpm, cycles, parts: chosen,
       flats: count(3, 10) >= count(1, 6), // spell the whole score one way: Eb/Bb or C#/F#
       moved: chosen.reduce((sum, p) => sum + p.moved, 0),
@@ -353,15 +369,15 @@
     const stale = () => mounts.get(host) !== run;
     let reply = null, score = null, asked = 0, from = 0, drawn = '', beats = [], cursor = null, lit = -1, lineTop = null, turning = false;
 
-    const trackBox = element('select', { ariaLabel: '트랙' });
-    const barBox = element('select', { ariaLabel: '마디 수' });
-    for (const n of [4, 8, 16]) barBox.append(element('option', { value: String(n), textContent: `${n}마디` }));
+    const trackBox = element('select', { ariaLabel: txt('track') });
+    const barBox = element('select', { ariaLabel: txt('bars') });
+    for (const n of [4, 8, 16]) barBox.append(element('option', { value: String(n), textContent: txt('bars_n', { n }) }));
     barBox.value = String(view.cycles);
     const range = element('span', { className: 'score-range', role: 'status' });
     const note = element('p', { className: 'score-note', role: 'status' });
     const paper = element('div', { className: 'score-paper', hidden: true });
     const legend = element('p', { className: 'score-legend', hidden: true });
-    const saveBtn = element('button', { type: 'button', className: 'iconBtn', innerHTML: SAVE_ICON, ariaLabel: '악보 저장', title: '악보 저장', disabled: true });
+    const saveBtn = element('button', { type: 'button', className: 'iconBtn', innerHTML: SAVE_ICON, ariaLabel: txt('save'), title: txt('save'), disabled: true });
     saveBtn.setAttribute('aria-haspopup', 'menu');
     saveBtn.setAttribute('aria-expanded', 'false');
     const menu = element('div', { className: 'score-menu', role: 'menu', hidden: true });
@@ -378,7 +394,7 @@
       let made = score;
       if (from) {
         const r = await query(view.cycles, 0);
-        if (!r?.ok) { note.textContent = '파일을 만들지 못했어.'; return; }
+        if (!r?.ok) { note.textContent = txt('file_failed'); return; }
         made = buildScore(song, r.tracks ?? {}, view.cycles, view.track);
       }
       save(`${fileName(made.title)}.${ext}`, type, make(made));
@@ -401,7 +417,7 @@
       note, paper, legend));
 
     const say = (text) => { note.textContent = text; };
-    const showRange = () => { range.textContent = from || position?.().playing ? `${from + 1}~${from + view.cycles}마디` : ''; };
+    const showRange = () => { range.textContent = from || position?.().playing ? txt('range', { a: from + 1, b: from + view.cycles }) : ''; };
     const clearLit = () => { if (lit >= 0) beats[lit]?.notes.forEach((n) => n.classList.remove('score-on')); lit = -1; };
     const blank = () => {
       score = null; drawn = ''; beats = []; cursor = null; lit = -1;
@@ -410,7 +426,7 @@
     };
     function fillTracks() {
       const extra = Object.keys(reply ?? {}).filter((id) => !song.tracks.some((t) => t.id === id));
-      const rows = [['all', '전체 트랙'], ...song.tracks.map((t) => [t.id, t.name]), ...extra.map((id) => [id, id])];
+      const rows = [['all', txt('all_tracks')], ...song.tracks.map((t) => [t.id, t.name]), ...extra.map((id) => [id, id])];
       if (!rows.some(([id]) => id === view.track)) view.track = 'all';
       trackBox.replaceChildren(...rows.map(([value, textContent]) => element('option', { value, textContent })));
       trackBox.value = view.track;
@@ -437,14 +453,14 @@
       const made = buildScore(song, reply, view.cycles, view.track);
       if (!made.parts.length) {
         blank();
-        say(view.track === 'all' ? '이 구간에는 음이 없어.' : '이 트랙은 이 구간에 음이 없어.');
+        say(view.track === 'all' ? txt('empty_all') : txt('empty_track'));
         return;
       }
       score = made;
       saveBtn.disabled = false;
-      say(made.moved ? '16분음표에 맞지 않는 음은 가장 가까운 칸으로 옮겨 적었어.' : '');
+      say(made.moved ? txt('moved') : '');
       const used = [...new Map(made.parts.flatMap((p) => p.notes).filter((n) => n.drum).map((n) => [n.drum.key, n.drum])).values()];
-      legend.textContent = used.length ? `타악 표기: ${used.map((d) => d.label).join(', ')}` : '';
+      legend.textContent = used.length ? txt('legend', { list: used.map((d) => d.label).join(', ') }) : '';
       legend.hidden = !used.length;
       try {
         await loadAbcjs();
@@ -454,20 +470,20 @@
         showRange();
       } catch (e) {
         paper.hidden = true;
-        say('악보를 그리지 못했어. 파일 저장은 그대로 쓸 수 있어.');
+        say(txt('draw_failed'));
         onError?.(String(e.message || e));
       }
     }
     async function load(quiet = false) {
       const ticket = ++asked;
-      if (!quiet) { blank(); say('악보를 읽는 중...'); }
+      if (!quiet) { blank(); say(txt('reading')); }
       let r;
       try { r = await query(view.cycles, from); } catch (e) { r = { ok: false, error: String(e.message || e) }; }
       if (stale() || ticket !== asked) return;
       if (!r?.ok) {
         if (quiet) return; // a failed page turn keeps the page on screen
         reply = null;
-        say('악보를 만들지 못했어. 곡이 소리 나는 상태인지 확인해 줘.');
+        say(txt('make_failed'));
         onError?.(r?.error ?? 'score failed');
         return;
       }

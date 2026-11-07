@@ -46,7 +46,8 @@ class Fake(BaseHTTPRequestHandler):
 server = ThreadingHTTPServer(("127.0.0.1", FAKE), Fake)
 threading.Thread(target=server.serve_forever, daemon=True).start()
 env = {**os.environ, "GEMINI_API_KEY": "test-key", "GEMINI_BASE_URL": f"http://127.0.0.1:{FAKE}", "STRUDEL_LOCAL_AI": "1"}
-app = subprocess.Popen([sys.executable, "-m", "streamlit", "run", "app.py", "--server.port", str(PORT), "--server.headless", "true"],
+app = subprocess.Popen([sys.executable, "-m", "streamlit", "run", "app.py", "--server.port", str(PORT), "--server.headless", "true",
+                        "--secrets.files", "no-secrets.toml"],  # local secrets turn on the Google login gate
                        cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 try:
     for _ in range(60):
@@ -59,7 +60,7 @@ try:
         page = browser.new_page(viewport={"width": 1440, "height": 900})
         errors = []
         page.on("pageerror", lambda e: errors.append(str(e)[:200]))
-        page.goto(f"http://127.0.0.1:{PORT}")
+        page.goto(f"http://127.0.0.1:{PORT}/?lang=ko")  # the checks below read Korean text
         frame = page.frame_locator('iframe[title*="studio"]')
         frame.locator("#play").wait_for(timeout=30000)
         inner = next(f for f in page.frames if "studio_frontend" in f.url or "component" in f.url)

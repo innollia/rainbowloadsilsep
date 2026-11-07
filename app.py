@@ -96,8 +96,12 @@ CHROME = """<style>
 st.markdown(CHROME, unsafe_allow_html=True)
 
 TEXT = {
-    "en": {"google": "Continue with Google · {n} free credits", "password": "Password", "enter": "Enter", "wrong": "Wrong password."},
-    "ko": {"google": "구글 계정으로 시작하기 · 무료 {n} 크레딧", "password": "비밀번호", "enter": "입장하기", "wrong": "비밀번호가 맞지 않아요."},
+    "en": {"google": "Continue with Google · {n} free credits", "password": "Password", "enter": "Enter", "wrong": "Wrong password.",
+           "back": "← Back to the music studio", "switch": "Switch Arcade / BLACK BOX",
+           "no_ai": "AI isn't connected. Check the connection in Settings."},
+    "ko": {"google": "구글 계정으로 시작하기 · 무료 {n} 크레딧", "password": "비밀번호", "enter": "입장하기", "wrong": "비밀번호가 맞지 않아요.",
+           "back": "← 음악 작업실로 돌아가기", "switch": "아케이드 / BLACK BOX 전환",
+           "no_ai": "AI가 연결되지 않았어. 설정에서 연결 상태를 확인해 줘."},
 }
 lang = st.query_params.get("lang", st.session_state.get("lang", "en"))
 lang = lang if lang in TEXT else "en"
@@ -162,10 +166,10 @@ st.session_state.setdefault("studio_page", "music")
 
 if st.session_state.studio_page != "music":
     left, right = st.columns([3, 1])
-    if left.button("← 음악 작업실로 돌아가기"):
+    if left.button(T["back"]):
         st.session_state.studio_page = "music"
         st.rerun()
-    if right.button("아케이드 / BLACK BOX 전환"):
+    if right.button(T["switch"]):
         st.session_state.studio_page = "blackbox" if st.session_state.studio_page == "arcade" else "arcade"
         st.rerun()
     runpy.run_path(str(Path(__file__).with_name("arcade_page.py" if st.session_state.studio_page == "arcade" else "blackbox_page.py")))
@@ -187,7 +191,7 @@ ai_ready = jobs().model is not None and (teacher or bool(email) or setting("STRU
 @st.fragment(run_every=1)
 def render():
     manager = jobs()
-    choices = manager.model.choices() if hasattr(manager.model, "choices") else None
+    choices = manager.model.choices(lang=lang) if hasattr(manager.model, "choices") else None
     snap = manager.snapshot(owner)
     if snap and "credits" in snap and "studio_account" in st.session_state:
         st.session_state.studio_account["credits"] = snap["credits"]
@@ -205,8 +209,9 @@ def render():
         action = result.get("action")
         if action == "generate":
             if not ai_ready:
-                raise ValueError("AI가 연결되지 않았어. 설정에서 연결 상태를 확인해 줘.")
-            req = validate_request(result["payload"])
+                raise ValueError(T["no_ai"])
+            payload = result["payload"]
+            req = validate_request({"lang": lang, **payload} if isinstance(payload, dict) else payload)
             req["model"] = req["model"] or (choices or {}).get("model", "")
             if email:
                 req["account"] = email
@@ -221,6 +226,12 @@ def render():
             manager.cancel(owner)
         elif action == "feedback":
             manager.feedback(owner, result.get("payload", {}))
+        elif action == "lang":
+            chosen = (result.get("payload") or {}).get("lang")
+            if chosen in TEXT and chosen != lang:
+                st.session_state.lang = chosen
+                st.query_params["lang"] = chosen
+                st.rerun(scope="app")
         elif action == "game":
             manager.cancel(owner)
             st.session_state.studio_page = "arcade"

@@ -75,7 +75,7 @@
     const fold = beds.length ? Math.ceil(FOLD * RATE) : 0;
     const groups = [];
     asset.layers.forEach((l, i) => {
-      const name = l.stem || (asset.layers.length > 1 ? (l.kind === 'noise' ? '잡음 층' : `음 층 ${i + 1}`) : '본체');
+      const name = l.stem || (asset.layers.length > 1 ? (l.kind === 'noise' ? 'noise_layer' : `tone_layer_${i + 1}`) : 'main');
       let g = groups.find((x) => x.name === name);
       if (!g) { g = { name, data: new Float32Array(length + fold) }; groups.push(g); }
       if (l.kind === 'bed') bed(g.data, l, shift, stretch, 7919 + i * 131 + Math.round(shift * 100));

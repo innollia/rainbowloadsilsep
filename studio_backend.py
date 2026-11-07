@@ -52,6 +52,170 @@ MAX_TRACKS = 8
 MAX_WAV_BYTES = 4_000_000
 TRACK_ID = re.compile(r"^[a-z][a-z0-9_]{0,23}$")
 ROLES = ("drums", "bass", "melody", "pad", "other")
+LANGS = ("en", "ko")
+DEFAULT_LANG = "en"
+
+# Every message a user can see, by request language. ko keeps the original wording.
+MSG = {
+    "en": {
+        "bad_payload": "Invalid request format.",
+        "bad_text": "Write your request in 1 to 2000 characters.",
+        "no_target": "Couldn't find the selected track.",
+        "bad_tracks": "Track info isn't valid.",
+        "bad_track_id": "Invalid track ID.",
+        "code_too_long": "Track code is too long.",
+        "dup_ids": "Two tracks share an ID.",
+        "bad_bpm": "BPM isn't valid.",
+        "bpm_range": "BPM must be between 20 and 400.",
+        "reply_format": "The model's reply had the wrong format.",
+        "outside_target": "Rejected: it tried to change a track outside the selection ({tid}).",
+        "model_bad_id": "The model gave an invalid track ID.",
+        "model_bad_code": "The model gave invalid code.",
+        "global_in_code": "Track code had a global setting mixed in.",
+        "track_count": "Track count is out of range.",
+        "target_bpm": "Rejected: it tried to change BPM on a track-only request.",
+        "bad_capture_data": "Capture data isn't valid.",
+        "bad_capture_file": "Capture file isn't valid.",
+        "finding_silent": "almost no sound",
+        "finding_clipping": "clipping in {n} samples",
+        "finding_peak": "peak too high",
+        "cancelled": "Stopped. Kept the last working version.",
+        "time_limit": "Hit the time limit ({minutes} min), so I stopped.",
+        "daily_limit": "Hit today's AI call limit, so I stopped.",
+        "no_credits": "Out of credits, so I stopped. You can top up with the credits button at the top.",
+        "no_key": "No Gemini key is set.",
+        "busy": "Your previous request is still running.",
+        "no_browser": "The browser stopped responding, so I stopped. Check if the tab was closed.",
+        "model_failed": "{error} Kept the previous version.",
+        "internal": "Something broke on our side. Kept the previous version.",
+        "reverted": "Round {n} was the best, so I went back to it.",
+        "edit_limit": "Hit the code-edit call limit ({n}), so I stopped.",
+        "talk_fallback": "Could you say that again?",
+        "fix_limit": "{error} Hit the retry limit, so I kept the previous version.",
+        "run_failed": "The new edit wouldn't run, so I kept the previous version.",
+        "fixing": "Fixing a runtime error.",
+        "edited": "Updated.",
+        "listen_failed": "Couldn't listen: {error}",
+        "signal": "Signal check: {findings}",
+        "signal_ok": "numbers look fine",
+        "analysis_failed": "Signal check done, but analysis failed: {error}",
+        "label_heard": "Audio analysis",
+        "label_measured": "Measurement analysis",
+        "verdict": "{label}: {score} pts, {problems}",
+        "problems_n": "{n} issue(s)",
+        "no_problems": "no issues",
+        "verdict_detail": "{span} (capture {id}): {heard}",
+        "verdict_problems": " / issues: {items}",
+        "goal_met": "Reached the goal, so I stopped.",
+        "rounds_used": "Used all {n} fixes, so I stopped.",
+        "no_gain": "It wasn't getting better, so I stopped.",
+        "effort_low": "Fast",
+        "effort_medium": "Normal",
+        "effort_high": "Deep",
+        "reply_lang": "Reply in English: write every text field in English.",
+        "gemini_quota": "Hit the Gemini usage limit.",
+        "gemini_key": "Check your Gemini key.",
+        "gemini_http": "Gemini error {code}: {detail}",
+        "gemini_conn": "Couldn't connect to Gemini: {detail}",
+        "gemini_parse": "Couldn't read Gemini's reply.",
+        "claude_key": "Check your Claude key.",
+        "claude_perm": "This Claude key can't use that model.",
+        "claude_quota": "Hit the Claude usage limit.",
+        "claude_http": "Claude error {code}: {detail}",
+        "claude_conn": "Couldn't connect to Claude.",
+        "claude_refused": "Claude refused this request.",
+        "claude_cut": "Claude's reply was too long and got cut off.",
+        "claude_parse": "Couldn't read Claude's reply.",
+        "agy_too_long": "The song is too long to fit on the CLI command line.",
+        "agy_missing": "Couldn't find the Antigravity CLI.",
+        "agy_timeout": "The Antigravity CLI didn't finish in time.",
+        "agy_parse": "Couldn't read the Antigravity CLI reply: {detail}",
+        "agy_failed": "Antigravity CLI failed: {detail}",
+    },
+    "ko": {
+        "bad_payload": "요청 형식이 올바르지 않아.",
+        "bad_text": "요청은 1자 이상 2000자 이하로 적어 줘.",
+        "no_target": "선택한 트랙을 찾지 못했어.",
+        "bad_tracks": "트랙 정보가 올바르지 않아.",
+        "bad_track_id": "트랙 ID가 올바르지 않아.",
+        "code_too_long": "트랙 코드가 너무 길어.",
+        "dup_ids": "트랙 ID가 겹쳐.",
+        "bad_bpm": "BPM이 올바르지 않아.",
+        "bpm_range": "BPM은 20에서 400 사이여야 해.",
+        "reply_format": "모델 응답 형식이 달라.",
+        "outside_target": "선택한 트랙 밖({tid})을 바꾸려 해서 거절했어.",
+        "model_bad_id": "모델이 올바르지 않은 트랙 ID를 줬어.",
+        "model_bad_code": "모델이 올바르지 않은 코드를 줬어.",
+        "global_in_code": "트랙 코드에 전역 설정이 섞였어.",
+        "track_count": "트랙 수가 허용 범위를 벗어났어.",
+        "target_bpm": "트랙만 고치는 요청에서 BPM을 바꾸려 해서 거절했어.",
+        "bad_capture_data": "캡처 데이터가 올바르지 않아.",
+        "bad_capture_file": "캡처 파일이 올바르지 않아.",
+        "finding_silent": "소리가 거의 없음",
+        "finding_clipping": "클리핑 {n}샘플",
+        "finding_peak": "피크가 너무 높음",
+        "cancelled": "중단했어. 마지막 정상 버전을 유지해.",
+        "time_limit": "시간 한도({minutes}분)에 닿아 멈췄어.",
+        "daily_limit": "오늘의 AI 호출 한도에 닿아 멈췄어.",
+        "no_credits": "크레딧이 모자라 멈췄어. 위쪽 크레딧 버튼에서 충전할 수 있어.",
+        "no_key": "Gemini 키가 설정되지 않았어.",
+        "busy": "이전 요청이 아직 진행 중이야.",
+        "no_browser": "브라우저 응답이 없어 멈췄어. 탭이 닫혔는지 확인해 줘.",
+        "model_failed": "{error} 이전 버전을 유지해.",
+        "internal": "작업 중 내부 오류가 났어. 이전 버전을 유지해.",
+        "reverted": "{n}회차가 가장 나아서 그 버전으로 되돌렸어.",
+        "edit_limit": "코드 수정 호출 한도({n}회)에 닿아 멈췄어.",
+        "talk_fallback": "무슨 말인지 다시 알려 줘.",
+        "fix_limit": "{error} 재수정 한도에 닿아 이전 버전을 유지해.",
+        "run_failed": "새 수정이 실행되지 않아 이전 버전을 유지해.",
+        "fixing": "실행 오류를 고치는 중이야.",
+        "edited": "수정했어.",
+        "listen_failed": "듣기 실패: {error}",
+        "signal": "신호 검사: {findings}",
+        "signal_ok": "수치상 문제 없음",
+        "analysis_failed": "신호 검사만 완료, 분석 실패: {error}",
+        "label_heard": "오디오 분석",
+        "label_measured": "측정 분석",
+        "verdict": "{label}: {score}점, {problems}",
+        "problems_n": "문제 {n}개",
+        "no_problems": "문제 없음",
+        "verdict_detail": "{span} (캡처 {id}): {heard}",
+        "verdict_problems": " / 문제: {items}",
+        "goal_met": "목표에 닿아서 멈췄어.",
+        "rounds_used": "고칠 횟수({n}번)를 다 써서 멈췄어.",
+        "no_gain": "더 나아지지 않아 멈췄어.",
+        "effort_low": "빠르게",
+        "effort_medium": "보통",
+        "effort_high": "깊게",
+        "reply_lang": "Reply in Korean: write every text field in Korean.",
+        "gemini_quota": "Gemini 사용 한도에 걸렸어.",
+        "gemini_key": "Gemini 키를 확인해 줘.",
+        "gemini_http": "Gemini 오류 {code}: {detail}",
+        "gemini_conn": "Gemini 연결 실패: {detail}",
+        "gemini_parse": "Gemini 응답을 읽지 못했어.",
+        "claude_key": "Claude 키를 확인해 줘.",
+        "claude_perm": "이 Claude 키로는 해당 모델을 쓸 수 없어.",
+        "claude_quota": "Claude 사용 한도에 걸렸어.",
+        "claude_http": "Claude 오류 {code}: {detail}",
+        "claude_conn": "Claude에 연결하지 못했어.",
+        "claude_refused": "Claude가 이 요청을 거절했어.",
+        "claude_cut": "Claude 응답이 너무 길어 잘렸어.",
+        "claude_parse": "Claude 응답을 읽지 못했어.",
+        "agy_too_long": "곡이 너무 길어 CLI 명령줄에 들어가지 않아.",
+        "agy_missing": "Antigravity CLI를 찾지 못했어.",
+        "agy_timeout": "Antigravity CLI가 시간 안에 끝나지 않았어.",
+        "agy_parse": "Antigravity CLI 응답을 읽지 못했어: {detail}",
+        "agy_failed": "Antigravity CLI 실패: {detail}",
+    },
+}
+
+
+def lang_of(value) -> str:
+    return value if value in LANGS else DEFAULT_LANG
+
+
+def msg(lang, key: str, **fields) -> str:
+    return MSG[lang_of(lang)][key].format(**fields)
 
 BASE_SYSTEM = """You write Strudel live-coding music for a Korean musician who never reads code.
 Each track is ONE Strudel pattern expression, for example stack(s("bd*4"), s("hh*8").gain(.4)).
@@ -119,7 +283,16 @@ from credits import LedgerError, call_cost  # noqa: E402
 
 
 class ModelError(Exception):
-    """A model call failed. Never retried automatically: retries spend money."""
+    """A model call failed. Never retried automatically: retries spend money.
+
+    Built from a MSG key so the job can show it in the request's language; any other text is shown as is."""
+
+    def __init__(self, key: str = "", **fields):
+        self.key, self.fields = key, fields
+        super().__init__(self.text(DEFAULT_LANG))
+
+    def text(self, lang) -> str:
+        return msg(lang, self.key, **self.fields) if self.key in MSG[DEFAULT_LANG] else self.key
 
 
 def redact(text: str, secret: str = "") -> str:
@@ -158,17 +331,17 @@ class Gemini:
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", "replace")
             if exc.code == 429:
-                raise ModelError("Gemini 사용 한도에 걸렸어.") from None
+                raise ModelError("gemini_quota") from None
             if exc.code in (401, 403):
-                raise ModelError("Gemini 키를 확인해 줘.") from None
-            raise ModelError(f"Gemini 오류 {exc.code}: {redact(detail, self.key)}") from None
+                raise ModelError("gemini_key") from None
+            raise ModelError("gemini_http", code=exc.code, detail=redact(detail, self.key)) from None
         except (OSError, ValueError) as exc:
-            raise ModelError(f"Gemini 연결 실패: {redact(exc, self.key)}") from None
+            raise ModelError("gemini_conn", detail=redact(exc, self.key)) from None
         try:
             text = "".join(p.get("text", "") for p in data["candidates"][0]["content"]["parts"])
             return json.loads(text)
         except (KeyError, IndexError, TypeError, ValueError):
-            raise ModelError("Gemini 응답을 읽지 못했어.") from None
+            raise ModelError("gemini_parse") from None
 
     def edit(self, prompt: str) -> dict:
         return self._call([{"text": prompt}], EDIT_SCHEMA)
@@ -242,23 +415,23 @@ class Claude:
                 messages=[{"role": "user", "content": prompt}],
             )
         except anthropic.AuthenticationError:
-            raise ModelError("Claude 키를 확인해 줘.") from None
+            raise ModelError("claude_key") from None
         except anthropic.PermissionDeniedError:
-            raise ModelError("이 Claude 키로는 해당 모델을 쓸 수 없어.") from None
+            raise ModelError("claude_perm") from None
         except anthropic.RateLimitError:
-            raise ModelError("Claude 사용 한도에 걸렸어.") from None
+            raise ModelError("claude_quota") from None
         except anthropic.APIStatusError as exc:
-            raise ModelError(f"Claude 오류 {exc.status_code}: {redact(exc.message, self.key)}") from None
+            raise ModelError("claude_http", code=exc.status_code, detail=redact(exc.message, self.key)) from None
         except anthropic.APIConnectionError:
-            raise ModelError("Claude에 연결하지 못했어.") from None
+            raise ModelError("claude_conn") from None
         if response.stop_reason == "refusal":
-            raise ModelError("Claude가 이 요청을 거절했어.")
+            raise ModelError("claude_refused")
         if response.stop_reason == "max_tokens":
-            raise ModelError("Claude 응답이 너무 길어 잘렸어.")
+            raise ModelError("claude_cut")
         try:
             return json.loads("".join(b.text for b in response.content if b.type == "text"))
         except ValueError:
-            raise ModelError("Claude 응답을 읽지 못했어.") from None
+            raise ModelError("claude_parse") from None
 
     def edit(self, prompt: str) -> dict:
         return self._call(prompt, EDIT_SCHEMA)
@@ -287,11 +460,12 @@ class Router:
     def hears(self) -> bool:
         return self.first == "gemini"
 
-    def choices(self) -> dict:
+    def choices(self, lang: str = DEFAULT_LANG) -> dict:
+        efforts = [{"id": e["id"], "label": msg(lang, "effort_" + e["id"])} for e in EFFORT_CHOICES]
         models = [{"id": m["id"], "label": m["label"]} for m in MODEL_CHOICES if self.keys[m["provider"]]]
         known = {m["id"] for m in models}
         named = self.named[self.first]
-        return {"models": models, "efforts": list(EFFORT_CHOICES), "model": named if named in known else models[0]["id"],
+        return {"models": models, "efforts": efforts, "model": named if named in known else models[0]["id"],
                 "effort": DEFAULT_EFFORT}
 
     def engine(self, model: str = "", effort: str = ""):
@@ -319,7 +493,7 @@ class AgyCli:
 
     def _run(self, prompt: str, schema_def: dict) -> dict:
         if os.name == "nt" and len(prompt) > 24000:
-            raise ModelError("곡이 너무 길어 CLI 명령줄에 들어가지 않아.")
+            raise ModelError("agy_too_long")
         # Windows caps a command line near 32000 characters; the skill is what can be dropped.
         system = BASE_SYSTEM if os.name == "nt" and len(SYSTEM) + len(prompt) > 30000 else SYSTEM
         text = system + "\nDo not use any tools. Reply only with the JSON object.\n\n" + prompt
@@ -335,10 +509,10 @@ class AgyCli:
                                                 stderr=subprocess.PIPE, creationflags=flags)
                 out, err = self.process.communicate(timeout=self.TIMEOUT + 20)
             except OSError:
-                raise ModelError("Antigravity CLI를 찾지 못했어.") from None
+                raise ModelError("agy_missing") from None
             except subprocess.TimeoutExpired:
                 self.stop()
-                raise ModelError("Antigravity CLI가 시간 안에 끝나지 않았어.") from None
+                raise ModelError("agy_timeout") from None
         return self.parse(out, err)
 
     def edit(self, prompt: str) -> dict:
@@ -349,10 +523,10 @@ class AgyCli:
         try:
             data = json.loads(out.decode("utf-8", "replace"))
         except ValueError:
-            raise ModelError("Antigravity CLI 응답을 읽지 못했어: " + redact(err.decode("utf-8", "replace"))) from None
+            raise ModelError("agy_parse", detail=redact(err.decode("utf-8", "replace"))) from None
         result = data.get("structured_output")
         if data.get("status") != "SUCCESS" or not isinstance(result, dict):
-            raise ModelError(f"Antigravity CLI 실패: {redact(data.get('status'))}")
+            raise ModelError("agy_failed", detail=redact(data.get("status")))
         return result
 
     def stop(self):
@@ -367,29 +541,29 @@ class AgyCli:
         return self._run(measured_prompt(wav, prompt), LISTEN_SCHEMA)
 
 
-def clean_tracks(tracks) -> list[dict]:
+def clean_tracks(tracks, lang: str = DEFAULT_LANG) -> list[dict]:
     if not isinstance(tracks, list) or len(tracks) > MAX_TRACKS:
-        raise ValueError("트랙 정보가 올바르지 않아.")
+        raise ValueError(msg(lang, "bad_tracks"))
     out = []
     for t in tracks:
         if not isinstance(t, dict) or not TRACK_ID.match(str(t.get("id", ""))):
-            raise ValueError("트랙 ID가 올바르지 않아.")
+            raise ValueError(msg(lang, "bad_track_id"))
         code = t.get("code")
         if not isinstance(code, str) or len(code) > MAX_CODE:
-            raise ValueError("트랙 코드가 너무 길어.")
+            raise ValueError(msg(lang, "code_too_long"))
         role = t.get("role") if t.get("role") in ROLES else "other"
         out.append({"id": t["id"], "name": str(t.get("name") or t["id"])[:40], "role": role,
                     "code": code, "raw": bool(t.get("raw")), "lead": str(t.get("lead") or "")[:500]})
     if len({t["id"] for t in out}) != len(out):
-        raise ValueError("트랙 ID가 겹쳐.")
+        raise ValueError(msg(lang, "dup_ids"))
     return out
 
 
-def valid_bpm(value) -> float:
+def valid_bpm(value, lang: str = DEFAULT_LANG) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
-        raise ValueError("BPM이 올바르지 않아.")
+        raise ValueError(msg(lang, "bad_bpm"))
     if not 20 <= value <= 400:
-        raise ValueError("BPM은 20에서 400 사이여야 해.")
+        raise ValueError(msg(lang, "bpm_range"))
     return float(value)
 
 
@@ -413,17 +587,18 @@ def rounds_from(payload: dict) -> int:
 
 
 def validate_request(payload: dict) -> dict:
+    lang = lang_of(payload.get("lang")) if isinstance(payload, dict) else DEFAULT_LANG
     if not isinstance(payload, dict):
-        raise ValueError("요청 형식이 올바르지 않아.")
+        raise ValueError(msg(lang, "bad_payload"))
     text = payload.get("text")
     if not isinstance(text, str) or not text.strip() or len(text) > MAX_REQUEST:
-        raise ValueError("요청은 1자 이상 2000자 이하로 적어 줘.")
-    tracks = clean_tracks(payload.get("tracks"))
+        raise ValueError(msg(lang, "bad_text"))
+    tracks = clean_tracks(payload.get("tracks"), lang)
     target = payload.get("target") or None
     if target is not None and target not in {t["id"] for t in tracks}:
-        raise ValueError("선택한 트랙을 찾지 못했어.")
+        raise ValueError(msg(lang, "no_target"))
     return {
-        "text": text.strip(), "tracks": tracks, "bpm": valid_bpm(payload.get("bpm")),
+        "text": text.strip(), "tracks": tracks, "bpm": valid_bpm(payload.get("bpm"), lang), "lang": lang,
         "target": target, "auto": payload.get("auto") is True, "rounds": rounds_from(payload),
         "model": payload.get("model") if payload.get("model") in {m["id"] for m in MODEL_CHOICES} else "",
         "effort": payload.get("effort") if payload.get("effort") in {e["id"] for e in EFFORT_CHOICES} else "", "base_version": str(payload.get("base_version", ""))[:64],
@@ -431,20 +606,20 @@ def validate_request(payload: dict) -> dict:
     }
 
 
-def merge_candidate(base: dict, reply: dict, target: str | None) -> dict:
+def merge_candidate(base: dict, reply: dict, target: str | None, lang: str = DEFAULT_LANG) -> dict:
     """Apply a model reply. Anything it did not name stays byte-identical by construction."""
     if not isinstance(reply, dict) or not isinstance(reply.get("changes"), list):
-        raise ValueError("모델 응답 형식이 달라.")
+        raise ValueError(msg(lang, "reply_format"))
     tracks = {t["id"]: dict(t) for t in base["tracks"]}
     order = [t["id"] for t in base["tracks"]]
     for change in reply["changes"]:
         if not isinstance(change, dict):
-            raise ValueError("모델 응답 형식이 달라.")
+            raise ValueError(msg(lang, "reply_format"))
         tid = change.get("id")
         if target and tid != target:
-            raise ValueError(f"선택한 트랙 밖({tid})을 바꾸려 해서 거절했어.")
+            raise ValueError(msg(lang, "outside_target", tid=tid))
         if not isinstance(tid, str) or not TRACK_ID.match(tid):
-            raise ValueError("모델이 올바르지 않은 트랙 ID를 줬어.")
+            raise ValueError(msg(lang, "model_bad_id"))
         if change.get("remove"):
             if tid in tracks:
                 del tracks[tid]
@@ -452,9 +627,9 @@ def merge_candidate(base: dict, reply: dict, target: str | None) -> dict:
             continue
         code = change.get("code")
         if not isinstance(code, str) or not code.strip() or len(code) > MAX_CODE:
-            raise ValueError("모델이 올바르지 않은 코드를 줬어.")
+            raise ValueError(msg(lang, "model_bad_code"))
         if re.search(r"\bset(cpm|cps)\s*\(|^\s*\$", code, re.M):
-            raise ValueError("트랙 코드에 전역 설정이 섞였어.")
+            raise ValueError(msg(lang, "global_in_code"))
         if tid not in tracks:
             order.append(tid)
             tracks[tid] = {"id": tid, "raw": False}
@@ -464,14 +639,14 @@ def merge_candidate(base: dict, reply: dict, target: str | None) -> dict:
             code=code,
         )
     if not tracks or len(tracks) > MAX_TRACKS:
-        raise ValueError("트랙 수가 허용 범위를 벗어났어.")
-    bpm = valid_bpm(reply.get("bpm", base["bpm"]))
+        raise ValueError(msg(lang, "track_count"))
+    bpm = valid_bpm(reply.get("bpm", base["bpm"]), lang)
     if target and bpm != base["bpm"]:
-        raise ValueError("트랙만 고치는 요청에서 BPM을 바꾸려 해서 거절했어.")
+        raise ValueError(msg(lang, "target_bpm"))
     return {"tracks": [tracks[i] for i in order], "bpm": bpm, "summary": str(reply.get("summary", ""))[:200]}
 
 
-def signal_report(wav: bytes) -> dict:
+def signal_report(wav: bytes, lang: str = DEFAULT_LANG) -> dict:
     import analyze_audio
 
     fd, path = tempfile.mkstemp(suffix=".wav")
@@ -484,26 +659,27 @@ def signal_report(wav: bytes) -> dict:
     silent = not math.isfinite(m["peak_dbfs"]) or m["peak_dbfs"] < -60
     findings = []
     if silent:
-        findings.append("소리가 거의 없음")
+        findings.append(msg(lang, "finding_silent"))
     if m["clipped_samples"]:
-        findings.append(f"클리핑 {m['clipped_samples']}샘플")
+        findings.append(msg(lang, "finding_clipping", n=m["clipped_samples"]))
     if m["true_peak_dbfs"] > -1 and not m["clipped_samples"]:
-        findings.append("피크가 너무 높음")
+        findings.append(msg(lang, "finding_peak"))
     keys = ("seconds", "sample_rate", "peak_dbfs", "rms_dbfs", "integrated_lufs", "true_peak_dbfs", "clipped_samples", "octave_bands_db")
     return {"silent": silent, "findings": findings, "metrics": {k: m[k] for k in keys if k in m}}
 
 
-def decode_capture(payload: dict) -> tuple[bytes, dict]:
+def decode_capture(payload: dict, lang: str = DEFAULT_LANG) -> tuple[bytes, dict]:
     try:
         wav = base64.b64decode(payload["wav"], validate=True)
     except (KeyError, TypeError, binascii.Error):
-        raise ValueError("캡처 데이터가 올바르지 않아.") from None
+        raise ValueError(msg(lang, "bad_capture_data")) from None
     if not wav.startswith(b"RIFF") or len(wav) > MAX_WAV_BYTES:
-        raise ValueError("캡처 파일이 올바르지 않아.")
+        raise ValueError(msg(lang, "bad_capture_file"))
     return wav, {"id": hashlib.sha256(wav).hexdigest()[:12], "span": str(payload.get("span", ""))[:40]}
 
 
-def edit_prompt(state: dict, instruction: str, error: str, target: str | None, history=(), goal="", tried=()) -> str:
+def edit_prompt(state: dict, instruction: str, error: str, target: str | None, history=(), goal="", tried=(),
+                lang: str = "") -> str:
     parts = ["Current song:", json.dumps({"bpm": state["bpm"], "tracks": state["tracks"]}, ensure_ascii=False)]
     if history:
         parts += ["Recent conversation:", *(f"{m['role']}: {m['text']}" for m in history)]
@@ -516,6 +692,8 @@ def edit_prompt(state: dict, instruction: str, error: str, target: str | None, h
         parts.append(f'Change only track "{target}". Keep bpm exactly {state["bpm"]}.')
     if error:
         parts.append(f"Your previous attempt failed with this error, fix it: {error}")
+    if lang:
+        parts.append(msg(lang, "reply_lang"))
     return "\n".join(parts)
 
 
@@ -524,6 +702,7 @@ class Job:
         self.id = uuid.uuid4().hex
         self.owner = owner
         self.request = request
+        self.lang = lang_of(request.get("lang"))
         self.cancelled = threading.Event()
         self.feedback: queue.Queue = queue.Queue()
         self.started = time.monotonic()
@@ -535,6 +714,9 @@ class Job:
     def update(self, **fields):
         with self.lock:
             self.view.update(fields)
+
+    def text(self, key: str, **fields) -> str:
+        return msg(self.lang, key, **fields)
 
     def say(self, kind: str, text: str, detail: str = ""):
         with self.lock:
@@ -566,16 +748,16 @@ class Jobs:
 
     def _spend(self, job: Job):
         if job.cancelled.is_set():
-            raise Stop("cancelled", "중단했어. 마지막 정상 버전을 유지해.")
+            raise Stop("cancelled", job.text("cancelled"))
         seconds = max(300, SECONDS_PER_ROUND * job.view["limit"])
         if time.monotonic() - job.started > seconds:
-            raise Stop("limit", f"시간 한도({seconds // 60}분)에 닿아 멈췄어.")
+            raise Stop("limit", job.text("time_limit", minutes=seconds // 60))
         with self.lock:
             today = datetime.date.today().isoformat()
             if today != self.day:
                 self.day, self.calls = today, 0
             if self.calls >= self.daily_limit:
-                raise Stop("limit", "오늘의 AI 호출 한도에 닿아 멈췄어.")
+                raise Stop("limit", job.text("daily_limit"))
             self.calls += 1
 
     def _ask(self, job: Job, call, *args):
@@ -590,7 +772,7 @@ class Jobs:
                 raise Stop("failed", str(exc)) from None
             job.update(credits=credits, calls=job.view.get("calls", 0) + 1)
             if not ok:
-                raise Stop("limit", "크레딧이 모자라 멈췄어. 위쪽 크레딧 버튼에서 충전할 수 있어.")
+                raise Stop("limit", job.text("no_credits"))
         try:
             return call(*args)
         except ModelError:
@@ -602,12 +784,13 @@ class Jobs:
             raise
 
     def submit(self, owner: str, request: dict) -> str:
+        lang = lang_of(request.get("lang"))
         if self.model is None:
-            raise ValueError("Gemini 키가 설정되지 않았어.")
+            raise ValueError(msg(lang, "no_key"))
         with self.lock:
             current = self.jobs.get(owner)
             if current and current.view["status"] == "running":
-                raise ValueError("이전 요청이 아직 진행 중이야.")
+                raise ValueError(msg(lang, "busy"))
             job = Job(owner, request)
             self.jobs[owner] = job
         threading.Thread(target=self._run, args=(job,), daemon=True).start()
@@ -621,7 +804,7 @@ class Jobs:
             getattr(self.model, "stop", lambda: None)()
             if job.view["status"] == "running":
                 job.update(status="cancelled", stage="done")
-                job.say("status", "중단했어. 마지막 정상 버전을 유지해.")
+                job.say("status", job.text("cancelled"))
 
     def feedback(self, owner: str, payload: dict):
         job = self.jobs.get(owner)
@@ -637,13 +820,13 @@ class Jobs:
         while True:
             left = deadline - time.monotonic()
             if left <= 0:
-                raise Stop("failed", "브라우저 응답이 없어 멈췄어. 탭이 닫혔는지 확인해 줘.")
+                raise Stop("failed", job.text("no_browser"))
             try:
                 item = job.feedback.get(timeout=left)
             except queue.Empty:
                 continue
             if item is None or job.cancelled.is_set():
-                raise Stop("cancelled", "중단했어. 마지막 정상 버전을 유지해.")
+                raise Stop("cancelled", job.text("cancelled"))
             if item.get("seq") == seq:  # a late report for an older candidate is ignored
                 return item
 
@@ -657,18 +840,18 @@ class Jobs:
         except ModelError as exc:
             if job.view["status"] == "running":
                 job.update(status="failed", stage="done")
-                job.say("error", f"{exc} 이전 버전을 유지해.")
+                job.say("error", job.text("model_failed", error=exc.text(job.lang)))
         except Exception:
             if job.view["status"] == "running":
                 job.update(status="failed", stage="done")
-                job.say("error", "작업 중 내부 오류가 났어. 이전 버전을 유지해.")
+                job.say("error", job.text("internal"))
 
     def _keep_best(self, job: Job, seq: int, state: dict, best_state, best_round: int) -> int:
         """A later round can sound worse, so the song ends on the round that scored highest."""
         if best_state is None or best_state is state:
             return seq
         seq += 1
-        summary = f"{best_round}회차가 가장 나아서 그 버전으로 되돌렸어."
+        summary = job.text("reverted", n=best_round)
         job.update(stage="verifying", candidate={"seq": seq, "listen": False, "summary": summary, **best_state})
         if self._wait(job, seq).get("ok"):
             job.say("change", summary)
@@ -686,21 +869,21 @@ class Jobs:
         while True:
             job.update(stage="editing", listen=None)
             if edits >= max_edits:
-                raise Stop("limit", f"코드 수정 호출 한도({max_edits}회)에 닿아 멈췄어.")
+                raise Stop("limit", job.text("edit_limit", n=max_edits))
             self._spend(job)
             edits += 1
             reply = self._ask(job, model.edit, edit_prompt(state, instruction, error, req["target"], req.get("history", ()),
-                                                goal=req["text"] if tried else "", tried=tried))
+                                                goal=req["text"] if tried else "", tried=tried, lang=job.lang))
             if isinstance(reply, dict) and reply.get("intent") == "talk":
-                job.say("reply", str(reply.get("reply") or reply.get("summary") or "무슨 말인지 다시 알려 줘.")[:MAX_REPLY])
+                job.say("reply", str(reply.get("reply") or reply.get("summary") or job.text("talk_fallback"))[:MAX_REPLY])
                 job.update(status="done", stage="done")
                 return
             try:
-                candidate = merge_candidate({**state}, reply, req["target"])
+                candidate = merge_candidate({**state}, reply, req["target"], job.lang)
             except ValueError as exc:
                 fixes += 1
                 if fixes > MAX_ERROR_FIXES:
-                    raise Stop("failed", f"{exc} 재수정 한도에 닿아 이전 버전을 유지해.") from None
+                    raise Stop("failed", job.text("fix_limit", error=exc)) from None
                 error = str(exc)
                 continue
             seq += 1
@@ -710,48 +893,50 @@ class Jobs:
                 fixes += 1
                 error = str(result.get("error", "실행 실패"))[:500]
                 if fixes > MAX_ERROR_FIXES:
-                    raise Stop("failed", "새 수정이 실행되지 않아 이전 버전을 유지해.")
-                job.say("status", "실행 오류를 고치는 중이야.")
+                    raise Stop("failed", job.text("run_failed"))
+                job.say("status", job.text("fixing"))
                 continue
             state, error = {"tracks": candidate["tracks"], "bpm": candidate["bpm"]}, ""
-            job.say("change", candidate["summary"] or "수정했어.")
+            job.say("change", candidate["summary"] or job.text("edited"))
             if not req["auto"]:
                 job.update(status="done", stage="done")
                 return
             try:
-                wav, capture = decode_capture(result)
+                wav, capture = decode_capture(result, job.lang)
             except ValueError as exc:
-                raise Stop("failed", f"듣기 실패: {exc}") from None
+                raise Stop("failed", job.text("listen_failed", error=exc)) from None
             job.update(stage="signal", listen=capture)
-            report = signal_report(wav)
-            job.say("signal", "신호 검사: " + (", ".join(report["findings"]) or "수치상 문제 없음"))
+            report = signal_report(wav, job.lang)
+            job.say("signal", job.text("signal", findings=", ".join(report["findings"]) or job.text("signal_ok")))
             job.update(stage="analyzing")
             self._spend(job)
             prompt = ("Listen to this capture of the song. Goal: " + req["text"]
                       + "\nMeasured signal: " + json.dumps(report, ensure_ascii=False)
                       + ("\nPrevious " + tried[-1] + "\nSay in heard whether this version is better than that one." if tried else "")
-                      + "\nJudge how well the audio meets the goal, score 0-100. Answer in Korean."
+                      + "\nJudge how well the audio meets the goal, score 0-100."
                       + " Set goal_met true as soon as the request is met; a matter of taste is not a reason to keep going."
                       + " List in problems only faults a listener would clearly notice, and leave it empty when there are none."
                       + " Do not invent work to fill the rounds."
-                      + " Put concrete fixes in next_instruction, following the measurement table in your instructions.")
+                      + " Put concrete fixes in next_instruction, following the measurement table in your instructions."
+                      + "\n" + job.text("reply_lang"))
             try:
                 verdict = self._ask(job, model.listen, wav, prompt)
             except ModelError as exc:
-                raise Stop("failed", f"신호 검사만 완료, 분석 실패: {exc}") from None
+                raise Stop("failed", job.text("analysis_failed", error=exc.text(job.lang))) from None
             problems = [str(p)[:200] for p in verdict.get("problems", [])][:5]
             hears = getattr(model, "hears", True)
-            label = "오디오 분석" if hears else "측정 분석"
+            label = job.text("label_heard" if hears else "label_measured")
             job.say("heard" if hears else "measured",
-                    f"{label}: {verdict.get('score', 0)}점, " + (f"문제 {len(problems)}개" if problems else "문제 없음"),
-                    f"{capture['span']} (캡처 {capture['id']}): {str(verdict.get('heard', ''))[:300]}"
-                    + (" / 문제: " + "; ".join(problems) if problems else ""))
+                    job.text("verdict", label=label, score=verdict.get("score", 0),
+                             problems=job.text("problems_n", n=len(problems)) if problems else job.text("no_problems")),
+                    job.text("verdict_detail", span=capture["span"], id=capture["id"], heard=str(verdict.get("heard", ""))[:300])
+                    + (job.text("verdict_problems", items="; ".join(problems)) if problems else ""))
             score = verdict.get("score", 0)
             numeric = isinstance(score, (int, float))
             good_enough = verdict.get("goal_met") or not problems or (numeric and score >= GOOD_SCORE)
             if good_enough and not report["silent"]:
                 job.update(status="done", stage="done")
-                job.say("status", "목표에 닿아서 멈췄어.")
+                job.say("status", job.text("goal_met"))
                 return
             round_now = job.view["iteration"]
             gained = numeric and score >= best + MIN_GAIN
@@ -760,9 +945,9 @@ class Jobs:
             tried.append(f"round {round_now}: changed: {candidate['summary'] or 'unknown'}; score {score}; problems: {'; '.join(problems) or 'none'}")
             if round_now >= rounds:
                 seq = self._keep_best(job, seq, state, best_state, best_round)
-                raise Stop("limit", f"고칠 횟수({rounds - 1}번)를 다 써서 멈췄어.")
+                raise Stop("limit", job.text("rounds_used", n=rounds - 1))
             if round_now > 1 and not gained:
                 seq = self._keep_best(job, seq, state, best_state, best_round)
-                raise Stop("done", "더 나아지지 않아 멈췄어.")
+                raise Stop("done", job.text("no_gain"))
             job.update(iteration=round_now + 1)
             instruction = str(verdict.get("next_instruction") or req["text"])[:MAX_REQUEST]

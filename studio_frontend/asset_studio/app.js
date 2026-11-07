@@ -25,9 +25,174 @@
   const setIcon = (el, name) => { el.innerHTML = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`; };
   const iconButton = (name, label, fn, cls = 'iconBtn') => { const b = el('button', cls); setIcon(b, name); b.setAttribute('aria-label', label); b.title = label; b.onclick = fn; return b; };
   function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
-  const STATUS = { pending: '대기', draft: '확인 필요', approved: '승인', flagged: '수정 표시', working: '수정 중', review: '검토 대기' };
+  /* ---------- language ---------- */
+  // The host page picks the language with ?lang= and can change it later with an asset:lang message.
+  const LANGS = ['en', 'ko'];
+  let lang = new URLSearchParams(location.search).get('lang');
+  if (!LANGS.includes(lang)) lang = 'en';
+  const TEXT = {
+    en: {
+      docTitle: 'Game sound assets', gameInfo: 'Game info', stagesLabel: 'Progress', help: 'How to use', spec: 'Spec', export: 'Export',
+      backToMusic: 'To music studio', category: 'Category', board: 'Asset board', playAll: 'Play all', stopAll: 'Stop playing all', hoverPlay: 'Play on hover',
+      acceptAll: 'Keep all', rejectAll: 'Discard all', selectAll: 'Select all', deselect: 'Deselect', approve: 'Approve', approved: 'Approved', clear: 'Clear',
+      ask: 'Edit request', send: 'Send',
+      status: { pending: 'Pending', draft: 'Needs check', approved: 'Approved', flagged: 'Flagged', working: 'Revising', review: 'In review' },
+      sec: (s) => `${s}s`,
+      previous: 'Previous', newVersion: 'New version', keep: 'Keep', drop: 'Discard',
+      approveAll: 'Approve all', leftToCheck: (n) => `${n} assets left to check.`,
+      samplesDone: (n, rest) => `All ${n} samples approved. The other ${rest} will be made in this style.`,
+      samplesProgress: (n, done, rest) => `${done} of ${n} samples approved. Listen and approve them, and the other ${rest} will be made in the same style.`,
+      makeRest: 'Make the rest', all: 'All', statusHead: 'Status',
+      stages: { brief: 'Brief', sample: 'Samples', expand: 'Expand', export: 'Export' },
+      counts: (n, ok) => `${n} total · ${ok} approved`, reviewCount: (n) => `${n} to review`, selected: (n) => `${n} selected`,
+      askSelected: (n) => `Request for the ${n} selected`, askOne: (name) => `Request for ${name}`, askNone: 'Pick an asset to send a request',
+      drafts: 'Drafts', draftCount: (i) => `${i}`, draftCountLabel: 'Number of drafts', draftNote: (text, k) => `${text} · draft ${k}`,
+      madeDrafts: (n) => `Made ${n} drafts. Listen and keep one.`, madeOne: 'Made a new version. Compare it with the previous one.',
+      expanding: (n) => `Making ${n} in the sample style`, firstVersion: 'First version', fromSpec: 'Created from spec',
+      play: 'Play', stop: 'Stop', toBoard: 'Back to board', prevAsset: 'Previous asset', nextAsset: 'Next asset',
+      peak: (v) => `Peak ${v} dB`, loud: (v) => `Loudness ${v} LUFS`, loop: 'Loop', oneShot: 'One shot', spectrum: 'Spectrum',
+      tracks: (n) => `${n} track${n === 1 ? '' : 's'}`,
+      stemOn: (s) => `Unmute ${s}`, stemOff: (s) => `Mute ${s}`, stemSolo: (s) => `Solo ${s}`, stemGain: (s) => `${s} volume`,
+      stems: { drums: 'Drums', bass: 'Bass', chords: 'Chords', melody: 'Melody', wind: 'Wind', gust: 'Gusts', rain_streaks: 'Rain streaks', rain_floor: 'Rain bed', raindrops: 'Raindrops', fire_bed: 'Fire bed', crackle: 'Crackle', cave_echo: 'Cave echo', drips: 'Drips', noise_layer: 'Noise layer', main: 'Main' },
+      toneLayer: (i) => `Tone layer ${i}`,
+      tabChat: 'Chat', tabCode: 'Code', tabVersions: (n) => `Versions ${n}`, tabLicense: 'Licenses',
+      chatEmpty: (name) => `Tell me how to change ${name}.`, listen: 'Listen', current: 'Current', copyLicenses: 'Copy all licenses',
+      askThis: 'Request for this asset', close: 'Close',
+      licenseTitle: (g) => `${g} sound asset license notice`, use: 'Use', license: 'License', holder: 'Holder', copiedLicenses: 'Copied the license notice',
+      example: { style: 'Warm wooden percussion and harp, combat not too heavy', assets: [
+        { name: 'Click', when: 'Pressing a menu button', description: 'Light, wooden' },
+        { name: 'Parry', when: 'The moment an enemy attack is blocked', description: 'Short metallic ring' },
+        { name: 'Garden', when: 'Garden screen', description: 'Calm harp and strings' },
+      ] },
+      specPrompt: (p) => `Please write a game sound spec as JSON. This spec goes into a sound production tool that makes the assets.
+
+Based on the design docs and code of the game you are working on, list every sound the game needs. Do not invent values that have no basis; leave them null, and put anything that needs deciding in questions.
+
+Fields
+- game: game name
+- platform: main device, one of ${p.platforms}
+- style: overall sound direction of the game, one or two sentences
+- assets: list of sounds
+  - id: lowercase English starting with sfx_ for effects, amb_ for ambience, bgm_ for music. If the code already uses a name, keep it
+  - name: human-readable name
+  - category: one of ${p.cats}
+  - length: target length (seconds). Effects at most ${p.dur}s, ambience an unbroken loop of 8 or 16 seconds
+  - loop: whether it repeats. Always true for ambience
+  - when: the moment in the game when it plays
+  - description: what it sounds like
+- questions: things the user must decide
+
+Do not reference tracks or samples with unclear licenses. Available materials: ${p.licenses}.
+
+Reply only with JSON in the format below, no explanation.
+${p.form}`,
+      sendPrompt: 'Send prompt', receiveSpec: 'Receive spec', pasteToAgent: 'Paste this into the agent that worked on the music.', prompt: 'Prompt',
+      copyPrompt: 'Copy prompt', copiedPrompt: 'Copied the prompt', pasteSpec: 'Paste the spec the agent gave you.', insertExample: 'Insert example',
+      notJson: (m) => `Not JSON: ${m}`, noAssets: 'There is no assets list.', badItems: (n, list) => `${n} items break the rules: ${list}`, noName: 'no name',
+      planSummary: (a, c, k, g) => `Add ${a} · Change ${c} · Keep ${k} · Remove ${g}`, tagAdd: 'Add', tagChange: 'Change', tagRemove: 'Remove',
+      moreRemoved: (n) => `${n} more removed`, startWithSpec: 'Start with this spec', addOnly: 'Add only, remove nothing',
+      specApplied: (n) => `Spec applied. ${n} new assets`,
+      exportIssues: (n, names) => `${n} assets with spec issues will also be exported: ${names}`, exportUnapproved: (n) => `${n} unapproved assets will be left out.`,
+      inBundle: 'In the bundle', bundleItems: ['Approved sound files', 'Spec game-audio.spec.json', 'CREDITS.md and license texts'], licenses: 'Licenses',
+      exportBundle: 'Export bundle', shellOnly: 'This is only a shell, so no files are made yet', restart: 'Start again from samples',
+      tutorialTitle: 'How to make game sounds',
+      steps: [
+        ['Get a spec', 'From the Spec button, copy the prompt, send it to the AI that has the game design doc, and paste back the spec it returns.'],
+        ['Check samples', 'Key sounds come first. Hover over a tile to listen, then approve.'],
+        ['Make the rest', 'The rest are made at once in the style of the approved samples.'],
+        ['Revise', 'Clicking a tile selects it and plays it. Pick several and write what to change. Raise the draft count to compare several options. Press and hold to open it large.'],
+        ['Export', 'Approved sounds are bundled with the license notice. The AI finishes spec checks before it hands over a sound.'],
+      ],
+    },
+    ko: {
+      docTitle: '게임 소리 에셋', gameInfo: '게임 정보', stagesLabel: '진행 단계', help: '사용법', spec: '명세', export: '내보내기',
+      backToMusic: '음악 작업실로', category: '분류', board: '에셋 보드', playAll: '전체 듣기', stopAll: '전체 듣기 멈춤', hoverPlay: '올리면 듣기',
+      acceptAll: '모두 채택', rejectAll: '모두 버림', selectAll: '전체 선택', deselect: '선택 해제', approve: '승인', approved: '승인됨', clear: '해제',
+      ask: '수정 요청', send: '보내기',
+      status: { pending: '대기', draft: '확인 필요', approved: '승인', flagged: '수정 표시', working: '수정 중', review: '검토 대기' },
+      sec: (s) => `${s}초`,
+      previous: '이전', newVersion: '새 버전', keep: '채택', drop: '버림',
+      approveAll: '전부 승인', leftToCheck: (n) => `확인할 에셋 ${n}개가 남았어요.`,
+      samplesDone: (n, rest) => `샘플 ${n}개를 모두 승인했어요. 이 스타일로 나머지 ${rest}개를 만듭니다.`,
+      samplesProgress: (n, done, rest) => `샘플 ${n}개 중 ${done}개 승인. 들어 보고 승인하면 나머지 ${rest}개를 같은 스타일로 만듭니다.`,
+      makeRest: '나머지 만들기', all: '전체', statusHead: '상태',
+      stages: { brief: '설명', sample: '샘플 확인', expand: '확장', export: '내보내기' },
+      counts: (n, ok) => `전체 ${n} · 승인 ${ok}`, reviewCount: (n) => `검토 ${n}개`, selected: (n) => `${n}개 선택`,
+      askSelected: (n) => `선택한 ${n}개에 보낼 요청`, askOne: (name) => `${name}에 보낼 요청`, askNone: '에셋을 골라 요청을 보내세요',
+      drafts: '시안', draftCount: (i) => `${i}개`, draftCountLabel: '시안 개수', draftNote: (text, k) => `${text} · 시안 ${k}`,
+      madeDrafts: (n) => `시안 ${n}개를 만들었어요. 들어 보고 하나를 채택하세요.`, madeOne: '새 버전을 만들었어요. 이전과 비교해 보세요.',
+      expanding: (n) => `샘플 스타일로 ${n}개를 만듭니다`, firstVersion: '첫 버전', fromSpec: '명세에서 생성',
+      play: '재생', stop: '정지', toBoard: '보드로', prevAsset: '이전 에셋', nextAsset: '다음 에셋',
+      peak: (v) => `최대 ${v} dB`, loud: (v) => `음량 ${v} LUFS`, loop: '루프', oneShot: '한 번 재생', spectrum: '주파수',
+      tracks: (n) => `트랙 ${n}개`,
+      stemOn: (s) => `${s} 켜기`, stemOff: (s) => `${s} 끄기`, stemSolo: (s) => `${s} 혼자 듣기`, stemGain: (s) => `${s} 음량`,
+      stems: { drums: '드럼', bass: '베이스', chords: '화음', melody: '멜로디', wind: '바람', gust: '바람결', rain_streaks: '빗줄기', rain_floor: '빗소리 바닥', raindrops: '빗방울', fire_bed: '불꽃 바닥', crackle: '타닥', cave_echo: '동굴 울림', drips: '물방울', noise_layer: '잡음 층', main: '본체' },
+      toneLayer: (i) => `음 층 ${i}`,
+      tabChat: '대화', tabCode: '코드', tabVersions: (n) => `버전 ${n}`, tabLicense: '저작권',
+      chatEmpty: (name) => `${name}을(를) 어떻게 바꿀지 말해 주세요.`, listen: '듣기', current: '현재', copyLicenses: '저작권 전체 복사',
+      askThis: '이 에셋에 보낼 요청', close: '닫기',
+      licenseTitle: (g) => `${g} 소리 에셋 저작권 고지`, use: '용도', license: '라이선스', holder: '저작권자', copiedLicenses: '저작권 고지를 복사했어요',
+      example: { style: '따뜻한 나무 타악기와 하프 중심, 전투도 무겁지 않게', assets: [
+        { name: '클릭', when: '메뉴 버튼을 누를 때', description: '가볍고 나무 느낌' },
+        { name: '패링', when: '적 공격을 막는 순간', description: '금속 울림이 짧게' },
+        { name: '정원', when: '정원 화면', description: '잔잔한 하프와 현악' },
+      ] },
+      specPrompt: (p) => `게임 소리 명세서를 JSON으로 작성해 주세요. 이 명세서를 소리 제작 도구에 넣어 에셋을 만듭니다.
+
+맡고 있는 게임의 기획서와 코드를 근거로, 게임에 필요한 소리를 빠짐없이 적어 주세요. 근거가 없는 값은 지어내지 말고 null로 두고, 정해야 할 것은 questions에 적어 주세요.
+
+항목
+- game: 게임 이름
+- platform: ${p.platforms} 중 주요 기기
+- style: 게임 전체의 소리 방향, 한두 문장
+- assets: 소리 목록
+  - id: 효과음 sfx_, 환경음 amb_, 음악 bgm_ 로 시작하는 소문자 영문. 코드에 이미 쓰는 이름이 있으면 그대로
+  - name: 사람이 읽을 이름
+  - category: ${p.cats} 중 하나
+  - length: 목표 길이(초). 효과음은 ${p.dur}초 이하, 환경음은 끊기지 않는 반복 구간 8초나 16초
+  - loop: 반복 재생 여부. 환경음은 언제나 true
+  - when: 게임의 어떤 순간에 나는 소리인지
+  - description: 어떤 소리인지
+- questions: 사용자가 정해야 할 것
+
+저작권이 불분명한 곡이나 샘플은 참조하지 마세요. 쓸 수 있는 재료는 ${p.licenses}입니다.
+
+설명 없이 아래 형식의 JSON만 답해 주세요.
+${p.form}`,
+      sendPrompt: '프롬프트 보내기', receiveSpec: '명세 받기', pasteToAgent: '음악 작업을 하던 에이전트에게 붙여 넣으세요.', prompt: '프롬프트',
+      copyPrompt: '프롬프트 복사', copiedPrompt: '프롬프트를 복사했어요', pasteSpec: '에이전트가 준 명세를 붙여 넣으세요.', insertExample: '예시 넣기',
+      notJson: (m) => `JSON이 아니에요: ${m}`, noAssets: 'assets 목록이 없어요.', badItems: (n, list) => `규칙에 맞지 않는 항목 ${n}개: ${list}`, noName: '이름 없음',
+      planSummary: (a, c, k, g) => `추가 ${a} · 변경 ${c} · 유지 ${k} · 삭제 ${g}`, tagAdd: '추가', tagChange: '변경', tagRemove: '삭제',
+      moreRemoved: (n) => `외 ${n}개 삭제`, startWithSpec: '이 명세로 작업 시작', addOnly: '삭제 없이 추가만',
+      specApplied: (n) => `명세를 적용했어요. 새 에셋 ${n}개`,
+      exportIssues: (n, names) => `규격 문제가 남은 에셋 ${n}개도 함께 나갑니다: ${names}`, exportUnapproved: (n) => `아직 승인되지 않은 에셋 ${n}개는 빠집니다.`,
+      inBundle: '묶음에 들어가는 것', bundleItems: ['승인한 소리 파일', '명세 game-audio.spec.json', 'CREDITS.md와 라이선스 원문'], licenses: '저작권',
+      exportBundle: '묶음 내보내기', shellOnly: '껍데기라 실제 파일은 아직 만들지 않아요', restart: '샘플 단계부터 다시',
+      tutorialTitle: '게임 소리 만드는 법',
+      steps: [
+        ['명세 받기', '명세 버튼에서 프롬프트를 복사해 게임 기획서를 가진 AI에게 보내고, 돌아온 명세를 붙여 넣어요.'],
+        ['샘플 확인', '대표 소리가 먼저 나와요. 타일에 마우스를 올려 듣고 승인하세요.'],
+        ['나머지 만들기', '승인한 샘플의 스타일로 나머지를 한 번에 만들어요.'],
+        ['고치기', '타일을 누르면 선택되고 소리가 나요. 여러 개를 고르고 바꿀 내용을 적으세요. 시안 개수를 늘리면 여러 안을 비교해 고를 수 있어요. 길게 누르면 크게 열려요.'],
+        ['내보내기', '승인한 소리를 저작권 고지와 함께 묶어요. 규격 검사는 AI가 소리를 내놓기 전에 끝내요.'],
+      ],
+    },
+  };
+  const t = (key, ...args) => { const v = TEXT[lang][key] ?? TEXT.en[key]; return typeof v === 'function' ? v(...args) : v; };
+  const tx = (v) => (v && typeof v === 'object' ? v[lang] ?? v.en : v); // data fields shaped { en, ko }; plain strings pass through
+  const nm = (x) => tx(x.name);
+  const statusText = (s) => t('status')[s];
+  const stemName = (key) => { const m = /^tone_layer_(\d+)$/.exec(key); return m ? t('toneLayer', m[1]) : t('stems')[key] ?? key; };
+  const noteText = (n) => (typeof n === 'string' ? n : n.key === 'draft' ? t('draftNote', n.text, n.k) : t(n.key));
+  const chatText = (m) => (m.ai === 'drafts' ? t('madeDrafts', m.n) : m.ai === 'one' ? t('madeOne') : m.text);
+  function applyStatic() {
+    document.documentElement.lang = lang; document.title = t('docTitle');
+    document.querySelectorAll('[data-i18n]').forEach((e) => { e.textContent = t(e.dataset.i18n); });
+    document.querySelectorAll('[data-i18n-aria]').forEach((e) => e.setAttribute('aria-label', t(e.dataset.i18nAria)));
+    document.querySelectorAll('[data-i18n-title]').forEach((e) => { e.title = t(e.dataset.i18nTitle); });
+  }
   const color = (cat) => CATEGORIES.find((c) => c.id === cat)?.hue || 'var(--text3)';
-  const seconds = (s) => (s < 10 ? s.toFixed(s < 1 ? 2 : 1) : s.toFixed(0)) + '초';
+  const seconds = (s) => t('sec', s < 10 ? s.toFixed(s < 1 ? 2 : 1) : s.toFixed(0));
   const stems = ['#E8AE72', '#87B9E8', '#8CCDB2', '#C7A0E8', '#F3C978'];
 
   /* ---------- state ---------- */
@@ -75,7 +240,7 @@
     }
     return v;
   }
-  function make(a, change = {}, note = '첫 버전') {
+  function make(a, change = {}, note = { key: 'firstVersion' }) {
     a.versions.push(checked(a, change, note));
     a.current = a.versions.length - 1;
   }
@@ -122,9 +287,9 @@
     document.querySelectorAll('.tile.playing').forEach((t) => t.classList.remove('playing'));
     const a = player?.asset;
     if (a) tileOf(a)?.classList.add('playing');
-    $('nowPlaying').textContent = a ? a.name : '';
+    $('nowPlaying').textContent = a ? nm(a) : '';
     setIcon($('playAll'), queue ? 'stop' : 'play');
-    $('playAll').setAttribute('aria-label', queue ? '전체 듣기 멈춤' : '전체 듣기');
+    $('playAll').setAttribute('aria-label', queue ? t('stopAll') : t('playAll'));
     document.querySelector('.dWave')?.classList.toggle('on', !!a);
   }
 
@@ -151,7 +316,7 @@
 
   function makeTile(a) {
     const t = el('div', 'tile'); t.dataset.id = a.id; t.dataset.status = a.status; t.tabIndex = a.versions.length || a.status === 'pending' ? 0 : -1;
-    t.setAttribute('role', 'button'); t.setAttribute('aria-label', `${a.name}, ${STATUS[a.status]}`);
+    t.setAttribute('role', 'button'); t.setAttribute('aria-label', `${nm(a)}, ${statusText(a.status)}`);
     t.style.setProperty('--c', color(a.cat));
     if (a.music) t.classList.add('wide');
     if (selected.has(a.id)) t.classList.add('selected');
@@ -161,9 +326,9 @@
     if (a.status === 'review') {
       t.append(reviewRow(a, () => { drawTile(a); play(a); }));
     }
-    const meta = el('div', 'meta'), name = el('span', 'name', a.name), sub = el('div', 'sub');
+    const meta = el('div', 'meta'), name = el('span', 'name', nm(a)), sub = el('div', 'sub');
     const v = a.versions.length ? heard(a) : null;
-    sub.append(el('span', '', v ? seconds(v.measure.seconds) : STATUS[a.status]), el('span', '', a.status === 'working' ? '수정 중' : v && a.versions.length > 1 ? `v${a.current + 1}` : ''));
+    sub.append(el('span', '', v ? seconds(v.measure.seconds) : statusText(a.status)), el('span', '', a.status === 'working' ? statusText('working') : v && a.versions.length > 1 ? `v${a.current + 1}` : ''));
     meta.append(name, sub); t.append(meta, el('i', 'state'));
     t.addEventListener('pointerenter', () => hoverStart(a));
     t.addEventListener('pointerleave', hoverEnd);
@@ -185,8 +350,8 @@
       };
       return b;
     };
-    row.append(option('이전', -1), ...a.drafts.map((_, i) => option(a.drafts.length > 1 ? String(i + 1) : '새 버전', i)));
-    row.append(iconButton('check', '채택', (e) => { e.stopPropagation(); settle(a, true); }, 'keep'), iconButton('close', '버림', (e) => { e.stopPropagation(); settle(a, false); }, 'drop'));
+    row.append(option(t('previous'), -1), ...a.drafts.map((_, i) => option(a.drafts.length > 1 ? String(i + 1) : t('newVersion'), i)));
+    row.append(iconButton('check', t('keep'), (e) => { e.stopPropagation(); settle(a, true); }, 'keep'), iconButton('close', t('drop'), (e) => { e.stopPropagation(); settle(a, false); }, 'drop'));
     return row;
   }
   const drawTile = (a) => { const c = tileOf(a)?.querySelector('canvas'); if (c) drawPeaks(c, heard(a).peaks, resolved(color(a.cat))); };
@@ -199,10 +364,10 @@
       if (!list.length) continue;
       const group = el('div', 'group'), h = el('h2'), dot = el('i');
       group.style.setProperty('--c', c.hue);
-      h.append(dot, c.name, el('span', '', String(list.length)));
+      h.append(dot, tx(c.name), el('span', '', String(list.length)));
       const pickable = ready(list);
       if (pickable.length) {
-        const all = el('button', 'ghost', pickable.every((x) => selected.has(x.id)) ? '선택 해제' : '전체 선택');
+        const all = el('button', 'ghost', pickable.every((x) => selected.has(x.id)) ? t('deselect') : t('selectAll'));
         all.onclick = () => { const off = pickable.every((x) => selected.has(x.id)); pickable.forEach((x) => (off ? selected.delete(x.id) : selected.add(x.id))); renderBoard(); };
         h.append(all);
       }
@@ -217,17 +382,17 @@
   function banner() {
     const unchecked = assets.filter((a) => a.status === 'draft');
     const box = el('div', 'note'); box.style.cssText = 'display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px';
-    const all = el('button', 'ghost', '전부 승인'); all.id = 'approveAll'; all.onclick = () => { unchecked.forEach(approve); renderBoard(); };
+    const all = el('button', 'ghost', t('approveAll')); all.id = 'approveAll'; all.onclick = () => { unchecked.forEach(approve); renderBoard(); };
     if (stage !== 'sample') {
       if (!unchecked.length) return [];
-      const text = el('span', '', `확인할 에셋 ${unchecked.length}개가 남았어요.`); text.style.flex = '1';
+      const text = el('span', '', t('leftToCheck', unchecked.length)); text.style.flex = '1';
       box.append(text, all);
       return [box];
     }
     const samples = assets.filter((a) => a.sample), done = samples.filter((a) => a.status === 'approved').length, rest = assets.filter((a) => a.status === 'pending').length;
-    const text = el('span', '', done === samples.length ? `샘플 ${samples.length}개를 모두 승인했어요. 이 스타일로 나머지 ${rest}개를 만듭니다.` : `샘플 ${samples.length}개 중 ${done}개 승인. 들어 보고 승인하면 나머지 ${rest}개를 같은 스타일로 만듭니다.`);
+    const text = el('span', '', done === samples.length ? t('samplesDone', samples.length, rest) : t('samplesProgress', samples.length, done, rest));
     text.style.flex = '1';
-    const go = el('button', 'primary', '나머지 만들기'); go.id = 'expandBtn'; go.disabled = done !== samples.length; go.onclick = expand;
+    const go = el('button', 'primary', t('makeRest')); go.id = 'expandBtn'; go.disabled = done !== samples.length; go.onclick = expand;
     box.append(text, all, go);
     return [box];
   }
@@ -239,30 +404,30 @@
       b.append(el('span', 'name', label), el('span', 'n', String(count)));
       return b;
     };
-    side.append(el('h2', '', '분류'), item('전체', assets.length, !filter.cat, () => { filter.cat = null; renderBoard(); }));
-    for (const c of CATEGORIES) side.append(item(c.name, assets.filter((a) => a.cat === c.id).length, filter.cat === c.id, () => { filter.cat = filter.cat === c.id ? null : c.id; renderBoard(); }, c.hue));
-    side.append(el('h2', '', '상태'));
-    for (const [id, label] of Object.entries(STATUS)) {
+    side.append(el('h2', '', t('category')), item(t('all'), assets.length, !filter.cat, () => { filter.cat = null; renderBoard(); }));
+    for (const c of CATEGORIES) side.append(item(tx(c.name), assets.filter((a) => a.cat === c.id).length, filter.cat === c.id, () => { filter.cat = filter.cat === c.id ? null : c.id; renderBoard(); }, c.hue));
+    side.append(el('h2', '', t('statusHead')));
+    for (const [id, label] of Object.entries(t('status'))) {
       const n = assets.filter((a) => a.status === id).length;
       if (n) side.append(item(label, n, filter.status === id, () => { filter.status = filter.status === id ? null : id; renderBoard(); }));
     }
   }
   function renderHeader() {
-    $('gameTitle').textContent = GAME;
-    const order = [['brief', '설명'], ['sample', '샘플 확인'], ['expand', '확장'], ['export', '내보내기']], at = order.findIndex(([id]) => id === stage);
+    $('gameTitle').textContent = tx(GAME);
+    const order = Object.entries(t('stages')), at = order.findIndex(([id]) => id === stage);
     $('stages').textContent = '';
     order.forEach(([, label], i) => { const li = el('li', i < at ? 'done' : '', label); if (i === at) li.setAttribute('aria-current', 'step'); $('stages').append(li); });
     const approved = assets.filter((a) => a.status === 'approved').length;
-    $('counts').textContent = `전체 ${assets.length} · 승인 ${approved}`;
+    $('counts').textContent = t('counts', assets.length, approved);
     const waiting = assets.filter((a) => a.status === 'review').length;
-    $('review').hidden = !waiting || !!openAsset; $('reviewText').textContent = `검토 ${waiting}개`;
+    $('review').hidden = !waiting || !!openAsset; $('reviewText').textContent = t('reviewCount', waiting);
   }
   function syncDock() {
     const count = selected.size, target = focused && byId(focused);
-    $('selCount').hidden = !count; $('selCount').textContent = `${count}개 선택`;
+    $('selCount').hidden = !count; $('selCount').textContent = t('selected', count);
     $('selAll').hidden = $('selApprove').hidden = $('selClear').hidden = !count;
     document.body.classList.toggle('selecting', !!count);
-    $('ask').placeholder = count ? `선택한 ${count}개에 보낼 요청` : target?.versions.length ? `${target.name}에 보낼 요청` : '에셋을 골라 요청을 보내세요';
+    $('ask').placeholder = count ? t('askSelected', count) : target?.versions.length ? t('askOne', nm(target)) : t('askNone');
     $('send').disabled = !count && !target?.versions.length;
   }
 
@@ -360,20 +525,20 @@
 
   /* ---------- simulated work ---------- */
   function changeFrom(text) {
-    const has = (...w) => w.some((x) => text.includes(x));
-    return { shift: has('높', '밝', '가볍', '귀엽') ? 1.25 : has('낮', '묵직', '무겁', '어둡') ? 0.8 : 1.1, stretch: has('짧') ? 0.7 : has('길') ? 1.4 : 0.95, level: has('작', '조용', '낮춰') ? 0.6 : has('크', '세게') ? 1.2 : 0.85 };
+    const low = text.toLowerCase(), has = (...w) => w.some((x) => low.includes(x));
+    return { shift: has('높', '밝', '가볍', '귀엽', 'high', 'bright', 'light', 'cute') ? 1.25 : has('낮', '묵직', '무겁', '어둡', 'low', 'heavy', 'dark', 'deep') ? 0.8 : 1.1, stretch: has('짧', 'short') ? 0.7 : has('길', 'long') ? 1.4 : 0.95, level: has('작', '조용', '낮춰', 'quiet', 'soft', 'lower') ? 0.6 : has('크', '세게', 'loud', 'strong') ? 1.2 : 0.85 };
   }
   const SPREAD = [[1, 1], [0.89, 1.15], [1.12, 0.88], [0.8, 1.3]];
   const MAX_DRAFTS = SPREAD.length;
   // "시안 3개" in the request wins over the picker, so it can be asked for in plain words.
   function draftsWanted(text) {
-    const said = text.match(/(?:시안|후보)\D{0,3}([1-9])|([1-9])\s*(?:개|가지)\s*(?:의\s*)?(?:시안|후보|버전)/);
-    return Math.min(MAX_DRAFTS, said ? +(said[1] || said[2]) : drafts);
+    const said = text.match(/(?:시안|후보|drafts?|options?)\D{0,3}([1-9])|([1-9])\s*(?:개|가지)\s*(?:의\s*)?(?:시안|후보|버전)|([1-9])\s*(?:drafts?|options?|versions?)\b/i);
+    return Math.min(MAX_DRAFTS, said ? +(said[1] || said[2] || said[3]) : drafts);
   }
   function draftPicker() {
-    const box = el('label', 'draftPick', '시안'), pick = el('select');
-    for (let i = 1; i <= MAX_DRAFTS; i++) pick.append(Object.assign(el('option', '', `${i}개`), { value: i }));
-    pick.value = drafts; pick.setAttribute('aria-label', '시안 개수');
+    const box = el('label', 'draftPick', t('drafts')), pick = el('select');
+    for (let i = 1; i <= MAX_DRAFTS; i++) pick.append(Object.assign(el('option', '', t('draftCount', i)), { value: i }));
+    pick.value = drafts; pick.setAttribute('aria-label', t('draftCountLabel'));
     pick.onchange = () => { drafts = +pick.value; };
     box.append(pick); return box;
   }
@@ -388,9 +553,9 @@
         a.progress = Math.min(1, (performance.now() - begun) / total);
         tileOf(a)?.querySelector('.bar')?.style.setProperty('--p', a.progress);
         if (a.progress < 1) { setTimeout(tick, 120); return; }
-        a.drafts = SPREAD.slice(0, count).map(([shift, stretch], k) => checked(a, { ...change, shift: change.shift * shift, stretch: change.stretch * stretch }, count > 1 ? `${text} · 시안 ${k + 1}` : text));
+        a.drafts = SPREAD.slice(0, count).map(([shift, stretch], k) => checked(a, { ...change, shift: change.shift * shift, stretch: change.stretch * stretch }, count > 1 ? { key: 'draft', text, k: k + 1 } : text));
         a.pick = 0; a.status = 'review';
-        a.chat.push({ text: count > 1 ? `시안 ${count}개를 만들었어요. 들어 보고 하나를 채택하세요.` : '새 버전을 만들었어요. 이전과 비교해 보세요.' });
+        a.chat.push(count > 1 ? { ai: 'drafts', n: count } : { ai: 'one' });
         renderOpen(a);
       };
       tick();
@@ -408,7 +573,7 @@
   function expand() {
     stage = 'expand'; stopSound();
     const rest = assets.filter((a) => a.status === 'pending');
-    toast(`샘플 스타일로 ${rest.length}개를 만듭니다`);
+    toast(t('expanding', rest.length));
     rest.forEach((a, i) => setTimeout(() => {
       const t = tileOf(a);
       make(a); a.status = 'draft';
@@ -483,20 +648,20 @@
     if (next) { stopSound(); openAsset = next; focused = next.id; stemState = {}; renderDetail(); }
   }
   function toggleDetailPlay() { if (player?.asset === openAsset) stopSound(); else play(openAsset, { loop: !!(openAsset.loop || openAsset.music) }); renderPlayButton(); }
-  function renderPlayButton() { const b = $('dPlay'); if (b) { setIcon(b, player?.asset === openAsset ? 'stop' : 'play'); b.setAttribute('aria-label', player ? '정지' : '재생'); } }
+  function renderPlayButton() { const b = $('dPlay'); if (b) { setIcon(b, player?.asset === openAsset ? 'stop' : 'play'); b.setAttribute('aria-label', player ? t('stop') : t('play')); } }
 
   function renderDetail() {
     const a = openAsset, v = heard(a), m = v.measure, box = $('detailView'), left = issues(a);
     box.textContent = '';
     const main = el('div', 'dMain'), head = el('div', 'dHead');
-    const title = el('div'); title.style.minWidth = '0'; title.append(el('h1', '', a.name), el('div', 'file', `${a.id}.wav`));
-    const play = iconButton('play', '재생', toggleDetailPlay); play.id = 'dPlay'; play.classList.add('primary');
-    const approveBtn = el('button', a.status === 'approved' ? '' : 'primary', a.status === 'approved' ? '승인됨' : '승인');
+    const title = el('div'); title.style.minWidth = '0'; title.append(el('h1', '', nm(a)), el('div', 'file', `${a.id}.wav`));
+    const play = iconButton('play', t('play'), toggleDetailPlay); play.id = 'dPlay'; play.classList.add('primary');
+    const approveBtn = el('button', a.status === 'approved' ? '' : 'primary', a.status === 'approved' ? t('approved') : t('approve'));
     approveBtn.onclick = () => { if (a.status === 'approved') a.status = 'draft'; else approve(a); renderDetail(); };
     approveBtn.disabled = a.status === 'working' || a.status === 'review';
-    head.append(iconButton('back', '보드로', closeDetail, 'ghost iconBtn'), title, el('span', 'spacer'), iconButton('prev', '이전 에셋', () => step(-1), 'ghost iconBtn'), iconButton('next', '다음 에셋', () => step(1), 'ghost iconBtn'), play, approveBtn);
+    head.append(iconButton('back', t('toBoard'), closeDetail, 'ghost iconBtn'), title, el('span', 'spacer'), iconButton('prev', t('prevAsset'), () => step(-1), 'ghost iconBtn'), iconButton('next', t('nextAsset'), () => step(1), 'ghost iconBtn'), play, approveBtn);
     const facts = el('p', 'dFacts');
-    for (const f of [seconds(m.seconds), `최대 ${m.peak.toFixed(1)} dB`, `음량 ${m.loud.toFixed(1)} LUFS`, a.loop ? '루프' : '한 번 재생', STATUS[a.status]]) facts.append(el('span', '', f));
+    for (const f of [seconds(m.seconds), t('peak', m.peak.toFixed(1)), t('loud', m.loud.toFixed(1)), a.loop ? t('loop') : t('oneShot'), statusText(a.status)]) facts.append(el('span', '', f));
     const wave = el('div', 'dWave'), canvas = el('canvas'); wave.append(canvas);
     wave.onclick = (e) => { const r = wave.getBoundingClientRect(); window.setTimeout(renderPlayButton); playFrom((e.clientX - r.left) / r.width * m.seconds); };
     if (a.status === 'review') {
@@ -505,8 +670,8 @@
       row.append(ab); wave.after(row);
       main.append(head, facts, wave, row);
     } else main.append(head, facts, wave);
-    const spec = el('canvas', 'dSpec'); spec.id = 'dSpec'; spec.setAttribute('aria-label', '주파수'); main.append(spec);
-    const th = el('div', 'dTrackHead'); th.append(el('h2', '', `트랙 ${v.sound.stems.length}개`)); main.append(th);
+    const spec = el('canvas', 'dSpec'); spec.id = 'dSpec'; spec.setAttribute('aria-label', t('spectrum')); main.append(spec);
+    const th = el('div', 'dTrackHead'); th.append(el('h2', '', t('tracks', v.sound.stems.length))); main.append(th);
     v.sound.stems.forEach((s, i) => main.append(stemRow(s, i)));
     box.append(main, sidePanel(a));
     requestAnimationFrame(() => {
@@ -520,49 +685,50 @@
   function stemRow(s, i) {
     const st = stemState[s.name] ||= { mute: false, solo: false, gain: 1 };
     const row = el('div', 'stem'), name = el('div', 'sName'), dot = el('i'); dot.style.setProperty('--c', stems[i % stems.length]);
-    name.append(dot, s.name);
-    const mute = iconButton(st.mute ? 'muted' : 'sound', `${s.name} ${st.mute ? '켜기' : '끄기'}`, () => { st.mute = !st.mute; applyStems(); setIcon(mute, st.mute ? 'muted' : 'sound'); mute.setAttribute('aria-pressed', String(st.mute)); }, 'iconBtn mute');
+    const label = stemName(s.name);
+    name.append(dot, label);
+    const mute = iconButton(st.mute ? 'muted' : 'sound', st.mute ? t('stemOn', label) : t('stemOff', label), () => { st.mute = !st.mute; applyStems(); setIcon(mute, st.mute ? 'muted' : 'sound'); mute.setAttribute('aria-pressed', String(st.mute)); }, 'iconBtn mute');
     mute.setAttribute('aria-pressed', String(st.mute));
-    const solo = iconButton('solo', `${s.name} 혼자 듣기`, null, 'iconBtn solo'); solo.setAttribute('aria-pressed', String(st.solo));
+    const solo = iconButton('solo', t('stemSolo', label), null, 'iconBtn solo'); solo.setAttribute('aria-pressed', String(st.solo));
     solo.onclick = () => { st.solo = !st.solo; solo.setAttribute('aria-pressed', String(st.solo)); applyStems(); };
-    const gain = el('input'); gain.type = 'range'; gain.min = 0; gain.max = 1.5; gain.step = 0.01; gain.value = st.gain; gain.setAttribute('aria-label', `${s.name} 음량`);
+    const gain = el('input'); gain.type = 'range'; gain.min = 0; gain.max = 1.5; gain.step = 0.01; gain.value = st.gain; gain.setAttribute('aria-label', t('stemGain', label));
     gain.oninput = () => { st.gain = +gain.value; applyStems(); };
     row.append(name, el('canvas'), mute, solo, gain);
     return row;
   }
   function sourceOf(a) {
     return a.layers.map((l) => {
-      if (l.kind === 'bed') return `// ${l.stem}\nnoise() |> lp(%, ${Math.round(l.cutoff * 8000)}) * ${l.gain} |> out(%)`;
-      if (l.kind === 'tone') return `// ${a.name}\nsweep(${l.from}, ${l.to}, ${l.len}) |> ${l.wave}(%) * adsr(0, ${l.len}, 0, 0) * ${l.gain} |> out(%)`;
+      if (l.kind === 'bed') return `// ${stemName(l.stem)}\nnoise() |> lp(%, ${Math.round(l.cutoff * 8000)}) * ${l.gain} |> out(%)`;
+      if (l.kind === 'tone') return `// ${nm(a)}\nsweep(${l.from}, ${l.to}, ${l.len}) |> ${l.wave}(%) * adsr(0, ${l.len}, 0, 0) * ${l.gain} |> out(%)`;
       if (l.kind === 'noise') return `noise() |> lp(%, ${Math.round(l.cutoff * 8000)}) * ar(${l.attack}, ${l.len}) * ${l.gain} |> out(%)`;
-      if (l.kind === 'drums') return `// ${l.stem}\nn"bd ~ bd ~" |> kick(@.trig) |> bus("drums")`;
-      return `// ${l.stem}\nn"${l.notes.slice(0, 8).filter((x) => x != null).join(' ')}" |> ${l.wave}(@.freq) * adsr(@.gate) |> bus("${l.stem}")`;
+      if (l.kind === 'drums') return `// ${stemName(l.stem)}\nn"bd ~ bd ~" |> kick(@.trig) |> bus("drums")`;
+      return `// ${stemName(l.stem)}\nn"${l.notes.slice(0, 8).filter((x) => x != null).join(' ')}" |> ${l.wave}(@.freq) * adsr(@.gate) |> bus("${l.stem}")`;
     }).join('\n\n');
   }
   function sidePanel(a) {
     const side = el('div', 'dSide'), tabs = el('div', 'tabs'), body = el('div', 'tabBody');
     tabs.setAttribute('role', 'tablist');
-    for (const [id, label] of [['chat', '대화'], ['code', '코드'], ['versions', `버전 ${a.versions.length}`], ['license', '저작권']]) {
+    for (const [id, label] of [['chat', t('tabChat')], ['code', t('tabCode')], ['versions', t('tabVersions', a.versions.length)], ['license', t('tabLicense')]]) {
       const b = el('button', '', label); b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(id === detailTab));
       b.onclick = () => { detailTab = id; renderDetail(); }; tabs.append(b);
     }
     if (detailTab === 'chat') {
-      if (!a.chat.length) body.append(el('p', 'msg ai', `${a.name}을(를) 어떻게 바꿀지 말해 주세요.`));
-      a.chat.forEach((m) => body.append(el('div', 'msg ' + (m.me ? 'me' : 'ai'), m.text)));
+      if (!a.chat.length) body.append(el('p', 'msg ai', t('chatEmpty', nm(a))));
+      a.chat.forEach((m) => body.append(el('div', 'msg ' + (m.me ? 'me' : 'ai'), chatText(m))));
     } else if (detailTab === 'code') body.append(el('pre', 'code', sourceOf(a)));
     else if (detailTab === 'versions') {
       [...a.versions].reverse().forEach((v) => {
-        const i = a.versions.indexOf(v), row = el('div', 'lineItem'), text = el('span', 'grow', `v${i + 1} · ${v.note}`);
-        row.append(text, iconButton('play', '듣기', () => { a.current = i; renderDetail(); play(a); }, 'ghost iconBtn'));
-        if (i === a.current) row.append(el('span', 'tag', '현재'));
+        const i = a.versions.indexOf(v), row = el('div', 'lineItem'), text = el('span', 'grow', `v${i + 1} · ${noteText(v.note)}`);
+        row.append(text, iconButton('play', t('listen'), () => { a.current = i; renderDetail(); play(a); }, 'ghost iconBtn'));
+        if (i === a.current) row.append(el('span', 'tag', t('current')));
         body.append(row);
       });
     } else {
-      LICENSES.forEach((l) => { const row = el('div', 'lineItem'); row.append(el('span', 'grow', `${l.name} · ${l.use}`), el('span', 'tag', l.license)); body.append(row); });
-      const copy = el('button', '', '저작권 전체 복사'); copy.onclick = copyLicenses; body.append(copy);
+      LICENSES.forEach((l) => { const row = el('div', 'lineItem'); row.append(el('span', 'grow', `${l.name} · ${tx(l.use)}`), el('span', 'tag', l.license)); body.append(row); });
+      const copy = el('button', '', t('copyLicenses')); copy.onclick = copyLicenses; body.append(copy);
     }
-    const dock = el('form', 'detailDock'), input = el('input'); input.placeholder = '이 에셋에 보낼 요청'; input.setAttribute('aria-label', '이 에셋에 보낼 요청');
-    const send = iconButton('send', '보내기', null); send.type = 'submit';
+    const dock = el('form', 'detailDock'), input = el('input'); input.placeholder = t('askThis'); input.setAttribute('aria-label', t('askThis'));
+    const send = iconButton('send', t('send'), null); send.type = 'submit';
     dock.onsubmit = (e) => { e.preventDefault(); const t = input.value.trim(); if (t && a.status !== 'working') request([a], t); };
     dock.append(draftPicker(), input, send);
     side.append(tabs, body, dock);
@@ -598,6 +764,7 @@
 
   /* ---------- dialogs ---------- */
   const dlg = $('dialog');
+  let reopen = null; // redraws the open dialog in a new language
   dlg.addEventListener('click', (e) => {
     if (e.target !== dlg) return;
     const q = dlg.getBoundingClientRect();
@@ -605,7 +772,7 @@
   });
   function openDialog(title) {
     dlg.textContent = '';
-    dlg.append(iconButton('close', '닫기', () => dlg.close(), 'ghost iconBtn dlgClose'), el('h2', '', title));
+    dlg.append(iconButton('close', t('close'), () => dlg.close(), 'ghost iconBtn dlgClose'), el('h2', '', title));
   }
   function toast(text) {
     const t = $('toast'); t.textContent = text; t.hidden = false;
@@ -618,122 +785,99 @@
     }
     toast(done);
   }
-  const licenseText = () => `${GAME} 소리 에셋 저작권 고지\n\n` + LICENSES.map((l) => `${l.name}\n  용도: ${l.use}\n  라이선스: ${l.license}\n  저작권자: ${l.holder}`).join('\n\n') + '\n';
-  const copyLicenses = () => copy(licenseText(), '저작권 고지를 복사했어요');
+  const licenseText = () => `${t('licenseTitle', tx(GAME))}\n\n` + LICENSES.map((l) => `${l.name}\n  ${t('use')}: ${tx(l.use)}\n  ${t('license')}: ${l.license}\n  ${t('holder')}: ${l.holder}`).join('\n\n') + '\n';
+  const copyLicenses = () => copy(licenseText(), t('copiedLicenses'));
 
-  const specExample = () => JSON.stringify({ game: GAME, platform: 'mobile', style: '따뜻한 나무 타악기와 하프 중심, 전투도 무겁지 않게', assets: [
-    { id: 'sfx_ui_click', name: '클릭', category: 'ui', length: 0.1, loop: false, when: '메뉴 버튼을 누를 때', description: '가볍고 나무 느낌' },
-    { id: 'sfx_combat_parry', name: '패링', category: 'combat', length: 0.3, loop: false, when: '적 공격을 막는 순간', description: '금속 울림이 짧게' },
-    { id: 'bgm_garden', name: '정원', category: 'bgm', length: 60, loop: true, when: '정원 화면', description: '잔잔한 하프와 현악' },
-  ], questions: [] }, null, 2);
+  const specExample = () => {
+    const ex = t('example'), ids = [['sfx_ui_click', 'ui', 0.1, false], ['sfx_combat_parry', 'combat', 0.3, false], ['bgm_garden', 'bgm', 60, true]];
+    return JSON.stringify({ game: tx(GAME), platform: 'mobile', style: ex.style, assets: ids.map(([id, category, length, loop], k) => ({ id, name: ex.assets[k].name, category, length, loop, when: ex.assets[k].when, description: ex.assets[k].description })), questions: [] }, null, 2);
+  };
   const specForm = () => JSON.stringify({ game: '', platform: '', style: '', assets: [{ id: '', name: '', category: '', length: 0, loop: false, when: '', description: '' }], questions: [] }, null, 2);
   // Only what this tool knows goes in. The game itself is the other agent's to fill in.
-  const specPrompt = () => `게임 소리 명세서를 JSON으로 작성해 주세요. 이 명세서를 소리 제작 도구에 넣어 에셋을 만듭니다.
+  const specPrompt = () => t('specPrompt', {
+    platforms: PROFILES.map((f) => f.id).filter((id) => id !== 'wide').join(', '),
+    cats: CATEGORIES.map((c) => c.id).join(', '),
+    dur: rule('dur').limit,
+    licenses: LICENSES.map((l) => `${l.name}(${l.license})`).join(', '),
+    form: specForm(),
+  });
 
-맡고 있는 게임의 기획서와 코드를 근거로, 게임에 필요한 소리를 빠짐없이 적어 주세요. 근거가 없는 값은 지어내지 말고 null로 두고, 정해야 할 것은 questions에 적어 주세요.
-
-항목
-- game: 게임 이름
-- platform: ${PROFILES.map((f) => f.id).filter((id) => id !== 'wide').join(', ')} 중 주요 기기
-- style: 게임 전체의 소리 방향, 한두 문장
-- assets: 소리 목록
-  - id: 효과음 sfx_, 환경음 amb_, 음악 bgm_ 로 시작하는 소문자 영문. 코드에 이미 쓰는 이름이 있으면 그대로
-  - name: 사람이 읽을 이름
-  - category: ${CATEGORIES.map((c) => c.id).join(', ')} 중 하나
-  - length: 목표 길이(초). 효과음은 ${rule('dur').limit}초 이하, 환경음은 끊기지 않는 반복 구간 8초나 16초
-  - loop: 반복 재생 여부. 환경음은 언제나 true
-  - when: 게임의 어떤 순간에 나는 소리인지
-  - description: 어떤 소리인지
-- questions: 사용자가 정해야 할 것
-
-저작권이 불분명한 곡이나 샘플은 참조하지 마세요. 쓸 수 있는 재료는 ${LICENSES.map((l) => `${l.name}(${l.license})`).join(', ')}입니다.
-
-설명 없이 아래 형식의 JSON만 답해 주세요.
-${specForm()}`;
-
-  function specDialog() {
-    openDialog('명세');
-    let tab = 'send';
+  function specDialog(tab = 'send', draft = '') {
+    openDialog(t('spec'));
+    reopen = () => specDialog(tab, $('specIn')?.value || draft);
     const body = el('div'), tabs = el('div', 'tabs'); tabs.style.padding = '0 0 0';
     const paint = () => {
       tabs.textContent = ''; body.textContent = '';
-      for (const [id, label] of [['send', '프롬프트 보내기'], ['receive', '명세 받기']]) { const b = el('button', '', label); b.setAttribute('aria-selected', String(tab === id)); b.onclick = () => { tab = id; paint(); }; tabs.append(b); }
+      for (const [id, label] of [['send', t('sendPrompt')], ['receive', t('receiveSpec')]]) { const b = el('button', '', label); b.setAttribute('aria-selected', String(tab === id)); b.onclick = () => { tab = id; paint(); }; tabs.append(b); }
       if (tab === 'send') {
-        body.append(el('p', '', '음악 작업을 하던 에이전트에게 붙여 넣으세요.'));
-        const area = el('textarea'); area.value = specPrompt(); area.readOnly = true; area.setAttribute('aria-label', '프롬프트');
-        const row = el('div', 'dlgRow'), b = el('button', 'primary', '프롬프트 복사'); b.id = 'copyPrompt'; b.onclick = () => copy(specPrompt(), '프롬프트를 복사했어요');
+        body.append(el('p', '', t('pasteToAgent')));
+        const area = el('textarea'); area.value = specPrompt(); area.readOnly = true; area.setAttribute('aria-label', t('prompt'));
+        const row = el('div', 'dlgRow'), b = el('button', 'primary', t('copyPrompt')); b.id = 'copyPrompt'; b.onclick = () => copy(specPrompt(), t('copiedPrompt'));
         row.append(b); body.append(area, row);
-      } else receive(body);
+      } else receive(body, draft);
     };
     dlg.append(tabs, el('div'), body); body.style.marginTop = '12px'; paint(); dlg.showModal();
   }
-  function receive(body) {
-    body.append(el('p', '', '에이전트가 준 명세를 붙여 넣으세요.'));
-    const area = el('textarea'); area.id = 'specIn'; area.setAttribute('aria-label', '명세');
-    const out = el('div'), row = el('div', 'dlgRow'), sample = el('button', 'ghost', '예시 넣기');
+  function receive(body, draft = '') {
+    body.append(el('p', '', t('pasteSpec')));
+    const area = el('textarea'); area.id = 'specIn'; area.setAttribute('aria-label', t('spec')); area.value = draft;
+    const out = el('div'), row = el('div', 'dlgRow'), sample = el('button', 'ghost', t('insertExample'));
     const check = () => { out.textContent = ''; if (area.value.trim()) out.append(...planSpec(area.value)); };
     area.oninput = check; sample.onclick = () => { area.value = specExample(); check(); };
-    row.append(sample); body.append(area, row, out);
+    row.append(sample); body.append(area, row, out); check();
   }
   function planSpec(text) {
     let spec;
-    try { spec = JSON.parse(text); } catch (e) { return [el('p', 'note err', `JSON이 아니에요: ${e.message}`)]; }
-    if (!Array.isArray(spec.assets)) return [el('p', 'note err', 'assets 목록이 없어요.')];
+    try { spec = JSON.parse(text); } catch (e) { return [el('p', 'note err', t('notJson', e.message))]; }
+    if (!Array.isArray(spec.assets)) return [el('p', 'note err', t('noAssets'))];
     const cats = CATEGORIES.map((c) => c.id), bad = spec.assets.filter((x) => !/^(sfx|amb|bgm)_[a-z0-9_]+$/.test(x.id || '') || !cats.includes(x.category));
-    if (bad.length) return [el('p', 'note err', `규칙에 맞지 않는 항목 ${bad.length}개: ${bad.map((x) => x.id || '이름 없음').join(', ')}`)];
-    const ids = new Set(spec.assets.map((x) => x.id)), added = spec.assets.filter((x) => !byId(x.id)), changed = spec.assets.filter((x) => byId(x.id) && byId(x.id).name !== x.name), kept = spec.assets.filter((x) => byId(x.id) && byId(x.id).name === x.name), gone = assets.filter((a) => !ids.has(a.id));
-    const out = [el('h3', '', `추가 ${added.length} · 변경 ${changed.length} · 유지 ${kept.length} · 삭제 ${gone.length}`)];
+    if (bad.length) return [el('p', 'note err', t('badItems', bad.length, bad.map((x) => x.id || t('noName')).join(', ')))];
+    const ids = new Set(spec.assets.map((x) => x.id)), added = spec.assets.filter((x) => !byId(x.id)), changed = spec.assets.filter((x) => byId(x.id) && nm(byId(x.id)) !== x.name), kept = spec.assets.filter((x) => byId(x.id) && nm(byId(x.id)) === x.name), gone = assets.filter((a) => !ids.has(a.id));
+    const out = [el('h3', '', t('planSummary', added.length, changed.length, kept.length, gone.length))];
     const line = (tag, cls, text) => { const r = el('div', 'lineItem'); r.append(el('span', 'tag ' + cls, tag), el('span', 'grow', text)); return r; };
-    added.forEach((x) => out.push(line('추가', 'add', `${x.name} · ${x.id}`)));
-    changed.forEach((x) => out.push(line('변경', 'chg', `${byId(x.id).name} → ${x.name}`)));
-    gone.slice(0, 6).forEach((a) => out.push(line('삭제', 'del', a.name)));
-    if (gone.length > 6) out.push(el('p', '', `외 ${gone.length - 6}개 삭제`));
-    const row = el('div', 'dlgRow'), run = el('button', 'primary', '이 명세로 작업 시작'), keep = el('button', '', '삭제 없이 추가만');
+    added.forEach((x) => out.push(line(t('tagAdd'), 'add', `${x.name} · ${x.id}`)));
+    changed.forEach((x) => out.push(line(t('tagChange'), 'chg', `${nm(byId(x.id))} → ${x.name}`)));
+    gone.slice(0, 6).forEach((a) => out.push(line(t('tagRemove'), 'del', nm(a))));
+    if (gone.length > 6) out.push(el('p', '', t('moreRemoved', gone.length - 6)));
+    const row = el('div', 'dlgRow'), run = el('button', 'primary', t('startWithSpec')), keep = el('button', '', t('addOnly'));
     const apply = (remove) => {
       const target = PROFILES.find((f) => f.id === spec.platform);
       if (target) rule('loud').range = [...target.loud];
-      added.forEach((x) => { const a = { id: x.id, name: x.name, cat: x.category, music: false, loop: !!x.loop || x.id.startsWith('amb_'), layers: x.id.startsWith('amb_') ? [STUDIO_DATA.bed(x.name, x.length >= 16 ? 16 : 8, 0.1, 0.4, [[1, 0.25, 0], [3, 0.15, 1]])] : [{ kind: 'tone', from: 500, to: 700, len: Math.min(0.6, x.length || 0.3), wave: 'triangle', gain: 0.4, at: 0 }], status: 'draft', versions: [], current: 0, drafts: [], pick: -1, chat: [], progress: 0 }; assets.push(a); make(a, {}, '명세에서 생성'); });
+      added.forEach((x) => { const a = { id: x.id, name: x.name, cat: x.category, music: false, loop: !!x.loop || x.id.startsWith('amb_'), layers: x.id.startsWith('amb_') ? [STUDIO_DATA.bed(x.name, x.length >= 16 ? 16 : 8, 0.1, 0.4, [[1, 0.25, 0], [3, 0.15, 1]])] : [{ kind: 'tone', from: 500, to: 700, len: Math.min(0.6, x.length || 0.3), wave: 'triangle', gain: 0.4, at: 0 }], status: 'draft', versions: [], current: 0, drafts: [], pick: -1, chat: [], progress: 0 }; assets.push(a); make(a, {}, { key: 'fromSpec' }); });
       changed.forEach((x) => { byId(x.id).name = x.name; });
       if (remove) gone.forEach((a) => assets.splice(assets.indexOf(a), 1));
-      dlg.close(); renderBoard(); toast(`명세를 적용했어요. 새 에셋 ${added.length}개`);
+      dlg.close(); renderBoard(); toast(t('specApplied', added.length));
     };
     run.onclick = () => apply(true); keep.onclick = () => apply(false);
     row.append(keep, run); out.push(row);
     return out;
   }
   function exportDialog() {
-    openDialog('내보내기');
+    openDialog(t('export')); reopen = exportDialog;
     const going = assets.filter((a) => a.status === 'approved'), undone = assets.filter((a) => a.status !== 'approved');
     const left = going.filter((a) => issues(a).length);
-    if (left.length) dlg.append(el('p', 'note err', `규격 문제가 남은 에셋 ${left.length}개도 함께 나갑니다: ${left.map((a) => a.name).join(', ')}`));
-    if (undone.length) dlg.append(el('p', 'note', `아직 승인되지 않은 에셋 ${undone.length}개는 빠집니다.`));
-    dlg.append(el('h3', '', '묶음에 들어가는 것'));
-    for (const t of ['승인한 소리 파일', '명세 game-audio.spec.json', 'CREDITS.md와 라이선스 원문']) dlg.append(Object.assign(el('div', 'lineItem'), { textContent: t }));
-    dlg.append(el('h3', '', '저작권'));
-    LICENSES.forEach((l) => { const r = el('div', 'lineItem'); r.append(el('span', 'grow', `${l.name} · ${l.use}`), el('span', 'tag', l.license)); dlg.append(r); });
-    const row = el('div', 'dlgRow'), go = el('button', 'primary', '묶음 내보내기'), lic = el('button', '', '저작권 전체 복사');
-    go.id = 'exportGo'; go.onclick = () => { dlg.close(); stage = 'export'; renderHeader(); toast('껍데기라 실제 파일은 아직 만들지 않아요'); };
+    if (left.length) dlg.append(el('p', 'note err', t('exportIssues', left.length, left.map(nm).join(', '))));
+    if (undone.length) dlg.append(el('p', 'note', t('exportUnapproved', undone.length)));
+    dlg.append(el('h3', '', t('inBundle')));
+    for (const item of t('bundleItems')) dlg.append(Object.assign(el('div', 'lineItem'), { textContent: item }));
+    dlg.append(el('h3', '', t('licenses')));
+    LICENSES.forEach((l) => { const r = el('div', 'lineItem'); r.append(el('span', 'grow', `${l.name} · ${tx(l.use)}`), el('span', 'tag', l.license)); dlg.append(r); });
+    const row = el('div', 'dlgRow'), go = el('button', 'primary', t('exportBundle')), lic = el('button', '', t('copyLicenses'));
+    go.id = 'exportGo'; go.onclick = () => { dlg.close(); stage = 'export'; renderHeader(); toast(t('shellOnly')); };
     lic.onclick = copyLicenses; row.append(lic, go); dlg.append(row);
     dlg.showModal();
   }
   function gameDialog() {
-    openDialog(GAME);
-    dlg.append(el('p', '', BRIEF));
-    const b = el('button', '', '샘플 단계부터 다시'); b.onclick = () => location.reload(); dlg.append(b);
+    openDialog(tx(GAME)); reopen = gameDialog;
+    dlg.append(el('p', '', tx(BRIEF)));
+    const b = el('button', '', t('restart')); b.onclick = () => location.reload(); dlg.append(b);
     dlg.showModal();
   }
 
-  const STEPS = [
-    ['명세 받기', '명세 버튼에서 프롬프트를 복사해 게임 기획서를 가진 AI에게 보내고, 돌아온 명세를 붙여 넣어요.'],
-    ['샘플 확인', '대표 소리가 먼저 나와요. 타일에 마우스를 올려 듣고 승인하세요.'],
-    ['나머지 만들기', '승인한 샘플의 스타일로 나머지를 한 번에 만들어요.'],
-    ['고치기', '타일을 누르면 선택되고 소리가 나요. 여러 개를 고르고 바꿀 내용을 적으세요. 시안 개수를 늘리면 여러 안을 비교해 고를 수 있어요. 길게 누르면 크게 열려요.'],
-    ['내보내기', '승인한 소리를 저작권 고지와 함께 묶어요. 규격 검사는 AI가 소리를 내놓기 전에 끝내요.'],
-  ];
   function tutorial() {
-    openDialog('게임 소리 만드는 법');
+    openDialog(t('tutorialTitle')); reopen = tutorial;
     const list = el('ol', 'steps');
-    for (const [what, how] of STEPS) { const li = el('li'); li.append(el('b', '', what), el('span', '', how)); list.append(li); }
+    for (const [what, how] of t('steps')) { const li = el('li'); li.append(el('b', '', what), el('span', '', how)); list.append(li); }
     dlg.append(list); dlg.showModal();
   }
 
@@ -747,8 +891,19 @@ ${specForm()}`;
     }
     if (e.data?.type === 'asset:hide') { queue = null; stopSound(); }
   });
+  function setLang(next) {
+    if (!LANGS.includes(next)) return;
+    lang = next; applyStatic();
+    const typed = document.querySelector('.detailDock input')?.value;
+    $('draftSlot').replaceChildren(draftPicker());
+    if (openAsset) { renderDetail(); const input = document.querySelector('.detailDock input'); if (input && typed) input.value = typed; } else renderBoard();
+    markPlaying();
+    if (dlg.open && reopen) { const again = reopen; dlg.close(); again(); }
+  }
+  addEventListener('message', (e) => { if (e.data?.type === 'asset:lang') setLang(e.data.lang); });
 
   /* ---------- start ---------- */
+  applyStatic();
   setIcon($('backBtn'), 'music'); setIcon($('send'), 'send'); setIcon($('playAll'), 'play'); setIcon($('gameName'), 'folder'); setIcon($('specBtn'), 'spec'); setIcon($('exportBtn'), 'download'); setIcon($('helpBtn'), 'help');
   $('helpBtn').onclick = tutorial; $('specBtn').onclick = specDialog; $('exportBtn').onclick = exportDialog; $('gameName').onclick = gameDialog;
   addEventListener('resize', () => { if (openAsset) renderDetail(); else assets.filter((a) => a.versions.length).forEach(drawTile); });
