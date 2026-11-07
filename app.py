@@ -13,7 +13,11 @@ from credits import FREE_CREDITS, LedgerError, LocalLedger, RemoteLedger, price_
 
 st.set_page_config(page_title="olmuse", page_icon="◉", layout="wide", initial_sidebar_state="collapsed")
 
+HERE = Path(__file__).parent
+LOCAL_SECRETS = Path.home() / ".all-tomorrow"  # this PC only; Cloud uses Streamlit Secrets
 
+
+# ---------- settings ----------
 def setting(name, default=""):
     value = os.environ.get(name)
     if value is not None:
@@ -24,35 +28,40 @@ def setting(name, default=""):
         return default
 
 
-def key_pool():
-    """Local-only key file. Absent on Cloud, where Streamlit Secrets are used."""
+def local_file(name, encoding="utf-8"):
     try:
-        lines = (Path.home() / ".all-tomorrow" / "key-pool.env").read_text(encoding="utf-8").splitlines()
+        return (LOCAL_SECRETS / name).read_text(encoding=encoding)
     except OSError:
-        return {}
+        return ""
+
+
+def key_pool():
+    lines = local_file("key-pool.env").splitlines()
     pairs = (line.removeprefix("export ").split("=", 1) for line in lines if "=" in line and not line.lstrip().startswith("#"))
     return {name.strip(): value.strip().strip("'\"") for name, value in pairs}
 
 
-def choose_model():
-    """AI_PROVIDER picks one engine outright. Unset: school Gemini, Gemini, Claude, then local agy."""
+def secret(*names):
+    """The first of names that is set, in settings first and then the local key pool."""
     pool = key_pool()
+    return next((value for name in names if (value := setting(name) or pool.get(name, ""))), "")
 
-    def secret(*names):
-        return next((value for name in names if (value := setting(name) or pool.get(name, ""))), "")
 
-    gemini_key = secret("SCHOOL_GEMINI_API_KEY", "GEMINI_API_KEY")
-    claude_key = secret("ANTHROPIC_API_KEY")
-    provider = setting("AI_PROVIDER").strip().lower()
+# The public server never sets this, so it alone must not unlock anything that spends a key on a public URL.
+LOCAL_AI = setting("STRUDEL_LOCAL_AI") == "1"
+
+
+# ---------- AI engine and credit ledger ----------
+def choose_model():
+    """STRUDEL_ENGINE=agy forces the local CLI. AI_PROVIDER picks one API outright; unset, Gemini comes before Claude."""
     if setting("STRUDEL_ENGINE") == "agy":
         return AgyCli()
-    if provider == "gemini":
-        claude_key = ""
-    if provider == "claude":
-        gemini_key = ""
+    provider = setting("AI_PROVIDER").strip().lower()
+    gemini_key = "" if provider == "claude" else secret("SCHOOL_GEMINI_API_KEY", "GEMINI_API_KEY")
+    claude_key = "" if provider == "gemini" else secret("ANTHROPIC_API_KEY")
     if gemini_key or claude_key:
         return Router(gemini_key, claude_key, setting("GEMINI_MODEL"), setting("GEMINI_BASE_URL"), setting("CLAUDE_MODEL"), provider)
-    return AgyCli() if setting("STRUDEL_LOCAL_AI") == "1" else None
+    return AgyCli() if LOCAL_AI else None
 
 
 @st.cache_resource
@@ -64,36 +73,19 @@ def jobs():
 def ledger():
     """The Lambda ledger when configured; otherwise a local file that only this PC sees."""
     url = setting("STRUDEL_CREDITS_URL")
-    token = setting("STRUDEL_CREDITS_TOKEN")
-    if not token:
-        try:
-            token = (Path.home() / ".all-tomorrow" / "strudel-credits.token").read_text(encoding="ascii").strip()
-        except OSError:
-            token = ""
+    token = setting("STRUDEL_CREDITS_TOKEN") or local_file("strudel-credits.token", "ascii").strip()
     if url and token:
         return RemoteLedger(url, token)
-    folder = Path(__file__).with_name(".studio-data")
+    folder = HERE / ".studio-data"
     folder.mkdir(exist_ok=True)
     return LocalLedger(str(folder / "credits.sqlite"), pepper=setting("STRUDEL_CREDITS_PEPPER", "local-only"))
 
 
-def google_ready():
-    try:
-        return "auth" in st.secrets
-    except Exception:
-        return False
-
-
-def google_login():
-    auth = st.secrets["auth"]
-    st.login("google") if "google" in auth else st.login()
-
-
-CHROME = """<style>
+# ---------- page text ----------
+st.markdown("""<style>
 [data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stDecoration"], [data-testid="stStatusWidget"],
 [data-testid="InputInstructions"], footer, #MainMenu {display:none !important}
-</style>"""
-st.markdown(CHROME, unsafe_allow_html=True)
+</style>""", unsafe_allow_html=True)
 
 TEXT = {
     "en": {"google": "Continue with Google · {n} free credits", "password": "Password", "enter": "Enter", "wrong": "Wrong password.",
@@ -108,11 +100,27 @@ lang = lang if lang in TEXT else "en"
 st.session_state.lang = lang
 T = TEXT[lang]
 
-password = setting("STUDIO_PASSWORD")
-google = google_ready()
-teacher = bool(st.session_state.get("studio_authenticated"))
-member = google and bool(st.user.is_logged_in)
-if (password or google) and not (teacher or member):
+
+def switch_lang(chosen, scope="app"):
+    st.session_state.lang = chosen
+    st.query_params["lang"] = chosen
+    st.rerun(scope=scope)
+
+
+# ---------- sign-in ----------
+def google_ready():
+    try:
+        return "auth" in st.secrets
+    except Exception:
+        return False
+
+
+def google_login():
+    auth = st.secrets["auth"]
+    st.login("google") if "google" in auth else st.login()
+
+
+def login_screen(password, google):
     _, middle, _ = st.columns([1, 2, 1])
     with middle:
         head, pick = st.columns([3, 2], vertical_alignment="center")
@@ -120,9 +128,7 @@ if (password or google) and not (teacher or member):
         chosen = pick.segmented_control("lang", ["en", "ko"], default=lang, format_func={"en": "English", "ko": "한국어"}.get,
                                         label_visibility="collapsed", key="lang_pick")
         if chosen and chosen != lang:
-            st.query_params["lang"] = chosen
-            st.session_state.lang = chosen
-            st.rerun()
+            switch_lang(chosen)
         if google:
             st.button(T["google"].format(n=FREE_CREDITS), type="primary", on_click=google_login, icon=":material/login:", use_container_width=True)
         if password:
@@ -135,9 +141,17 @@ if (password or google) and not (teacher or member):
                     else:
                         st.error(T["wrong"])
     st.stop()
+
+
+password = setting("STUDIO_PASSWORD")
+google = google_ready()
+teacher = bool(st.session_state.get("studio_authenticated"))  # password holders use the owner's key without credits
+member = google and bool(st.user.is_logged_in)
+if (password or google) and not (teacher or member):
+    login_screen(password, google)
 email = str(st.user.get("email") or "").strip().lower() if member and not teacher else ""
-if not email and not google and not teacher and setting("STRUDEL_LOCAL_AI") == "1":
-    email = setting("STRUDEL_DEV_EMAIL").strip().lower()  # local testing of credits only; the public server never sets STRUDEL_LOCAL_AI
+if not email and not google and not teacher and LOCAL_AI:
+    email = setting("STRUDEL_DEV_EMAIL").strip().lower()  # lets credits be tried locally
 
 
 def account_view(refresh=False, history=False):
@@ -161,6 +175,8 @@ def account_view(refresh=False, history=False):
     view["history"] = st.session_state.get("studio_history")
     return view
 
+
+# ---------- game pages ----------
 st.session_state.setdefault("studio_owner", secrets.token_urlsafe(24))
 st.session_state.setdefault("studio_page", "music")
 
@@ -172,20 +188,50 @@ if st.session_state.studio_page != "music":
     if right.button(T["switch"]):
         st.session_state.studio_page = "blackbox" if st.session_state.studio_page == "arcade" else "arcade"
         st.rerun()
-    runpy.run_path(str(Path(__file__).with_name("arcade_page.py" if st.session_state.studio_page == "arcade" else "blackbox_page.py")))
+    runpy.run_path(str(HERE / ("arcade_page.py" if st.session_state.studio_page == "arcade" else "blackbox_page.py")))
     st.stop()
 
+
+# ---------- music studio ----------
 st.markdown("""<style>
-[data-testid="stHeader"] {display:none}
 [data-testid="stMainBlockContainer"] {max-width:none;padding:0}
 html,body,[data-testid="stApp"] {background:#0f0f0f}
 iframe {display:block}
 [data-testid="stVerticalBlock"]:has(iframe) {gap:0}
 </style>""", unsafe_allow_html=True)
-studio = components.declare_component("studio", path=str(Path(__file__).parent / "studio_frontend"))
+studio = components.declare_component("studio", path=str(HERE / "studio_frontend"))
 owner = st.session_state.studio_owner
-# A public URL must never be able to spend the key, so AI needs a password or an explicit local flag.
-ai_ready = jobs().model is not None and (teacher or bool(email) or setting("STRUDEL_LOCAL_AI") == "1")
+# A public URL must never be able to spend the key, so AI needs a password, a signed-in account or the local flag.
+ai_ready = jobs().model is not None and (teacher or bool(email) or LOCAL_AI)
+
+
+def handle(action, payload, manager, choices):
+    if action == "generate":
+        if not ai_ready:
+            raise ValueError(T["no_ai"])
+        req = validate_request({"lang": lang, **payload} if isinstance(payload, dict) else payload)
+        req["model"] = req["model"] or (choices or {}).get("model", "")
+        if email:
+            req["account"] = email
+        manager.submit(owner, req)
+    elif action == "account":
+        account_view(refresh=True, history=True)
+    elif action == "logout":
+        manager.cancel(owner)
+        st.session_state.pop("studio_account", None)
+        st.logout()
+    elif action == "cancel":
+        manager.cancel(owner)
+    elif action == "feedback":
+        manager.feedback(owner, payload)
+    elif action == "lang":
+        chosen = (payload or {}).get("lang")
+        if chosen in TEXT and chosen != lang:
+            switch_lang(chosen)
+    elif action == "game":
+        manager.cancel(owner)
+        st.session_state.studio_page = "arcade"
+        st.rerun(scope="app")
 
 
 @st.fragment(run_every=1)
@@ -206,36 +252,7 @@ def render():
     st.session_state.studio_event = event_id
     st.session_state.studio_error = ""
     try:
-        action = result.get("action")
-        if action == "generate":
-            if not ai_ready:
-                raise ValueError(T["no_ai"])
-            payload = result["payload"]
-            req = validate_request({"lang": lang, **payload} if isinstance(payload, dict) else payload)
-            req["model"] = req["model"] or (choices or {}).get("model", "")
-            if email:
-                req["account"] = email
-            manager.submit(owner, req)
-        elif action == "account":
-            account_view(refresh=True, history=True)
-        elif action == "logout":
-            manager.cancel(owner)
-            st.session_state.pop("studio_account", None)
-            st.logout()
-        elif action == "cancel":
-            manager.cancel(owner)
-        elif action == "feedback":
-            manager.feedback(owner, result.get("payload", {}))
-        elif action == "lang":
-            chosen = (result.get("payload") or {}).get("lang")
-            if chosen in TEXT and chosen != lang:
-                st.session_state.lang = chosen
-                st.query_params["lang"] = chosen
-                st.rerun(scope="app")
-        elif action == "game":
-            manager.cancel(owner)
-            st.session_state.studio_page = "arcade"
-            st.rerun(scope="app")
+        handle(result.get("action"), result.get("payload"), manager, choices)
     except (ValueError, KeyError, TypeError) as exc:
         st.session_state.studio_error = str(exc)
 

@@ -104,11 +104,11 @@ def transact(ops):
     try:
         ddb().transact_write_items(TransactItems=ops)
         return None
-    except Exception as e:  # botocore ClientError
-        resp_ = getattr(e, "response", None) or {}
-        if resp_.get("Error", {}).get("Code") != "TransactionCanceledException":
+    except Exception as e:  # botocore ClientError, 시험의 가짜도 같은 모양
+        err = getattr(e, "response", None) or {}
+        if err.get("Error", {}).get("Code") != "TransactionCanceledException":
             raise
-        return [(r or {}).get("Code", "None") for r in resp_.get("CancellationReasons", [])] or ["Unknown"]
+        return [(r or {}).get("Code", "None") for r in err.get("CancellationReasons", [])] or ["Unknown"]
 
 
 # ---------- 계정 ----------
@@ -131,7 +131,7 @@ def hist(key, ver, kind, amount, credits, note):
 def apply(key, delta, kind, note, extra=(), need_balance=False):
     """잔액을 delta 만큼 바꾸고 기록을 남긴다. extra 연산과 한 트랜잭션.
     반환: ("ok", 새 잔액) | ("short", 잔액) | ("dup", 잔액: extra 조건 실패) | ("noacct", 0)"""
-    for _ in range(10):
+    for attempt in range(10):
         acc = get(f"ACC#{key}")
         if not acc:
             return "noacct", 0
@@ -147,7 +147,7 @@ def apply(key, delta, kind, note, extra=(), need_balance=False):
             return "ok", new
         if any(c == "ConditionalCheckFailed" for c in r[:len(extra)]):
             return "dup", acc["credits"]
-        time.sleep(0.02 * (_ + 1))  # 계정 ver 충돌 또는 트랜잭션 충돌 → 다시 읽고 재시도
+        time.sleep(0.02 * (attempt + 1))  # 계정 ver 충돌 또는 트랜잭션 충돌 → 다시 읽고 재시도
     raise RuntimeError("busy")
 
 
@@ -238,6 +238,38 @@ def find_owner(data):
     return None, False
 
 
+def is_payment(kind):
+    return (kind.startswith(PAYMENT_PREFIXES) and not kind.endswith(".updated")) or kind in SUBSCRIPTION_STARTS
+
+
+def payment_item(pid, ev, data):
+    """PAY# 항목. 크레딧은 USD 결제만 환산한다."""
+    try:
+        amount = Decimal(str(data.get("amount") or 0))
+    except ArithmeticError:
+        amount = Decimal(0)
+    currency = str(data.get("currency") or "USD").upper()
+    cpu = Decimal(os.environ.get("CREDITS_PER_USD", "20"))
+    credits = int((amount * cpu).to_integral_value(rounding=ROUND_FLOOR)) if currency == "USD" and amount > 0 else 0
+    return {"pk": f"PAY#{pid}", "sk": "META", "amount": str(amount), "currency": currency, "credits": credits,
+            "at": str(data.get("created_at") or ev.get("created") or ""), "received": now_iso(),
+            "test": str(ev.get("live_mode", True)).lower() == "false"}
+
+
+def hold_payment(pay, pid, key):
+    """계정에 바로 못 넣은 결제를 보관한다. key 가 있으면 가입할 때 찾아가고, 없으면 orphan."""
+    if key:
+        r = transact([op_put({**pay, "st": "unclaimed", "owner": key}, "attribute_not_exists(pk)"),
+                      op_put({"pk": f"UNCLAIMED#{key}", "sk": f"PAY#{pid}"})])
+    else:
+        r = transact([op_put({**pay, "st": "orphan"}, "attribute_not_exists(pk)")])
+    if r is None:
+        return resp(200, {"ok": True, "applied": False, "held": True})
+    if r[0] == "ConditionalCheckFailed":
+        return resp(200, {"ok": True, "duplicate": True})
+    raise RuntimeError(f"store failed: {r}")
+
+
 def webhook(event):
     body = raw_body(event)
     sig = (event.get("headers") or {}).get("x-signature-sha256", "").strip().lower()
@@ -255,40 +287,21 @@ def webhook(event):
     pid = f"{kind.split('.')[0]}:{rid}"
     if "refund" in kind:
         return refund_event(pid)
-    is_money = (kind.startswith(PAYMENT_PREFIXES) and not kind.endswith(".updated")) or kind in SUBSCRIPTION_STARTS
-    if not is_money:
+    if not is_payment(kind):
         return resp(200, {"ok": True, "applied": False})
-    if kind in SUBSCRIPTION_STARTS:
+    if kind in SUBSCRIPTION_STARTS:  # 구독은 기간마다 새 결제
         pid += f":{data.get('current_period_start') or data.get('started_at') or ''}"
-    test = str(ev.get("live_mode", True)).lower() == "false"
-    try:
-        amount = Decimal(str(data.get("amount") or 0))
-    except ArithmeticError:
-        amount = Decimal(0)
-    currency = str(data.get("currency") or "USD").upper()
-    cpu = Decimal(os.environ.get("CREDITS_PER_USD", "20"))
-    credits = int((amount * cpu).to_integral_value(rounding=ROUND_FLOOR)) if currency == "USD" and amount > 0 else 0
-    pay = {"pk": f"PAY#{pid}", "sk": "META", "amount": str(amount), "currency": currency, "credits": credits,
-           "at": str(data.get("created_at") or ev.get("created") or ""), "received": now_iso(), "test": test}
+    pay = payment_item(pid, ev, data)
     key, exists = find_owner(data)
     if key and exists:
-        st, bal = apply(key, credits, "buy", pay_note(pay),
-                        extra=[op_put({**pay, "st": "applied", "acct": key}, "attribute_not_exists(pk)")])
+        st, _ = apply(key, pay["credits"], "buy", pay_note(pay),
+                      extra=[op_put({**pay, "st": "applied", "acct": key}, "attribute_not_exists(pk)")])
         if st == "ok":
-            return resp(200, {"ok": True, "applied": True, "credits": credits})
+            return resp(200, {"ok": True, "applied": True, "credits": pay["credits"]})
         if st == "dup":
             return resp(200, {"ok": True, "duplicate": True})
         # 계정이 사라졌다 → 주인 없는 결제로
-    if key:
-        r = transact([op_put({**pay, "st": "unclaimed", "owner": key}, "attribute_not_exists(pk)"),
-                      op_put({"pk": f"UNCLAIMED#{key}", "sk": f"PAY#{pid}"})])
-    else:
-        r = transact([op_put({**pay, "st": "orphan"}, "attribute_not_exists(pk)")])
-    if r is not None:
-        if r[0] == "ConditionalCheckFailed":
-            return resp(200, {"ok": True, "duplicate": True})
-        raise RuntimeError(f"store failed: {r}")
-    return resp(200, {"ok": True, "applied": False, "held": True})
+    return hold_payment(pay, pid, key)
 
 
 def refund_event(pid):

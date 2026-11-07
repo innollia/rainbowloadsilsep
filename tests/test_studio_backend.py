@@ -437,6 +437,7 @@ def test_lang_picks_message_language_and_falls_back_to_english():
         jobs.submit("o", request(lang=lang))
         assert [m["text"] for m in drive(jobs)["messages"]] == [done]
         assert fake.last_prompt.endswith(sb.MSG[lang]["reply_lang"])
+    assert "Korean" not in sb.BASE_SYSTEM  # the reply language comes only from reply_lang
     fake = Fake(); jobs = sb.Jobs(fake)
     jobs.submit("o", request(auto=True, lang="ko"))
     while not jobs.snapshot("o")["candidate"]:

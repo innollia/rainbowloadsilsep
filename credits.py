@@ -84,6 +84,14 @@ class LocalLedger:
     def _credits(self, key) -> int:
         return self.db.execute("select credits from accounts where key=?", (key,)).fetchone()[0]
 
+    def _add(self, key, delta: int) -> int:
+        self.db.execute("update accounts set credits=credits+? where key=?", (delta, key))
+        return self._credits(key)
+
+    def _opened(self, email: str) -> str:
+        self.account(email)
+        return self._key(email)
+
     def account(self, email: str) -> dict:
         key = self._key(email)
         with self.lock, self.db:
@@ -101,25 +109,21 @@ class LocalLedger:
             return {"code": code, "credits": self.free, "free": True}
 
     def grant(self, email: str, amount: int, note: str = "구매") -> int:
-        self.account(email)
-        key = self._key(email)
+        key = self._opened(email)
         with self.lock, self.db:
-            self.db.execute("update accounts set credits=credits+? where key=?", (amount, key))
-            credits = self._credits(key)
+            credits = self._add(key, amount)
             self._log(key, "buy", amount, credits, note)
             return credits
 
     def charge(self, email: str, amount: int, ref: str) -> tuple[bool, int]:
-        self.account(email)
-        key = self._key(email)
+        key = self._opened(email)
         with self.lock, self.db:
             if self.db.execute("select 1 from refs where ref=?", (ref,)).fetchone():
                 return True, self._credits(key)
             if self._credits(key) < amount:
                 return False, self._credits(key)
-            self.db.execute("update accounts set credits=credits-? where key=?", (amount, key))
             self.db.execute("insert into refs (ref, key, amount) values (?,?,?)", (ref, key, amount))
-            credits = self._credits(key)
+            credits = self._add(key, -amount)
             self._log(key, "charge", -amount, credits, ref.split(":")[0][:12])
             return True, credits
 
@@ -129,8 +133,7 @@ class LocalLedger:
             row = self.db.execute("select amount, refunded from refs where ref=? and key=?", (ref, key)).fetchone()
             if row and not row[1]:
                 self.db.execute("update refs set refunded=1 where ref=?", (ref,))
-                self.db.execute("update accounts set credits=credits+? where key=?", (row[0], key))
-                self._log(key, "refund", row[0], self._credits(key), "실패한 호출")
+                self._log(key, "refund", row[0], self._add(key, row[0]), "실패한 호출")
             return self._credits(key)
 
     def history(self, email: str) -> list:
