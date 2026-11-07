@@ -172,4 +172,3 @@ dialog input[type=text], dialog select { background:var(--raised); border:0; bor
 .creditHistory { margin:16px 0; max-height:240px; overflow:auto; }
 .creditHistory .lineItem { display:flex; gap:8px; padding:6px 0; border-top:1px solid var(--divider); font-size:.85rem; }
 .creditHistory .grow { flex:1; color:var(--text2); }
-#langPick { height:36px; background:var(--raised); color:var(--text2); border:0; border-radius:10px; padding:0 6px; font-size:.78rem; }

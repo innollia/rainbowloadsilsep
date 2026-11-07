@@ -22,7 +22,6 @@
     document.querySelectorAll('[data-i18n]').forEach((e) => { e.textContent = t(e.dataset.i18n); });
     document.querySelectorAll('[data-i18n-aria]').forEach((e) => e.setAttribute('aria-label', t(e.dataset.i18nAria)));
     document.querySelectorAll('[data-i18n-title]').forEach((e) => { e.title = t(e.dataset.i18nTitle); });
-    $('langPick').value = i18n.lang;
   }
   applyStatic();
 
@@ -605,12 +604,18 @@
     scale.value = db.scale || 100;
     scale.onchange = () => { db.scale = +scale.value; applyScale(); touched(); };
     dlg.append(row(t('font_size'), scale));
+    const langPick = el('select');
+    langPick.setAttribute('aria-label', t('language'));
+    langPick.add(new Option('English', 'en')); langPick.add(new Option('한국어', 'ko'));
+    langPick.value = i18n.lang;
+    langPick.onchange = () => { const next = langPick.value; pendingLang = next; setLang(next); send('lang', { lang: next }); settingsDialog(); };
+    dlg.append(row(t('language'), langPick));
     dlg.append(row(aiEnabled ? t('ai_on', { e: engineName }) : t('ai_off')));
     dlg.append(heading('h3', t('tips')));
     for (const [what, how] of raw('tip_list')) dlg.append(el('div', { className: 'row' }, el('b', { textContent: what }), how));
     dlg.append(heading('h3', t('misc')));
     dlg.append(row('', button(t('play_game'), () => { stop(); persist(); dlg.close(); send('game', {}); })));
-    dlg.showModal();
+    if (!dlg.open) dlg.showModal();
   }
   /* ---------- code editor ---------- */
   let soundNames = [], editor = null, editorOpen = false, editorDirty = false, editorBase = '';
@@ -853,7 +858,6 @@
     for (const mode of Object.keys(engines)) postTo(mode, engineText('lang'));
   }
   // Until Streamlit echoes the new language back, older renders must not switch it back.
-  $('langPick').onchange = (e) => { const next = e.target.value; pendingLang = next; setLang(next); send('lang', { lang: next }); };
 
   /* ---------- start ---------- */
   (async () => {
