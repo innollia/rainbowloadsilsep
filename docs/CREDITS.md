@@ -5,7 +5,7 @@
 1. 첫 화면에서 구글 계정으로 로그인한다. 처음 로그인한 계정에 무료 20 크레딧이 들어간다.
 2. AI를 부를 때마다 그 호출 값만큼 빠진다. 호출이 실패하면 돌려준다. 크레딧이 모자라면 부르기 전에 멈춘다.
 3. 위쪽 `크레딧` 버튼에서 남은 양, 호출당 값, 내역, 충전 코드가 보인다.
-4. 충전은 Buy Me a Coffee 후원이다. 1달러당 20 크레딧. 메시지에 `SD-XXXXXX` 코드를 적거나 로그인한 구글 이메일로 결제하면 그 계정에 들어간다. 둘 다 아니면 그 이메일로 처음 로그인할 때 들어간다.
+4. 충전은 Buy Me a Coffee 결제다. 1달러당 20 크레딧. 메시지에 계정의 `SD-XXXXXX` 코드가 있어야 그 계정에 들어간다. 코드가 없으면 블로그 후원으로만 처리된다. 결제는 블로그의 `bmc-webhook`이 받아 코드 건만 장부로 넘긴다(`deploy/credits/README.md`).
 5. 선생님 비밀번호로 연 작업실은 크레딧을 쓰지 않는다.
 
 ## 값 (호출 1번당)
@@ -36,7 +36,7 @@
 | 이름 | 위치 | 뜻 |
 |---|---|---|
 | `[auth]` | `.streamlit/secrets.toml` 또는 Cloud Secrets | 구글 로그인. 아래 예시 |
-| `STRUDEL_CREDITS_URL` | 환경 변수 또는 Secrets | 장부 Lambda 주소. 없으면 이 PC의 `.studio-data/credits.sqlite`만 쓴다 |
+| `STRUDEL_CREDITS_URL` | 환경 변수 또는 Secrets. `run_public.ps1`이 넣는다 | 장부 Lambda 주소. 없으면 이 PC의 `.studio-data/credits.sqlite`만 쓴다 |
 | `STRUDEL_CREDITS_TOKEN` | Secrets. 이 PC에서는 `~/.all-tomorrow/strudel-credits.token` | 장부 호출 토큰 |
 | `STRUDEL_BUY_URL` | 선택 | 기본 `https://buymeacoffee.com/innollia` |
 | `STRUDEL_CREDITS_PER_USD` | 선택 | 화면에 보이는 값. Lambda의 `CREDITS_PER_USD`와 같아야 한다 |

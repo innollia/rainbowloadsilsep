@@ -261,7 +261,7 @@
     table.append(Object.assign(document.createElement('span'), { textContent: '깊게 추론' }), Object.assign(document.createElement('b'), { textContent: `+${account.prices.efforts.high}` }));
     const buy = document.createElement('div'); buy.className = 'creditBuy';
     const text = document.createElement('p');
-    text.textContent = `Buy Me a Coffee에서 후원하면 1달러당 ${account.per_usd} 크레딧이 들어와. 메시지 칸에 아래 코드를 적거나, 이 계정 이메일(${account.email})로 결제해 줘.`;
+    text.textContent = `Buy Me a Coffee에서 1달러당 ${account.per_usd} 크레딧. 결제할 때 메시지 칸에 아래 코드를 꼭 적어 줘. 코드가 없으면 후원으로만 처리돼. 몇 초 뒤 내역에 들어와.`;
     const code = document.createElement('button'); code.className = 'ghost creditCode'; code.textContent = account.code; code.title = '복사';
     code.onclick = () => navigator.clipboard?.writeText(account.code).then(() => { code.textContent = '복사했어'; setTimeout(() => (code.textContent = account.code), 1200); });
     const go = document.createElement('a'); go.className = 'primaryLink'; go.href = account.buy_url; go.target = '_blank'; go.rel = 'noopener'; go.textContent = '충전하러 가기';

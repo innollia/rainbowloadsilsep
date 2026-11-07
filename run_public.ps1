@@ -8,6 +8,7 @@ $pool = Join-Path $HOME '.all-tomorrow\key-pool.env'
 $line = Get-Content $pool | Where-Object { $_ -match '^(export\s+)?STUDIO_PASSWORD=' } | Select-Object -First 1
 if (-not $line) { throw 'STUDIO_PASSWORD is missing from key-pool.env' }
 $env:STUDIO_PASSWORD = $line.Split('=', 2)[1].Trim()
+$env:STRUDEL_CREDITS_URL = 'https://6wasuz6jowaayhoedd4h3vmthe0alpoq.lambda-url.ap-northeast-2.on.aws'  # 장부. 토큰은 ~/.all-tomorrow/strudel-credits.token
 $env:STRUDEL_DAILY_CALLS = '200'
 Remove-Item Env:STRUDEL_LOCAL_AI -ErrorAction SilentlyContinue
 Stop-Server
