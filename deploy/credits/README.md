@@ -1,6 +1,6 @@
 # 크레딧 장부 (strudel-credits)
 
-Buy Me a Coffee 결제를 딸깍이 크레딧으로 바꾸고, 앱이 크레딧을 차감·환불하는 서버다.
+Buy Me a Coffee 결제를 olmuse 크레딧으로 바꾸고, 앱이 크레딧을 차감·환불하는 서버다.
 AWS Lambda(Function URL, 인증 없음) + DynamoDB 테이블 1개, 리전 `ap-northeast-2`. 함수와 테이블 이름은 둘 다 `strudel-credits`이다.
 
 - 웹훅 URL: `https://6wasuz6jowaayhoedd4h3vmthe0alpoq.lambda-url.ap-northeast-2.on.aws/webhooks/bmc`

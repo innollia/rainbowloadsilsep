@@ -1,4 +1,4 @@
-"""AI side of strudel 딸깍이: Gemini calls, scope checks and the bounded feedback loop.
+"""AI side of olmuse (구 strudel 딸깍이): Gemini calls, scope checks and the bounded feedback loop.
 
 The browser owns sound. This module owns decisions: every limit is enforced here so a
 tampered or stuck page cannot make it spend more than one request allows.

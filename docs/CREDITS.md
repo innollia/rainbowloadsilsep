@@ -59,7 +59,7 @@ client_secret = "<클라이언트 시크릿>"
 server_metadata_url = "https://accounts.google.com/.well-known/openid-configuration"
 ```
 
-주의: 지금 공개 주소는 cloudflared 임시 터널이라 터널을 다시 열면 주소가 바뀌고, 그때마다 리디렉션 URI도 바꿔야 한다. 고정 주소가 필요하다.
+주의: 지금 공개 주소는 cloudflared 임시 터널이라 터널을 다시 열면 주소가 바뀐다. 고정 주소는 `olmuse.app`으로 정했다(2026-11-07, 구매는 사람이 한다). 산 뒤에는 이름 있는 터널로 연결하고 리디렉션 URI를 `https://olmuse.app/oauth2callback`으로 넣는다.
 
 ### 로컬 시험
 

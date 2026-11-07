@@ -1,4 +1,6 @@
-# strudel 딸깍이
+# olmuse
+
+LLM으로만 음악을 만드는 작업실(only LLM music). 예전 이름은 strudel 딸깍이.
 
 코드를 보지 않고 자연어로 Strudel 음악을 만드는 작업실이다. 기존 아케이드와 BLACK BOX 09는 설정 → 게임하기에 있다.
 

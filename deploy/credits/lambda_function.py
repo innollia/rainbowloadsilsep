@@ -1,4 +1,4 @@
-"""strudel 딸깍이 크레딧 장부 (Lambda Function URL + DynamoDB 한 테이블).
+"""olmuse (구 strudel 딸깍이) 크레딧 장부 (Lambda Function URL + DynamoDB 한 테이블).
 
   POST /webhooks/bmc   BMC 웹훅. x-signature-sha256 = HMAC-SHA256(BMC_WEBHOOK_SECRET, 원문) 16진수. 틀리면 403.
   POST /api/account    {email}               → {code, credits, free}

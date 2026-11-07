@@ -1,4 +1,4 @@
-"""strudel 딸깍이 — Streamlit entry point."""
+"""olmuse (구 strudel 딸깍이) — Streamlit entry point."""
 from pathlib import Path
 import os
 import hmac
@@ -11,7 +11,7 @@ import streamlit.components.v1 as components
 from studio_backend import AgyCli, Jobs, Router, validate_request
 from credits import FREE_CREDITS, LedgerError, LocalLedger, RemoteLedger, price_table
 
-st.set_page_config(page_title="strudel 딸깍이", page_icon="◉", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="olmuse", page_icon="◉", layout="wide", initial_sidebar_state="collapsed")
 
 
 def setting(name, default=""):
@@ -94,7 +94,7 @@ google = google_ready()
 teacher = bool(st.session_state.get("studio_authenticated"))
 member = google and bool(st.user.is_logged_in)
 if (password or google) and not (teacher or member):
-    st.title("strudel 딸깍이")
+    st.title("olmuse")
     st.write("말로 음악을 만들고, 게임에 쓸 소리까지 뽑아 주는 작업실이야.")
     if google:
         st.button(f"구글 계정으로 시작하기 · 무료 {FREE_CREDITS} 크레딧", type="primary", on_click=google_login)
