@@ -14,7 +14,7 @@
 
   /* ---------- pure model ---------- */
   const uid = () => Math.random().toString(36).slice(2, 10);
-  const snapshot = (p) => ({ bpm: p.bpm, tracks: p.tracks.map((t) => ({ ...t })) });
+  const snapshot = (p) => ({ bpm: p.bpm, head: p.head || '', tracks: p.tracks.map((t) => ({ ...t })) });
 
   function newProject(name) {
     const p = { id: uid(), name, bpm: 120, tracks: DEFAULT_TRACKS.map((t) => ({ ...t })), mix: {}, chat: [], versions: [], versionId: '' };
@@ -30,7 +30,7 @@
   }
   const mixOf = (p, id) => p.mix[id] || { mute: false, gain: 1 };
 
-  const { compose, songText, parseSong } = window.songCode;
+  const { compose, songText, parseSong, locate, clean } = window.songCode;
 
   /* ---------- storage ---------- */
   let db = { current: '', projects: [] };
@@ -115,7 +115,7 @@
     if (!entry) return;
     const [mode, eng] = entry;
     if (m.type === 'loaded') postTo(mode, { type: 'boot', strudel: strudelText, samples: SAMPLES });
-    else if (m.type === 'ready') { if (mode === 'live') samplesOk = m.samplesOk; eng.ready(); render(); }
+    else if (m.type === 'ready') { if (mode === 'live') { samplesOk = m.samplesOk; soundNames = m.sounds || []; editor?.setSounds(soundNames); } eng.ready(); render(); }
     else if (m.type === 'boot-error') say('error', '음악 엔진을 시작하지 못했어: ' + m.message);
     else if (m.type === 'tick') { cycles = m.cycles; bands = m.bands; }
     else if (m.type === 'events') trackEvents = m.tracks;
@@ -349,7 +349,7 @@
     dlg.append(heading('h3', '이전 버전'));
     for (const v of [...p.versions].reverse().slice(0, 30)) {
       const b = button('복구', async () => {
-        p.bpm = v.bpm; p.tracks = v.tracks.map((t) => ({ ...t })); addVersion(p, `복구: ${v.summary}`, 'user');
+        p.bpm = v.bpm; p.head = v.head || ''; p.tracks = v.tracks.map((t) => ({ ...t })); addVersion(p, `복구: ${v.summary}`, 'user');
         touched(); render(); dlg.close(); if (playing) await play();
       });
       if (v.id === p.versionId) b.disabled = true;
@@ -370,7 +370,7 @@
       } catch {
         n = newProject(input.files[0].name);
         const parsed = parseSong(text, n);
-        n.bpm = parsed.bpm; n.tracks = parsed.tracks;
+        n.bpm = parsed.bpm; n.head = parsed.head; n.tracks = parsed.tracks.map(clean);
         addVersion(n, '불러온 코드', 'user');
       }
       db.projects.push(n); switchTo(n.id);
@@ -393,7 +393,7 @@
     dlg.showModal();
   }
   /* ---------- code editor ---------- */
-  let editor = null, editorOpen = false, editorDirty = false, editorBase = '';
+  let soundNames = [], editor = null, editorOpen = false, editorDirty = false, editorBase = '';
   const codeNote = (text, tone) => { $('codeNote').textContent = text; $('codeNote').style.color = tone ? `var(--${tone})` : ''; $('codeReload').hidden = true; };
 
   function loadScript(src) {
@@ -420,30 +420,37 @@
         doc: '', onRun: applyCode, onStop: stop,
         onChange: () => { editorDirty = editor.text() !== editorBase; if (editorDirty) $('codeNote').textContent = '실행 전 변경 있음'; },
       });
+      editor.setSounds(soundNames);
     }
     if (!editorDirty) fillEditor();
     editor.focus();
   }
-  // Names the failing track, since the song text and the running code differ line by line.
+  // Probes tracks alone to find the failing one, then marks its line in the editor.
   async function explainFailure(trial, error) {
     for (const t of trial.tracks) {
       const alone = await probe(compose({ bpm: trial.bpm, tracks: [t] }, true));
-      if (!alone.ok) return `${t.name}: ${alone.error}`;
+      if (alone.ok) continue;
+      const pos = locate(trial, t, alone.error);
+      editor.showError(pos);
+      const line = editor.text().slice(0, pos).split('\n').length;
+      return `${t.name} ${line}번째 줄: ${alone.error}`;
     }
     return error;
   }
   async function applyCode() {
     const p = project();
     await engines.probe.whenReady;
+    editor.clearError();
     const trial = parseSong(editor.text(), p);
     codeNote('확인하는 중이야.');
     const r = await probe(compose(trial, true));
-    if (!r.ok) { codeNote('실행 실패, 적용 안 함 · ' + await explainFailure(trial, r.error), 'err'); return; }
-    p.bpm = trial.bpm; p.tracks = trial.tracks;
+    if (!r.ok) { const why = await explainFailure(trial, r.error); codeNote('실행 실패, 적용 안 함 · ' + why, 'err'); return; }
+    p.bpm = trial.bpm; p.head = trial.head; p.tracks = trial.tracks.map(clean);
     selected = p.tracks.some((t) => t.id === selected) ? selected : null;
     addVersion(p, '코드 직접 수정', 'user');
     editorBase = songText(p);
-    editorDirty = editor.text() !== editorBase;
+    if (editor.text() !== editorBase) editor.set(editorBase); // unnamed $: becomes a named track here
+    editorDirty = false;
     touched(); render();
     if (await play()) codeNote(trial.tracks[0].raw ? '적용했어. 트랙으로 나누지 못해 전체 곡 하나로 재생해.' : '적용했어.', 'ok');
   }
@@ -501,6 +508,8 @@
     if (e.key === 'ArrowLeft') setWidth(now + 20);
     if (e.key === 'ArrowRight') setWidth(now - 20);
   };
+
+  window.studioEditor = () => editor;
 
   /* ---------- start ---------- */
   (async () => {

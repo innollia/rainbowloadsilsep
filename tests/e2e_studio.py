@@ -93,16 +93,29 @@ try:
         page.keyboard.press("Control+Enter")
         inner.wait_for_function("/실행 실패/.test(document.getElementById('codeNote').textContent)", timeout=20000)
         bad_note = inner.evaluate("document.getElementById('codeNote').textContent")
+        error_marked = inner.evaluate("document.querySelector('#codeHost .cm-errorLine')?.textContent || ''")
         set_code('// 내 메모\nsetcpm(90/4)\n\n$drums: s("bd*2") // 킥\n\n$bass: note("c2 eb2").s("sawtooth")\n')
         page.keyboard.press("Control+Enter")
         inner.wait_for_function("document.getElementById('codeNote').textContent==='적용했어.'", timeout=20000)
         time.sleep(1)
         edited = inner.evaluate("JSON.parse(localStorage.getItem('strudel-ddalkkak-v1')).projects[0]")
+        head_kept = edited.get("head") == "// 내 메모"
+        complete = inner.evaluate("""() => { const e = window.studioEditor(), put = (t) => { e.set(t); return t.length; };
+          const labels = (t) => (e.completionsAt(put(t))?.options || []).map(o => o.label);
+          const m = labels('s("bd").'), sound = labels('s("b'), top = labels('st');
+          const out = { method: m.includes('gain'), noInternal: !m.includes('queryArc'), sound: sound.includes('bd'), top: top.includes('stack') };
+          e.set(''); return out; }""")
+        set_code('// 앞 메모\n$: s("bd*4")\n// 베이스 메모\n$: note("c2").s("sawtooth")\n')
+        page.keyboard.press("Control+Enter")
+        inner.wait_for_function("window.studioEditor().text().includes('$t2:')", timeout=20000)
+        time.sleep(1)
+        anon = inner.evaluate("JSON.parse(localStorage.getItem('strudel-ddalkkak-v1')).projects[0]")
+        anon_text = inner.evaluate("window.studioEditor().text()")
         trip = inner.evaluate("""() => { const c = window.songCode, prev = {bpm: 120, tracks: []};
           const song = {bpm: 100, tracks: [{id:'a',name:'a',role:'other',code:'s("bd")'},{id:'b',name:'b',role:'other',code:'stack(\\n s("hh")\\n)'}]};
           const back = c.parseSong(c.songText(song), prev);
           return { same: JSON.stringify(back.tracks.map(t=>t.code)) === JSON.stringify(song.tracks.map(t=>t.code)) && back.bpm === 100,
-                   rawOk: c.parseSong('$: s("bd")', prev).tracks[0].raw === true, plainOk: c.parseSong('s("bd")', prev).tracks[0].raw === true }; }""")
+                   tempo: c.parseSong('setcps(0.5)\\n$a: s("bd")', prev).bpm === 120, plainOk: c.parseSong('s("bd")', prev).tracks[0].raw === true }; }""")
         frame.locator("#codeBtn").click()
         frame.locator("#settingsBtn").click()
         frame.get_by_role("button", name="게임하기").click()
@@ -119,7 +132,11 @@ try:
         "no clipping": not any("클리핑" in x for x in log),
         "no page errors": not errors,
         "code editor opens from header": code_visible,
-        "bad code names track and is refused": "베이스" in bad_note and edited["bpm"] == 90,
+        "bad code names track and line": "베이스 5번째 줄" in bad_note and edited["bpm"] == 90,
+        "error line highlighted": "oops" in error_marked,
+        "head comment kept": head_kept,
+        "autocomplete": all(complete.values()),
+        "unnamed tracks split": [t["id"] for t in anon["tracks"]] == ["t1", "t2"] and "베이스 메모" in anon_text,
         "edited code applied as version": len(edited["versions"]) == before + 1 and edited["tracks"][0]["code"].endswith("// 킥"),
         "text round trip": all(trip.values()),
         "art follows playback": art_moves,

@@ -106,7 +106,9 @@
         try { await strudel.samples(sampleBase); } catch (e) { samplesOk = false; }
       },
     });
-    post({ type: 'ready', samplesOk });
+    let sounds = [];
+    try { sounds = Object.keys(strudel.soundMap.get()).filter((name) => !/^(gm_|wt_|_)/.test(name)).sort(); } catch (e) { /* no sound list */ }
+    post({ type: 'ready', samplesOk, sounds });
   }
 
   const handlers = {

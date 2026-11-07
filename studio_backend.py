@@ -218,7 +218,7 @@ def clean_tracks(tracks) -> list[dict]:
             raise ValueError("트랙 코드가 너무 길어.")
         role = t.get("role") if t.get("role") in ROLES else "other"
         out.append({"id": t["id"], "name": str(t.get("name") or t["id"])[:40], "role": role,
-                    "code": code, "raw": bool(t.get("raw"))})
+                    "code": code, "raw": bool(t.get("raw")), "lead": str(t.get("lead") or "")[:500]})
     if len({t["id"] for t in out}) != len(out):
         raise ValueError("트랙 ID가 겹쳐.")
     return out
