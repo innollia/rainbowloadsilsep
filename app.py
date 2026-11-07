@@ -95,6 +95,7 @@ st.markdown("""<style>
 [data-testid="stMainBlockContainer"] {max-width:none;padding:0}
 html,body,[data-testid="stApp"] {background:#0f0f0f}
 iframe {display:block}
+[data-testid="stVerticalBlock"]:has(iframe) {gap:0}
 </style>""", unsafe_allow_html=True)
 studio = components.declare_component("studio", path=str(Path(__file__).parent / "studio_frontend"))
 owner = st.session_state.studio_owner
