@@ -338,38 +338,75 @@
 
   const mounts = new WeakMap(); // host -> newest mount, so an older one's late answers are dropped
 
-  function mount(host, { song, query, onError }) {
+  const SAVE_ICON = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg>';
+  const FORMATS = [
+    ['MIDI', 'mid', 'audio/midi', toMidi],
+    ['MusicXML', 'musicxml', 'application/vnd.recordare.musicxml+xml', toMusicXml],
+    ['ABC', 'abc', 'text/vnd.abc', toAbc],
+  ];
+
+  function mount(host, { song, query, onError, position }) {
     ensureCss();
     const view = mounts.get(host)?.view ?? { track: 'all', cycles: 4 };
     const run = { view };
     mounts.set(host, run);
     const stale = () => mounts.get(host) !== run;
-    let reply = null, score = null, asked = 0;
+    let reply = null, score = null, asked = 0, from = 0, drawn = '', beats = [], cursor = null, lit = -1, lineTop = null, turning = false;
 
     const trackBox = element('select', { ariaLabel: '트랙' });
     const barBox = element('select', { ariaLabel: '마디 수' });
     for (const n of [4, 8, 16]) barBox.append(element('option', { value: String(n), textContent: `${n}마디` }));
     barBox.value = String(view.cycles);
+    const range = element('span', { className: 'score-range', role: 'status' });
     const note = element('p', { className: 'score-note', role: 'status' });
     const paper = element('div', { className: 'score-paper', hidden: true });
     const legend = element('p', { className: 'score-legend', hidden: true });
-    const exports = [
-      ['MIDI', 'mid', 'audio/midi', toMidi],
-      ['MusicXML', 'musicxml', 'application/vnd.recordare.musicxml+xml', toMusicXml],
-      ['ABC', 'abc', 'text/vnd.abc', toAbc],
-    ].map(([label, ext, type, make]) => element('button', {
-      type: 'button', textContent: `${label} 저장`, disabled: true,
-      onclick: () => score && save(`${fileName(score.title)}.${ext}`, type, make(score)),
-    }));
+    const saveBtn = element('button', { type: 'button', className: 'iconBtn', innerHTML: SAVE_ICON, ariaLabel: '악보 저장', title: '악보 저장', disabled: true });
+    saveBtn.setAttribute('aria-haspopup', 'menu');
+    saveBtn.setAttribute('aria-expanded', 'false');
+    const menu = element('div', { className: 'score-menu', role: 'menu', hidden: true });
+    const closeMenu = () => { menu.hidden = true; saveBtn.setAttribute('aria-expanded', 'false'); };
+    saveBtn.onclick = (e) => {
+      e.stopPropagation();
+      menu.hidden = !menu.hidden; saveBtn.setAttribute('aria-expanded', String(!menu.hidden));
+      if (!menu.hidden) menu.firstChild.focus();
+    };
+    // A file always starts at bar 1, wherever playback has turned the page to.
+    async function saveAs(ext, type, make) {
+      closeMenu();
+      if (!score) return;
+      let made = score;
+      if (from) {
+        const r = await query(view.cycles, 0);
+        if (!r?.ok) { note.textContent = '파일을 만들지 못했어.'; return; }
+        made = buildScore(song, r.tracks ?? {}, view.cycles, view.track);
+      }
+      save(`${fileName(made.title)}.${ext}`, type, make(made));
+    }
+    for (const [label, ext, type, make] of FORMATS) {
+      const item = element('button', { type: 'button', role: 'menuitem', onclick: () => saveAs(ext, type, make) },
+        element('span', { textContent: label }), element('small', { textContent: `.${ext}` }));
+      menu.append(item);
+    }
+    const dismiss = (e) => {
+      if (stale()) { removeEventListener('pointerdown', dismiss); removeEventListener('keydown', escape); return; }
+      if (!menu.hidden && !menu.contains(e.target) && !saveBtn.contains(e.target)) closeMenu();
+    };
+    const escape = (e) => { if (e.key === 'Escape' && !menu.hidden) { closeMenu(); saveBtn.focus(); } };
+    addEventListener('pointerdown', dismiss); addEventListener('keydown', escape);
+
     host.replaceChildren(element('div', { className: 'score' },
-      element('div', { className: 'score-bar' }, trackBox, barBox, element('span', { className: 'score-gap' }), ...exports),
+      element('div', { className: 'score-bar' }, trackBox, barBox, range, element('span', { className: 'score-gap' }),
+        element('div', { className: 'score-save' }, saveBtn, menu)),
       note, paper, legend));
 
     const say = (text) => { note.textContent = text; };
+    const showRange = () => { range.textContent = from || position?.().playing ? `${from + 1}~${from + view.cycles}마디` : ''; };
+    const clearLit = () => { if (lit >= 0) beats[lit]?.notes.forEach((n) => n.classList.remove('score-on')); lit = -1; };
     const blank = () => {
-      score = null;
-      paper.hidden = legend.hidden = true;
-      exports.forEach((b) => { b.disabled = true; });
+      score = null; drawn = ''; beats = []; cursor = null; lit = -1;
+      paper.hidden = legend.hidden = true; paper.replaceChildren();
+      saveBtn.disabled = true; closeMenu();
     };
     function fillTracks() {
       const extra = Object.keys(reply ?? {}).filter((id) => !song.tracks.some((t) => t.id === id));
@@ -377,6 +414,24 @@
       if (!rows.some(([id]) => id === view.track)) view.track = 'all';
       trackBox.replaceChildren(...rows.map(([value, textContent]) => element('option', { value, textContent })));
       trackBox.value = view.track;
+    }
+    // Each drawing gets its own box: abcjs writes inline layout onto its target, and that must not stick to the paper.
+    function draw(abc, made) {
+      const sheet = element('div');
+      paper.hidden = false;
+      paper.append(sheet);
+      const [tune] = window.ABCJS.renderAbc(sheet, abc, { responsive: 'resize', staffwidth: 860, paddingleft: 8, paddingright: 8, add_classes: true });
+      while (paper.firstChild !== sheet) paper.firstChild.remove();
+      drawn = abc; lit = -1; lineTop = null;
+      tune.setTiming?.(made.bpm);
+      const svg = sheet.querySelector('svg');
+      beats = (tune.noteTimings ?? []).filter((t) => t.type === 'event' && t.left != null).map((t) => ({
+        at: t.milliseconds, left: t.left, top: t.top, height: t.height, notes: (t.elements ?? []).flat(Infinity).filter(Boolean),
+      }));
+      cursor = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      cursor.setAttribute('class', 'score-cursor');
+      cursor.style.display = 'none';
+      svg?.append(cursor);
     }
     async function show() {
       const made = buildScore(song, reply, view.cycles, view.track);
@@ -386,7 +441,7 @@
         return;
       }
       score = made;
-      exports.forEach((b) => { b.disabled = false; });
+      saveBtn.disabled = false;
       say(made.moved ? '16분음표에 맞지 않는 음은 가장 가까운 칸으로 옮겨 적었어.' : '');
       const used = [...new Map(made.parts.flatMap((p) => p.notes).filter((n) => n.drum).map((n) => [n.drum.key, n.drum])).values()];
       legend.textContent = used.length ? `타악 표기: ${used.map((d) => d.label).join(', ')}` : '';
@@ -394,22 +449,23 @@
       try {
         await loadAbcjs();
         if (stale() || score !== made) return;
-        paper.hidden = false;
-        window.ABCJS.renderAbc(paper, toAbc(made), { responsive: 'resize', staffwidth: 860, paddingleft: 8, paddingright: 8 });
+        const abc = toAbc(made);
+        if (abc !== drawn) draw(abc, made); // a repeating song keeps the same page, so nothing flickers
+        showRange();
       } catch (e) {
         paper.hidden = true;
         say('악보를 그리지 못했어. 파일 저장은 그대로 쓸 수 있어.');
         onError?.(String(e.message || e));
       }
     }
-    async function load() {
+    async function load(quiet = false) {
       const ticket = ++asked;
-      blank();
-      say('악보를 읽는 중...');
+      if (!quiet) { blank(); say('악보를 읽는 중...'); }
       let r;
-      try { r = await query(view.cycles); } catch (e) { r = { ok: false, error: String(e.message || e) }; }
+      try { r = await query(view.cycles, from); } catch (e) { r = { ok: false, error: String(e.message || e) }; }
       if (stale() || ticket !== asked) return;
       if (!r?.ok) {
+        if (quiet) return; // a failed page turn keeps the page on screen
         reply = null;
         say('악보를 만들지 못했어. 곡이 소리 나는 상태인지 확인해 줘.');
         onError?.(r?.error ?? 'score failed');
@@ -420,9 +476,54 @@
       await show();
     }
     trackBox.onchange = () => { view.track = trackBox.value; if (reply) show(); };
-    barBox.onchange = () => { view.cycles = +barBox.value; load(); };
+    const pageOf = (cycle) => Math.floor(Math.max(0, cycle) / view.cycles) * view.cycles;
+    barBox.onchange = () => {
+      view.cycles = +barBox.value;
+      const now = position?.();
+      from = now?.playing ? pageOf(now.cycles) : 0;
+      load();
+    };
+
+    // Follows the sound: the page turns with the bars, a line sweeps the system and the sounding notes light up.
+    function place(cycle) {
+      const ms = (cycle - from) * 240000 / (score?.bpm || 120);
+      let i = beats.length - 1;
+      while (i > 0 && beats[i].at > ms) i--;
+      const now = beats[i], next = beats[i + 1];
+      if (!now || !cursor) return;
+      const span = next && next.top === now.top ? next.left - now.left : 0;
+      const share = next ? Math.min(1, Math.max(0, (ms - now.at) / ((next.at - now.at) || 1))) : 0;
+      const x = String(now.left + span * share);
+      cursor.setAttribute('x1', x); cursor.setAttribute('x2', x);
+      cursor.setAttribute('y1', String(now.top)); cursor.setAttribute('y2', String(now.top + now.height));
+      cursor.style.display = '';
+      if (i !== lit) { clearLit(); now.notes.forEach((n) => n.classList.add('score-on')); lit = i; }
+      if (now.top !== lineTop) {
+        lineTop = now.top;
+        const box = host.closest('#stage'), q = cursor.getBoundingClientRect(), b = box?.getBoundingClientRect();
+        if (b && (q.top < b.top || q.bottom > b.bottom)) box.scrollBy({ top: q.top - b.top - 24, behavior: 'smooth' });
+      }
+    }
+    function follow() {
+      if (stale()) return;
+      requestAnimationFrame(follow);
+      const now = position?.();
+      if (!now?.playing || host.hidden) {
+        if (cursor && cursor.style.display !== 'none') { cursor.style.display = 'none'; clearLit(); lineTop = null; showRange(); }
+        return;
+      }
+      if (!range.textContent) showRange();
+      const page = pageOf(now.cycles);
+      if (page !== from && !turning) {
+        from = page; turning = true;
+        load(true).finally(() => { turning = false; });
+        return;
+      }
+      if (!turning && score) place(now.cycles);
+    }
 
     fillTracks();
+    requestAnimationFrame(follow);
     return load();
   }
 

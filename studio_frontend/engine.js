@@ -144,7 +144,7 @@
         post({ type: 'probed', id, ok: true, events: haps.length });
       } catch (e) { post({ type: 'probed', id, ok: false, error: String(e.message || e) }); }
     },
-    async score({ id, code, cycles }) {
+    async score({ id, code, cycles, from = 0 }) {
       evalError = null;
       // A numeric n is a sample index or harmonic count, never a pitch; only a note name in n is one.
       const midiOf = (v) => {
@@ -158,13 +158,13 @@
         if (evalError) throw new Error(evalError);
         if (!pat || !pat.queryArc) throw new Error('패턴이 만들어지지 않았어');
         const tracks = {};
-        for (const h of pat.queryArc(0, cycles)) {
+        for (const h of pat.queryArc(from, from + cycles)) {
           // Long notes come back once per cycle with the same whole; hasOnset keeps only the first piece.
           if (!h.hasOnset()) continue;
           const v = h.value && typeof h.value === 'object' ? h.value : { note: h.value };
           // A raw song is not wired with .set({trk}); its one track has the id 'song'.
           (tracks[v.trk ?? 'song'] ??= []).push({
-            b: h.whole.begin.valueOf(), e: h.whole.end.valueOf(), note: midiOf(v),
+            b: h.whole.begin.valueOf() - from, e: h.whole.end.valueOf() - from, note: midiOf(v),
             s: typeof v.s === 'string' ? v.s : null, gain: typeof v.gain === 'number' ? v.gain : 1,
           });
         }

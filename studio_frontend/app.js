@@ -621,9 +621,10 @@
     scoreShown = p.versionId;
     window.studioScore?.mount($('scorePanel'), {
       song, onError: (text) => say('error', text),
-      query: async (cycles) => {
+      position: () => ({ playing: playing && !audition, cycles }),
+      query: async (bars, from = 0) => {
         await engines.probe.whenReady;
-        try { return await ask('probe', { type: 'score', code: compose(song, true), cycles }, 'scored', 8000); }
+        try { return await ask('probe', { type: 'score', code: compose(song, true), cycles: bars, from }, 'scored', 8000); }
         catch (e) { createEngine('probe').catch(() => {}); throw e; }
       },
     });
