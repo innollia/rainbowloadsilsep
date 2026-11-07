@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>게임 소리 에셋</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header>
+    <button id="gameName" class="ghost" aria-haspopup="dialog"></button>
+    <ol id="stages" aria-label="진행 단계"></ol>
+    <span class="spacer"></span>
+    <span id="counts"></span>
+    <button id="specBtn" class="ghost">명세</button>
+    <button id="lintBtn" class="ghost">린트 <span id="lintCount" class="badge" hidden></span></button>
+    <button id="exportBtn" class="ghost">내보내기</button>
+    <button id="backBtn" class="iconBtn" aria-label="음악 작업실로" title="음악 작업실로"></button>
+  </header>
+
+  <main id="boardView">
+    <nav id="side" aria-label="분류"></nav>
+    <section id="board" tabindex="-1" aria-label="에셋 보드"></section>
+  </main>
+
+  <main id="detailView" hidden></main>
+
+  <footer id="dock">
+    <button id="playAll" class="iconBtn" aria-label="전체 듣기" title="전체 듣기"></button>
+    <label class="toggle"><input id="hoverPlay" type="checkbox" checked> 올리면 듣기</label>
+    <span id="nowPlaying"></span>
+    <div id="review" hidden>
+      <span id="reviewText"></span>
+      <button id="acceptAll">모두 채택</button>
+      <button id="rejectAll" class="ghost">모두 버림</button>
+    </div>
+    <form id="askForm">
+      <span id="selCount" hidden></span>
+      <input id="ask" autocomplete="off" aria-label="수정 요청">
+      <button id="send" class="iconBtn" aria-label="보내기" title="보내기"></button>
+    </form>
+  </footer>
+</div>
+<div id="lasso" hidden></div>
+<div id="toast" role="status" hidden></div>
+<dialog id="dialog"></dialog>
+<script src="data.js"></script>
+<script src="synth.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

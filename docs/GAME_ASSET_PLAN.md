@@ -116,7 +116,7 @@ Strudel 공식 FAQ는 만든 음악은 사용자 것이라고 적지만 상업 �
 
 ## 7. 공개
 
-- 코드는 `asset_studio/`에 두고 Strudel과 게임 파일을 import하지 않는다. 나중에 그대로 별도 저장소로 뺄 수 있어야 한다.
+- 화면은 `studio_frontend/asset_studio/`에 두고 음악 화면을 iframe으로만 연결한다. Strudel과 게임 파일을 import하지 않으므로 나중에 그대로 별도 저장소로 뺄 수 있다.
 - 공개 라이선스는 MIT로 정했다. 이 폴더만 별도 저장소로 떼어 공개한다. Strudel을 포함한 현재 저장소에 넣은 채 공개하면 AGPL-3.0-or-later가 되므로 그렇게 하지 않는다.
 - TINProject는 라이선스가 없고 패치와 곡 데이터는 게임 고유물이다. 코드도 데이터도 옮기지 않고, 상류 nkido에 직접 어댑터를 새로 쓴다.
 - 이 저장소의 `analyze_audio.py`는 TINProject에서 복사한 파일이다. 공개 전에 새로 쓰거나 허락을 받는다.

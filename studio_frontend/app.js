@@ -664,6 +664,73 @@
     if (e.key === 'ArrowRight') setWidth(now - 20);
   };
 
+  /* ---------- game sound screen ---------- */
+  const frame = $('assetFrame');
+  let assetOpen = false, morphing = false;
+  function barPieces() { // the coloured track bars become the flying pieces
+    const out = [];
+    for (const row of $('tracks').children) {
+      const cv = row.querySelector('canvas'); if (!cv) continue;
+      const q = cv.getBoundingClientRect(); if (!q.width) continue;
+      const c = getComputedStyle(row).getPropertyValue('--tc'), n = 10, w = q.width / n;
+      for (let i = 0; i < n; i++) out.push({ x: q.left + i * w, y: q.top + 8, w: w - 3, h: q.height - 16, c });
+    }
+    return out.length ? out : Array.from({ length: 24 }, (_, i) => ({ x: 40 + (i % 8) * 60, y: 300 + (i >> 3) * 40, w: 54, h: 30, c: '#C4C4C4' }));
+  }
+  const tileRects = () => new Promise((resolve) => {
+    const done = (e) => { if (e.data?.type === 'asset:tiles') { removeEventListener('message', done); resolve(e.data.tiles); } };
+    addEventListener('message', done);
+    frame.contentWindow.postMessage({ type: 'asset:measure' }, '*');
+    setTimeout(() => { removeEventListener('message', done); resolve([]); }, 400);
+  });
+  async function morph(from, to, opening) {
+    const box = $('morph'); box.textContent = ''; box.hidden = false;
+    const veil = document.createElement('div'); veil.className = 'veil'; box.append(veil);
+    const count = Math.max(from.length, to.length), jobs = [];
+    veil.animate([{ opacity: opening ? 0 : 1 }, { opacity: opening ? 1 : 0 }], { duration: 620, fill: 'both', easing: 'ease-in-out' });
+    for (let i = 0; i < count; i++) {
+      const a = from[i % from.length], b = to[i % to.length], piece = document.createElement('b');
+      piece.style.cssText = `width:${a.w}px;height:${a.h}px;background:${a.c}`;
+      box.append(piece);
+      const place = (r, extra = '') => `translate(${r.x}px,${r.y}px) ${extra} scale(${r.w / a.w},${r.h / a.h})`;
+      const mid = { x: (a.x + b.x) / 2 + (Math.random() - 0.5) * 240, y: (a.y + b.y) / 2 + (Math.random() - 0.5) * 240, w: a.w, h: a.h };
+      jobs.push(piece.animate([
+        { transform: place(a, 'rotate(0deg)'), background: a.c },
+        { transform: place(mid, `rotate(${(Math.random() - 0.5) * 50}deg)`), offset: 0.5 },
+        { transform: place(b, 'rotate(0deg)'), background: b.c },
+      ], { duration: 640, delay: Math.random() * 180, fill: 'both', easing: 'cubic-bezier(.65,0,.25,1)' }).finished);
+    }
+    await Promise.all(jobs);
+  }
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function showAssets(open) {
+    if (morphing || open === assetOpen) return;
+    morphing = true;
+    const still = calm.matches;
+    if (open) {
+      stop();
+      if (!frame.getAttribute('src')) { frame.src = 'asset_studio/index.html'; await new Promise((r) => { frame.onload = r; }); }
+      frame.classList.add('waiting'); frame.hidden = false;
+      await wait(60);
+      const targets = await tileRects();
+      if (!still && targets.length) await morph(barPieces(), targets, true);
+      assetOpen = true; frame.classList.remove('waiting');
+      await wait(230);
+      frame.contentWindow.focus();
+    } else {
+      frame.contentWindow.postMessage({ type: 'asset:hide' }, '*');
+      const targets = await tileRects();
+      frame.classList.add('waiting');
+      assetOpen = false;
+      if (!still && targets.length) await morph(targets, barPieces(), false);
+      frame.hidden = true;
+    }
+    $('morph').hidden = true; $('morph').textContent = '';
+    morphing = false;
+  }
+  $('assetBtn').onclick = () => showAssets(true);
+  addEventListener('message', (e) => { if (e.data?.type === 'asset:back') showAssets(false); });
+
   window.studioEditor = () => editor;
 
   /* ---------- start ---------- */
