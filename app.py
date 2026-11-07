@@ -8,7 +8,7 @@ import runpy
 import streamlit as st
 import streamlit.components.v1 as components
 
-from studio_backend import AgyCli, Gemini, Jobs, validate_request
+from studio_backend import AgyCli, Claude, Gemini, Jobs, validate_request
 
 st.set_page_config(page_title="strudel 딸깍이", page_icon="◉", layout="wide", initial_sidebar_state="collapsed")
 
@@ -33,23 +33,34 @@ def key_pool():
     return {name.strip(): value.strip().strip("'\"") for name, value in pairs}
 
 
-def gemini_key():
+def choose_model():
+    """AI_PROVIDER picks one engine outright. Unset: school Gemini, Gemini, Claude, then local agy."""
     pool = key_pool()
-    for name in ("SCHOOL_GEMINI_API_KEY", "GEMINI_API_KEY"):
-        key = setting(name) or pool.get(name, "")
-        if key:
-            return key
-    return ""
+
+    def secret(*names):
+        return next((value for name in names if (value := setting(name) or pool.get(name, ""))), "")
+
+    def gemini():
+        key = secret("SCHOOL_GEMINI_API_KEY", "GEMINI_API_KEY")
+        return Gemini(key, setting("GEMINI_MODEL"), setting("GEMINI_BASE_URL")) if key else None
+
+    def claude():
+        key = secret("ANTHROPIC_API_KEY")
+        return Claude(key, setting("CLAUDE_MODEL")) if key else None
+
+    provider = setting("AI_PROVIDER").strip().lower()
+    if setting("STRUDEL_ENGINE") == "agy":
+        return AgyCli()
+    if provider == "gemini":
+        return gemini()
+    if provider == "claude":
+        return claude()
+    return gemini() or claude() or (AgyCli() if setting("STRUDEL_LOCAL_AI") == "1" else None)
 
 
 @st.cache_resource
 def jobs():
-    key = gemini_key()
-    if setting("STRUDEL_ENGINE") == "agy" or (not key and setting("STRUDEL_LOCAL_AI") == "1"):
-        model = AgyCli()
-    else:
-        model = Gemini(key, setting("GEMINI_MODEL"), setting("GEMINI_BASE_URL")) if key else None
-    return Jobs(model, daily_limit=int(setting("STRUDEL_DAILY_CALLS", "200")))
+    return Jobs(choose_model(), daily_limit=int(setting("STRUDEL_DAILY_CALLS", "200")))
 
 
 password = setting("STUDIO_PASSWORD")

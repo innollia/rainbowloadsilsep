@@ -23,6 +23,7 @@ import urllib.request
 import uuid
 
 DEFAULT_MODEL = "gemini-3.8-flash"
+DEFAULT_CLAUDE_MODEL = "claude-sonnet-5-5"
 MAX_IMPROVEMENTS = 3   # also the listen limit: one listen per improvement round
 MAX_ERROR_FIXES = 2
 MAX_EDIT_CALLS = 5
@@ -140,6 +141,80 @@ def plain_schema(schema):
     return [plain_schema(v) for v in schema] if isinstance(schema, list) else schema
 
 
+def strict_schema(schema):
+    """Standard JSON schema with closed objects, as Claude structured output requires."""
+    if isinstance(schema, list):
+        return [strict_schema(v) for v in schema]
+    if not isinstance(schema, dict):
+        return schema
+    out = {k: strict_schema(v) for k, v in schema.items()}
+    if out.get("type") == "object":
+        out["additionalProperties"] = False
+    return out
+
+
+def measured_prompt(wav: bytes, prompt: str) -> str:
+    """For engines with no audio input: the model judges ear.py's measurements of the capture."""
+    import ear
+
+    return (prompt + "\n\nYou have no audio input. Judge only from these measurements of the real capture. "
+            "In the heard field state what the measurements show, not how it sounds.\n" + ear.describe(wav))
+
+
+class Claude:
+    """Messages API has no audio input, so listening is measurement analysis, labelled as such."""
+
+    name = "Claude"
+    hears = False
+
+    def __init__(self, key: str, model: str = "", client=None):
+        self.key = key
+        self.model = model or DEFAULT_CLAUDE_MODEL
+        self.client = client
+
+    def _sdk(self):
+        if self.client is None:
+            import anthropic
+
+            # No SDK retries: every hidden retry would be spend outside the job limits.
+            self.client = anthropic.Anthropic(api_key=self.key, max_retries=0, timeout=120.0)
+        return self.client
+
+    def _call(self, prompt: str, schema: dict) -> dict:
+        import anthropic
+
+        try:
+            response = self._sdk().messages.create(
+                model=self.model, max_tokens=16000, system=SYSTEM,
+                output_config={"format": {"type": "json_schema", "schema": strict_schema(plain_schema(schema))}},
+                messages=[{"role": "user", "content": prompt}],
+            )
+        except anthropic.AuthenticationError:
+            raise ModelError("Claude 키를 확인해 줘.") from None
+        except anthropic.PermissionDeniedError:
+            raise ModelError("이 Claude 키로는 해당 모델을 쓸 수 없어.") from None
+        except anthropic.RateLimitError:
+            raise ModelError("Claude 사용 한도에 걸렸어.") from None
+        except anthropic.APIStatusError as exc:
+            raise ModelError(f"Claude 오류 {exc.status_code}: {redact(exc.message, self.key)}") from None
+        except anthropic.APIConnectionError:
+            raise ModelError("Claude에 연결하지 못했어.") from None
+        if response.stop_reason == "refusal":
+            raise ModelError("Claude가 이 요청을 거절했어.")
+        if response.stop_reason == "max_tokens":
+            raise ModelError("Claude 응답이 너무 길어 잘렸어.")
+        try:
+            return json.loads("".join(b.text for b in response.content if b.type == "text"))
+        except ValueError:
+            raise ModelError("Claude 응답을 읽지 못했어.") from None
+
+    def edit(self, prompt: str) -> dict:
+        return self._call(prompt, EDIT_SCHEMA)
+
+    def listen(self, wav: bytes, prompt: str) -> dict:
+        return self._call(measured_prompt(wav, prompt), LISTEN_SCHEMA)
+
+
 class AgyCli:
     """Local test engine using the logged-in Antigravity CLI. It runs tool-free in an empty
     temp folder. It has no audio input, so listen hands it ear.py's measurements of the real
@@ -198,12 +273,7 @@ class AgyCli:
                 process.kill()
 
     def listen(self, wav: bytes, prompt: str) -> dict:
-        import ear
-
-        report = ear.describe(wav)
-        return self._run(
-            prompt + "\n\nYou have no audio input. Judge only from these measurements of the real capture. "
-            "In the heard field state what the measurements show, not how it sounds.\n" + report, LISTEN_SCHEMA)
+        return self._run(measured_prompt(wav, prompt), LISTEN_SCHEMA)
 
 
 def clean_tracks(tracks) -> list[dict]:

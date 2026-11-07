@@ -220,3 +220,48 @@ def test_agy_verdict_is_labelled_as_measurement_not_hearing():
 
 def test_plain_schema_lowercases_types_only():
     assert sb.plain_schema({"type": "OBJECT", "enum": ["DRUMS"]}) == {"type": "object", "enum": ["DRUMS"]}
+
+
+class FakeBlock:
+    type = "text"
+    def __init__(self, text):
+        self.text = text
+
+
+class FakeReply:
+    def __init__(self, text, stop="end_turn"):
+        self.content, self.stop_reason = [FakeBlock(text)], stop
+
+
+class FakeClaudeClient:
+    def __init__(self, reply):
+        self.reply, self.calls = reply, []
+        self.messages = self
+
+    def create(self, **kw):
+        self.calls.append(kw)
+        return self.reply
+
+
+def test_claude_requests_closed_schema_and_parses_reply():
+    client = FakeClaudeClient(FakeReply('{"summary":"x","bpm":120,"changes":[]}'))
+    assert sb.Claude("k", client=client).edit("p")["summary"] == "x"
+    call = client.calls[0]
+    schema = call["output_config"]["format"]["schema"]
+    assert call["model"] == "claude-sonnet-5-5" and schema["additionalProperties"] is False
+    assert schema["properties"]["changes"]["items"]["additionalProperties"] is False
+    assert schema["type"] == "object" and "temperature" not in call
+
+
+def test_claude_refusal_and_truncation_are_errors():
+    for stop in ("refusal", "max_tokens"):
+        with pytest.raises(sb.ModelError):
+            sb.Claude("k", client=FakeClaudeClient(FakeReply("", stop))).edit("p")
+
+
+def test_claude_listen_uses_measurements_and_is_not_hearing():
+    verdict = '{"heard":"저음 큼","problems":[],"score":90,"goal_met":true,"next_instruction":""}'
+    client = FakeClaudeClient(FakeReply(verdict))
+    model = sb.Claude("k", client=client)
+    assert model.hears is False and model.listen(wav(), "p")["goal_met"] is True
+    assert "측정 템포" in client.calls[0]["messages"][0]["content"]

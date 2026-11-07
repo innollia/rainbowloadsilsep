@@ -24,6 +24,8 @@ STUDIO_PASSWORD = "..."
 
 학교 Gemini 키는 `SCHOOL_GEMINI_API_KEY`로 넣는다(Secrets, 로컬은 `~/.all-tomorrow/key-pool.env`). 둘 다 있으면 학교 키를 먼저 쓴다.
 
+Claude는 `ANTHROPIC_API_KEY`로 넣는다(기본 모델 `claude-sonnet-5-5`, `CLAUDE_MODEL`로 변경). `AI_PROVIDER=claude` 또는 `gemini`로 고를 수 있고, 지정이 없으면 학교 Gemini, Gemini, Claude 키 순으로 쓴다. Claude와 agy에는 오디오 입력이 없어 `ear.py` 측정표로 판단하며 "측정 분석"으로 표시한다.
+
 `STUDIO_PASSWORD`가 없으면 공개 URL에서 키가 쓰이지 않도록 AI가 꺼진다. 선택 값은 `GEMINI_MODEL`, `STRUDEL_DAILY_CALLS`다.
 
 프로젝트는 브라우저에 저장되므로 다른 기기로 옮길 때는 프로젝트 내보내기와 파일 불러오기를 쓴다.
