@@ -43,8 +43,8 @@
     sfx('sfx_combat_block', '방패 막기', 'combat', [tone(1200, 800, 0.1, 'square', 0.3), noise(0.08, 0.9, 0.4)]),
     sfx('sfx_combat_explosion', '폭발', 'combat', [noise(1.1, 0.3, 1.5), tone(90, 30, 0.9, 'sine', 1.1)]),
     sfx('sfx_combat_cast', '마법 시전', 'combat', [tone(200, 1400, 0.6, 'sine', 0.4), noise(0.6, 0.6, 0.12, 0.2)]),
-    sfx('sfx_combat_heal', '치유', 'combat', [523, 659, 784, 1047].map((f, i) => tone(f, f, 0.5, 'sine', 0.3, i * 0.1))),
-    sfx('sfx_combat_arrow', '화살', 'combat', [noise(0.2, 0.7, 0.3, 0.01), tone(900, 500, 0.15, 'sine', 0.2)]),
+    sfx('heal_sfx', '치유', 'combat', [523, 659, 784, 1047].map((f, i) => tone(f, f, 0.5, 'sine', 0.3, i * 0.1))),
+    sfx('sfx_combat_arrow', '화살', 'combat', [noise(0.2, 0.7, 0.3, 0.01), tone(900, 500, 0.15, 'sine', 0.2, 0.09)], { noLicense: true }),
     sfx('sfx_char_step', '발소리', 'char', [noise(0.07, 0.25, 0.5), tone(120, 70, 0.08, 'sine', 0.5)], { sample: true }),
     sfx('sfx_char_jump', '점프', 'char', [tone(280, 760, 0.2, 'square', 0.3)]),
     sfx('sfx_char_land', '착지', 'char', [noise(0.1, 0.2, 0.6), tone(100, 50, 0.14, 'sine', 0.7)]),
@@ -63,19 +63,24 @@
     bgm('bgm_lose', '패배', 72, 52, 'dark'),
   ];
 
-  const PROFILE = {
-    name: '모바일 기본',
-    rules: [
-      { id: 'peak', text: '최대 소리 -1.0 dBTP 이하' },
-      { id: 'loud', text: '음악 음량 -24 ~ -16 LUFS' },
-      { id: 'rate', text: '48 kHz WAV' },
-      { id: 'name', text: '이름 규칙 sfx_, amb_, bgm_' },
-      { id: 'lead', text: '앞 무음 50 ms 이하' },
-      { id: 'dur', text: '효과음 2초 이하' },
-      { id: 'loop', text: '루프 이음새 튐 없음' },
-      { id: 'lic', text: '라이선스 기록 있음' },
-    ],
-  };
+  const PROFILES = [
+    { id: 'mobile', name: '모바일', loud: [-20, -16] },
+    { id: 'console', name: '콘솔', loud: [-26, -22] },
+    { id: 'wide', name: '넓게', loud: [-26, -14] },
+  ];
+  // Thresholds are user-editable. `applies` narrows a rule; `fix` marks what the tool can repair without AI.
+  const RULES = [
+    { id: 'peak', name: '최대 소리', unit: 'dB', limit: -1, level: 'error', fix: true, read: (m) => m.peak, bad: (v, r) => v > r.limit, hint: 'true peak 상한' },
+    { id: 'clip', name: '클리핑', unit: '개', limit: 0, level: 'error', fix: true, read: (m) => m.clips, bad: (v, r) => v > r.limit, hint: '찌그러진 샘플 수' },
+    { id: 'loud', name: '음악 음량', unit: 'LUFS', range: [-20, -16], level: 'error', fix: true, applies: (a) => a.music, read: (m) => m.loud, bad: (v, r) => v < r.range[0] || v > r.range[1], hint: '곡 전체 평균 음량' },
+    { id: 'dur', name: '길이', unit: '초', limit: 2, level: 'warn', applies: (a) => !a.music && !a.loop, read: (m) => m.seconds, bad: (v, r) => v > r.limit, hint: '효과음 최대 길이' },
+    { id: 'lead', name: '앞 무음', unit: 'ms', limit: 50, level: 'warn', fix: true, read: (m) => m.lead, bad: (v, r) => v > r.limit, hint: '눌렀을 때 늦게 들림' },
+    { id: 'tail', name: '뒤 무음', unit: 'ms', limit: 200, level: 'warn', fix: true, applies: (a) => !a.loop, read: (m) => m.tail, bad: (v, r) => v > r.limit, hint: '쓸데없는 파일 길이' },
+    { id: 'dc', name: 'DC', unit: '', limit: 0.002, level: 'warn', read: (m) => m.dc, bad: (v, r) => v > r.limit, hint: '파형 중심 치우침' },
+    { id: 'seam', name: '루프 이음새', unit: '', limit: 0.1, level: 'warn', applies: (a) => a.loop, read: (m) => m.seam, bad: (v, r) => v > r.limit, hint: '반복될 때 나는 튐' },
+    { id: 'name', name: '이름', text: true, level: 'error', read: (m, a) => /^(sfx|amb|bgm)_[a-z0-9_]+$/.test(a.id), hint: 'sfx_, amb_, bgm_ 로 시작' },
+    { id: 'lic', name: '저작권', text: true, level: 'error', read: (m, a) => !a.noLicense, hint: '사용 도구·음원 기록' },
+  ];
 
   const LICENSES = [
     { name: 'nkido (Akkado, Cedar)', license: 'MIT', holder: 'Moritz Laass', use: '소리 합성 엔진' },
@@ -83,5 +88,5 @@
     { name: 'Kenney Audio', license: 'CC0-1.0', holder: 'Kenney.nl', use: '효과음 재료' },
   ];
 
-  window.STUDIO_DATA = { GAME: '별빛 정원', BRIEF: '잔잔한 판타지 수집 게임. 귀엽고 따뜻하게.', CATEGORIES, ASSETS, PROFILE, LICENSES };
+  window.STUDIO_DATA = { GAME: '별빛 정원', BRIEF: '잔잔한 판타지 수집 게임. 귀엽고 따뜻하게.', CATEGORIES, ASSETS, PROFILES, RULES, LICENSES };
 })();

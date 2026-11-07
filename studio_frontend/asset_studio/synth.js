@@ -69,19 +69,29 @@
     });
     const mix = new Float32Array(length);
     for (const g of groups) for (let i = 0; i < length; i++) { g.data[i] *= level; mix[i] += g.data[i]; }
+    if (change.trim) {
+      const from = Math.floor(change.trim[0] * RATE), to = length - Math.floor(change.trim[1] * RATE);
+      for (const g of groups) g.data = g.data.slice(from, to);
+      return { rate: RATE, seconds: (to - from) / RATE, stems: groups, mix: mix.slice(from, to) };
+    }
     return { rate: RATE, seconds: length / RATE, stems: groups, mix };
   }
 
   function measure(sound) {
-    let peak = 0, sum = 0, lead = -1;
     const { mix, rate } = sound;
+    let peak = 0, sum = 0, total = 0, lead = -1, last = 0, clips = 0;
     for (let i = 0; i < mix.length; i++) {
       const v = Math.abs(mix[i]);
-      peak = Math.max(peak, v); sum += v * v;
-      if (lead < 0 && v > 0.003) lead = i;
+      peak = Math.max(peak, v); sum += v * v; total += mix[i];
+      if (v >= 1) clips++;
+      if (v > 0.003) { if (lead < 0) lead = i; last = i; }
     }
     const db = (v) => 20 * Math.log10(Math.max(v, 1e-6));
-    return { peak: db(peak), loud: db(Math.sqrt(sum / mix.length)) - 0.7, seconds: sound.seconds, lead: Math.max(0, lead) / rate * 1000 };
+    return {
+      peak: db(peak), loud: db(Math.sqrt(sum / mix.length)) - 0.7, seconds: sound.seconds, clips,
+      lead: Math.max(0, lead) / rate * 1000, tail: (mix.length - 1 - last) / rate * 1000,
+      dc: Math.abs(total / mix.length), seam: Math.abs(mix[0] - mix[mix.length - 1]),
+    };
   }
 
   function peaks(data, count) {

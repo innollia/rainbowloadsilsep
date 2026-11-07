@@ -10,13 +10,14 @@
 <body>
 <div id="app">
   <header>
-    <button id="gameName" class="ghost" aria-haspopup="dialog"></button>
+    <button id="gameName" class="ghost iconBtn" aria-haspopup="dialog" aria-label="게임 정보" title="게임 정보"></button>
+    <span id="gameTitle"></span>
     <ol id="stages" aria-label="진행 단계"></ol>
     <span class="spacer"></span>
     <span id="counts"></span>
-    <button id="specBtn" class="ghost">명세</button>
-    <button id="lintBtn" class="ghost">린트 <span id="lintCount" class="badge" hidden></span></button>
-    <button id="exportBtn" class="ghost">내보내기</button>
+    <button id="specBtn" class="iconBtn" aria-label="명세" title="명세"></button>
+    <button id="lintBtn" class="iconBtn" aria-pressed="false" aria-label="린트" title="린트"><span id="lintCount" class="badge" hidden></span></button>
+    <button id="exportBtn" class="iconBtn" aria-label="내보내기" title="내보내기"></button>
     <button id="backBtn" class="iconBtn" aria-label="음악 작업실로" title="음악 작업실로"></button>
   </header>
 
@@ -24,6 +25,8 @@
     <nav id="side" aria-label="분류"></nav>
     <section id="board" tabindex="-1" aria-label="에셋 보드"></section>
   </main>
+
+  <main id="lintView" hidden></main>
 
   <main id="detailView" hidden></main>
 
@@ -38,6 +41,10 @@
     </div>
     <form id="askForm">
       <span id="selCount" hidden></span>
+      <button id="selAll" type="button" class="ghost" hidden>전체 선택</button>
+      <button id="selApprove" type="button" class="ghost" hidden>승인</button>
+      <button id="selClear" type="button" class="ghost" hidden>해제</button>
+      <button id="detailBtn" type="button" class="ghost" hidden>자세히</button>
       <input id="ask" autocomplete="off" aria-label="수정 요청">
       <button id="send" class="iconBtn" aria-label="보내기" title="보내기"></button>
     </form>
