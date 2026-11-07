@@ -47,19 +47,19 @@
 
 1. Google Cloud Console → API 및 서비스 → OAuth 동의 화면을 외부로 만든다.
 2. 사용자 인증 정보 → OAuth 클라이언트 ID → 웹 애플리케이션.
-3. 승인된 리디렉션 URI에 `https://<공개 주소>/oauth2callback`을 넣는다. 로컬 시험이면 `http://localhost:8501/oauth2callback`도 넣는다.
+3. 승인된 리디렉션 URI에 `https://olmuse.app/oauth2callback`을 넣는다. 로컬 시험이면 `http://localhost:8501/oauth2callback`도 넣는다.
 4. 받은 클라이언트 ID와 시크릿을 secrets에 넣는다.
 
 ```toml
 [auth]
-redirect_uri = "https://<공개 주소>/oauth2callback"
+redirect_uri = "https://olmuse.app/oauth2callback"
 cookie_secret = "<긴 무작위 문자열>"
 client_id = "<클라이언트 ID>"
 client_secret = "<클라이언트 시크릿>"
 server_metadata_url = "https://accounts.google.com/.well-known/openid-configuration"
 ```
 
-주의: 지금 공개 주소는 cloudflared 임시 터널이라 터널을 다시 열면 주소가 바뀐다. 고정 주소는 `olmuse.app`으로 정했다(2026-11-07, 구매는 사람이 한다). 산 뒤에는 이름 있는 터널로 연결하고 리디렉션 URI를 `https://olmuse.app/oauth2callback`으로 넣는다.
+공개 주소는 `https://olmuse.app`이다. 이 PC의 이름 있는 cloudflared 터널 `olmuse`(`~/.cloudflared/olmuse.yml`)가 `run_public.ps1`로 연결한다. 리디렉션 URI는 `https://olmuse.app/oauth2callback`.
 
 ### 로컬 시험
 

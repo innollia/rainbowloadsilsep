@@ -1,5 +1,5 @@
-# Serves the app from this PC through a Cloudflare quick tunnel. The URL changes on every start.
-# -ServerOnly restarts just the app, so code changes go live while the tunnel and its URL stay.
+# Serves the app from this PC at https://olmuse.app through the named Cloudflare tunnel 'olmuse' (~/.cloudflared/olmuse.yml).
+# -ServerOnly restarts just the app, so code changes go live while the tunnel stays.
 param([switch]$ServerOnly)
 function Stop-Server {
   Get-NetTCPConnection -LocalPort 8501 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
@@ -16,5 +16,5 @@ Start-Process python -WindowStyle Hidden -WorkingDirectory $PSScriptRoot -Argume
 if ($ServerOnly) { return }
 $tunnel = (Get-Command cloudflared -ErrorAction SilentlyContinue).Source
 if (-not $tunnel) { $tunnel = "${env:ProgramFiles(x86)}\cloudflared\cloudflared.exe" }
-try { & $tunnel tunnel --url http://127.0.0.1:8501 }
+try { & $tunnel tunnel --config (Join-Path $HOME '.cloudflared\olmuse.yml') run olmuse }
 finally { Stop-Server }
