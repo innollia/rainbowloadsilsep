@@ -63,7 +63,7 @@ try:
         frame = page.frame_locator('iframe[title*="studio"]')
         frame.locator("#play").wait_for(timeout=30000)
         inner = next(f for f in page.frames if "studio_frontend" in f.url or "component" in f.url)
-        inner.wait_for_function("document.querySelectorAll('iframe').length===2", timeout=20000)
+        inner.wait_for_function("document.querySelectorAll('iframe[sandbox]').length===2", timeout=20000)
         boots = inner.evaluate("window.__marker=1")
         time.sleep(4)
         frame.locator("#play").click()
