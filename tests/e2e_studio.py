@@ -80,7 +80,7 @@ try:
         page.screenshot(path=str(Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "artifacts-e2e.png"))
         same_iframe = inner.evaluate("window.__marker") == 1
         # code editor: find it, break it, fix it, and confirm the song really changed
-        frame.locator("#codeBtn").click()
+        frame.locator("#tabCode").click()
         inner.wait_for_selector("#codeHost .cm-content", timeout=15000)
         code_visible = frame.locator("#codeHost .cm-content").is_visible() and not frame.locator("#tracks").is_visible()
         put = "t=>document.querySelector('#codeHost .cm-content').cmView?.view"
@@ -116,7 +116,7 @@ try:
           const back = c.parseSong(c.songText(song), prev);
           return { same: JSON.stringify(back.tracks.map(t=>t.code)) === JSON.stringify(song.tracks.map(t=>t.code)) && back.bpm === 100,
                    tempo: c.parseSong('setcps(0.5)\\n$a: s("bd")', prev).bpm === 120, plainOk: c.parseSong('s("bd")', prev).tracks[0].raw === true }; }""")
-        frame.locator("#codeBtn").click()
+        frame.locator("#tabTracks").click()
         tracks_before = inner.evaluate("JSON.stringify(JSON.parse(localStorage.getItem('strudel-ddalkkak-v1')).projects[0].tracks)")
         frame.locator("#tracks .mute").first.click()
         frame.locator("#projectBtn").click()
@@ -163,7 +163,7 @@ try:
         "signal not silent": not any("소리가 거의 없음" in x for x in log),
         "no clipping": not any("클리핑" in x for x in log),
         "no page errors": not errors,
-        "code editor opens from header": code_visible,
+        "code editor opens from tab": code_visible,
         "bad code names track and line": "베이스 5번째 줄" in bad_note and edited["bpm"] == 90,
         "error line highlighted": "oops" in error_marked,
         "head comment kept": head_kept,

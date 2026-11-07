@@ -605,7 +605,7 @@
       ['트랙 이름 누르기', '그 트랙만 AI가 고치도록 지정해.'],
       ['자동 개선', '막대를 끌어 최대 몇 번 더 고칠지 정해. 고칠 게 없거나 더 나아지지 않으면 그 전에 멈추고, 가장 점수가 높았던 버전을 남겨. 호출 5회, 5분, 회당 16초까지 들어.'],
       ['프로젝트 폴더', '곡 전환, 이전 버전 듣기와 복구, 파일 내보내기가 여기 있어.'],
-      ['코드 버튼 (Ctrl+E)', '곡의 코드를 보고 고쳐. Ctrl+Enter로 실행해.'],
+      ['코드 탭 (Ctrl+E)', '트랙, 악보 옆 코드 탭에서 곡의 코드를 보고 고쳐. Ctrl+Enter로 실행해.'],
       ['저장', '바뀔 때마다 이 브라우저에 자동으로 저장돼.'],
     ]) { const r = row(''); r.textContent = ''; const b = document.createElement('b'); b.textContent = what; r.append(b, how); dlg.append(r); }
     dlg.append(heading('h3', '기타'));
@@ -630,7 +630,6 @@
   async function toggleCode(open = !editorOpen) {
     editorOpen = open;
     $('app').classList.toggle('coding', open);
-    $('codeBtn').setAttribute('aria-pressed', String(open));
     $('codePanel').hidden = !open;
     if (!open) return;
     if (!editor) {
@@ -705,7 +704,6 @@
   $('autoRounds').oninput = (e) => { db.autoRounds = +e.target.value; touched(); render(); showCredits(); };
   $('projectBtn').onclick = projectDialog;
   $('settingsBtn').onclick = settingsDialog;
-  $('codeBtn').onclick = () => toggleCode();
   $('codeRun').onclick = applyCode;
   $('codeExport').onclick = () => saveFile(`${project().name}.strudel.js`, songText(project()));
   $('codeImport').onclick = importFile;
@@ -722,7 +720,7 @@
     if (e.shiftKey) artDialog(); else newArt();
   };
 
-  let tab = 'tracks', scoreShown = '';
+  let tab = 'tracks', lastTab = 'tracks', scoreShown = '';
   function showScore() {
     const p = project(), song = { name: p.name, bpm: p.bpm, tracks: p.tracks.map((t) => ({ ...t })) };
     scoreShown = p.versionId;
@@ -737,14 +735,15 @@
     });
   }
   function setTab(name) {
-    tab = name;
-    $('tabTracks').setAttribute('aria-selected', String(name === 'tracks'));
-    $('tabScore').setAttribute('aria-selected', String(name === 'score'));
+    tab = name; if (name !== 'code') lastTab = name;
+    for (const [id, n] of [['tabTracks', 'tracks'], ['tabScore', 'score'], ['tabCode', 'code']]) $(id).setAttribute('aria-selected', String(name === n));
     $('tracks').hidden = name !== 'tracks'; $('scorePanel').hidden = name !== 'score'; $('allMute').hidden = name !== 'tracks';
+    if ((name === 'code') !== editorOpen) toggleCode(name === 'code');
     if (name === 'score' && scoreShown !== project().versionId) showScore();
   }
   $('tabTracks').onclick = () => setTab('tracks');
   $('tabScore').onclick = () => setTab('score');
+  $('tabCode').onclick = () => setTab('code');
   $('volume').oninput = () => engines.live && postTo('live', { type: 'volume', value: +$('volume').value });
   let bpmWait = 0;
   function setBpm(value) { // stepping presses collapse into one version
@@ -757,7 +756,7 @@
   $('bpmDown').onclick = () => setBpm(+$('bpm').value - 10);
   $('bpmUp').onclick = () => setBpm(+$('bpm').value + 10);
   addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') { e.preventDefault(); toggleCode(); }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') { e.preventDefault(); setTab(editorOpen ? lastTab : 'code'); }
     if (e.code === 'Space' && !dlg.open && !e.target.isContentEditable && !/INPUT|TEXTAREA|SELECT|BUTTON/.test(e.target.tagName)) { e.preventDefault(); $('play').click(); }
   });
   const setWidth = (w) => { const v = Math.min(640, Math.max(320, w)); document.documentElement.style.setProperty('--chat', v + 'px'); $('divider').setAttribute('aria-valuenow', v); };

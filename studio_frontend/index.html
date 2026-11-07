@@ -14,7 +14,6 @@
     <button id="projectBtn" class="ghost iconBtn" data-icon="folder" aria-haspopup="dialog" aria-label="프로젝트" title="프로젝트"></button>
     <span id="saveState" role="status"></span>
     <span class="spacer"></span>
-    <button id="codeBtn" class="iconBtn" data-icon="code" aria-pressed="false" aria-label="코드" title="코드 (Ctrl+E)"></button>
     <button id="creditBtn" class="ghost" hidden aria-haspopup="dialog" title="크레딧"></button>
     <button id="settingsBtn" class="iconBtn" data-icon="settings" aria-label="설정" title="설정"></button>
     <button id="assetBtn" class="iconBtn" data-icon="game" aria-label="게임 소리" title="게임 소리"></button>
@@ -33,12 +32,13 @@
       <div class="tabs" role="tablist">
         <button id="tabTracks" role="tab" aria-selected="true" aria-controls="tracks">트랙</button>
         <button id="tabScore" role="tab" aria-selected="false" aria-controls="scorePanel">악보</button>
+        <button id="tabCode" role="tab" aria-selected="false" aria-controls="codePanel" title="코드 (Ctrl+E)">코드</button>
         <span class="spacer"></span>
         <button id="allMute" class="ghost iconBtn" data-icon="sound" aria-label="전체 끄기" title="전체 끄기"></button>
       </div>
       <div id="tracks" role="tabpanel"></div>
       <div id="scorePanel" role="tabpanel" hidden></div>
-      <div id="codePanel" hidden>
+      <div id="codePanel" role="tabpanel" hidden>
         <div class="codeBar">
           <button id="codeRun" class="iconBtn" data-icon="play" aria-label="실행" title="실행 (Ctrl+Enter)"></button>
           <span id="codeNote" role="status"></span>

@@ -37,7 +37,7 @@ button.ghost:hover { background:var(--raised); }
 header { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:12px; border-bottom:1px solid var(--divider); }
 .spacer { flex:1; }
 #saveState { color:var(--text3); font-size:.75rem; }
-#codeBtn[aria-pressed="true"] { background:var(--text); color:#111; }
+
 
 main { display:flex; min-height:0; }
 #stage { flex:1; min-width:0; overflow:auto; padding:20px 32px; }
@@ -68,7 +68,7 @@ main { display:flex; min-height:0; }
 input[type=range] { accent-color:var(--text); height:32px; }
 
 #app.coding #stage { display:flex; flex-direction:column; }
-#app.coding #tracks, #app.coding .tabs, #app.coding #scorePanel, #app.coding #viz { display:none; }
+#app.coding #tracks, #app.coding #scorePanel, #app.coding #viz { display:none; }
 #app.coding .hero { margin-bottom:12px; }
 #app.coding #art { width:72px; height:72px; }
 #codePanel { flex:1; min-height:240px; display:flex; flex-direction:column; gap:8px; }
