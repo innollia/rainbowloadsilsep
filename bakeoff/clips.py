@@ -1,6 +1,7 @@
 """Blind-listening clips (docs/MODEL_BAKEOFF_PLAN.md 6).
 
-Takes the final song of each finalist on each star task (first successful repetition), cuts every clip to
+Takes the final songs of each finalist on every task (first TAKES successful repetitions, one clip set per take),
+cuts every clip to
 the same length, levels loudness to the same LUFS and writes it under a random name to static/bakeoff/
 (served at /app/static/bakeoff/). One clip per task is added again under another name to check listener
 consistency. The model behind each name is kept only in results/listen/manifest.json on this PC.
@@ -37,6 +38,8 @@ from referee import final_wav  # noqa: E402
 STATIC = core.ROOT / "static" / "bakeoff"
 BASELINE = "anthropic/claude-opus-5.5"  # the user's baseline: always a finalist
 SIZE = 6
+TAKES = 2  # songs per (task, model) served: variety without new generation cost
+MIN_MODELS = 3
 TARGET_LUFS = -16.0
 CEILING = 10 ** (-1 / 20)  # -1 dBFS sample peak after levelling
 
@@ -71,16 +74,35 @@ def encode(wav: Path, name: str) -> str:
     return target.name
 
 
-def pick_song(model_id: str, task_id: str, config: dict, root: Path) -> Path | None:
+def pick_songs(model_id: str, task_id: str, config: dict, root: Path) -> list[Path]:
+    """Final songs of the model's successful repetitions of a task, in repetition order."""
     model = next(m for m in config["models"] if m["id"] == model_id)
+    songs = []
     for rep in range(1, int(model.get("reps", 1)) + 3):
         log = core.job_log(model_id, task_id, rep, root)
         records = core.read_jsonl(log)
         if core.outcome(records) == "success":
             wav = final_wav(log, core.end_of(records))
             if wav:
-                return wav
-    return None
+                songs.append(wav)
+    return songs
+
+
+def pick_song(model_id: str, task_id: str, config: dict, root: Path) -> Path | None:
+    songs = pick_songs(model_id, task_id, config, root)
+    return songs[0] if songs else None
+
+
+def clip_sets(task: dict, models: list[str], config: dict, root: Path) -> list[tuple[str, dict]]:
+    """(set id, model -> song) for each take of a task. Take 1 keeps the task id (votes cast on it stay put),
+    take k > 1 is "<id>-<k>". A take needs MIN_MODELS finalists with that many successful songs to be worth comparing."""
+    songs = {m: pick_songs(m, task["id"], config, root) for m in models}
+    sets = []
+    for take in range(1, TAKES + 1):
+        found = {m: s[take - 1] for m, s in songs.items() if len(s) >= take}
+        if len(found) >= MIN_MODELS:
+            sets.append((task["id"] if take == 1 else f'{task["id"]}-{take}', found))
+    return sets
 
 
 def report2_finalists(root: Path, size: int = SIZE) -> list[str]:
@@ -126,27 +148,23 @@ def main(argv=None):
     rng = random.Random()
     tasks = []
     with tempfile.TemporaryDirectory() as tmp:
-        for task in (t for t in config["tasks"] if t.get("star")):
-            found = {m: pick_song(m, task["id"], config, root) for m in models}
-            found = {m: w for m, w in found.items() if w}
-            if not found:
-                continue
+        for task, set_id, found in ((t, i, f) for t in config["tasks"] for i, f in clip_sets(t, models, config, root)):
             seconds = min(analyze_audio.read_wav(str(w))[0].shape[0] / analyze_audio.read_wav(str(w))[1] for w in found.values())
             clips = []
             for model, wav in found.items():
-                name = keep.get((task["id"], model, str(wav.relative_to(core.ROOT)))) or secrets.token_hex(8)
+                name = keep.get((set_id, model, str(wav.relative_to(core.ROOT)))) or secrets.token_hex(8)
                 leveled = Path(tmp) / f"{name}.wav"
                 level(wav, leveled, seconds)
                 clips.append({"clip": name, "file": encode(leveled, name), "model": model, "source": str(wav.relative_to(core.ROOT)),
                               "dup_of": None})
-            dup = old_dup.get(task["id"])
+            dup = old_dup.get(set_id)
             twin = next((c for c in clips if dup and c["clip"] == dup["dup_of"]), None) or rng.choice(clips)
             name = dup["clip"] if dup and dup["dup_of"] == twin["clip"] else secrets.token_hex(8)
             src = STATIC / twin["file"]
             copy = STATIC / f"{name}{src.suffix}"
             shutil.copyfile(src, copy)
             clips.append({**twin, "clip": name, "file": copy.name, "dup_of": twin["clip"]})
-            tasks.append({"id": task["id"], "genre": task["genre"], "text": task["text"], "seconds": round(seconds, 1),
+            tasks.append({"id": set_id, "genre": task["genre"], "text": task["text"], "seconds": round(seconds, 1),
                           "clips": clips})
     served = {c["clip"] for t in tasks for c in t["clips"]}
     retired = [r for r in previous.get("retired", []) if r["clip"] not in served]
