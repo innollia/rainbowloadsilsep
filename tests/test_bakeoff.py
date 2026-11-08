@@ -180,3 +180,14 @@ def test_pairwise_queue_and_tally(tmp_path):
     result = listen_store.tally_pairs(manifest, store.all())
     assert [r["model"] for r in result["models"]] == ["M1", "M2", "M3"]
     assert result["consistency"] == []
+
+
+def test_both_bad_is_a_tie_counted_apart(tmp_path):
+    manifest = {"tasks": [{"id": "1", "genre": "하우스", "text": "t", "clips": [
+        {"clip": "a", "model": "M1", "file": "a.mp3"}, {"clip": "b", "model": "M2", "file": "b.mp3"}]}]}
+    store = listen_store.Pairs(tmp_path / "p.sqlite")
+    store.save("민지", {"task": "1", "left": "a", "right": "b", "repeat": 0}, "bad")
+    store.save("수아", {"task": "1", "left": "b", "right": "a", "repeat": 0}, "left")
+    rows = {r["model"]: r for r in listen_store.tally_pairs(manifest, store.all())["models"]}
+    assert rows["M1"]["win_rate"] == 0.25 and rows["M2"]["win_rate"] == 0.75
+    assert rows["M1"]["bad_rate"] == rows["M2"]["bad_rate"] == 0.5
