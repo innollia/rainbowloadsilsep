@@ -63,8 +63,33 @@
 - [x] 8-3 크레딧, 모델·추론 수준 선택, 코드 탭(트랙·악보 옆).
 - [x] 8-4 구글 로그인 `[auth]` secrets. 사람이 OAuth 클라이언트를 만들고 리디렉션 URI `https://olmuse.app/oauth2callback`을 넣는다. 절차는 `docs/CREDITS.md`. 끝난 기준: https://olmuse.app 에서 구글 로그인 후 무료 20 크레딧이 보인다.
 - [x] 8-5 이상 상황 대비(`docs/EDGE_CASES.md`): 계정 단위 작업 이어받기·환불, 계정별 하루 한도, 단어 결제 코드(`stormy-diamond-wagon` 형식), 결제 찾기 화면, 남은 호출 표시, 공용 PC 배려 제거. 커밋 540b53c, 8c8dfc1, 89f6194, 92266f2.
-- [x] 8-6 블로그 결제 넘김 안전화: 장부가 죽어도 BMC에 200, 못 넘긴 결제는 블로그 DynamoDB에 `fwd#`로 보관해 10분마다 다시 넘김(`bmc-webhook-retry`), 장부는 결제 id로 멱등. 코드는 all-tomorrow `deploy/bmc-webhook/`(커밋 3380edd, 브랜치 feat/overseer).
-- [x] 8-7 청취 클립을 듣는 심판(report2) 결선 6개로 교체: opus 5.5, sonnet 5.5, deepseek v4.1 flash, gemini 3.8 flash, gpt-5.6-terra, glm 5.3. 빠진 클립 표는 `retired`로 집계 유지. 커밋 451043a.
+- [x] 8-6 블로그 결제 넘김 안전화: 장부가 죽어도 BMC에 200, 못 넘긴 결제는 블로그 DynamoDB에 `fwd#`로 보관해 10분마다 다시 넘김(`bmc-webhook-retry`), 장부는 결제 id로 멱등. 코드는 all-tomorrow `deploy/bmc-webhook/`(커밋 3380edd, 2026-11-08 main에 합침).
+- [x] 8-7 청취 클립을 듣는 심판(report2) 결선 6개로 교체: opus 5.5, sonnet 5.5, deepseek v4.1 flash, gemini 3.8 flash, gpt-5.6-terra, glm 5.3. 빠진 클립 표는 `retired`로 집계 유지. 커밋 451043a. 이후 바뀐 것은 10절.
+
+## 10. 모델 고르기와 음악 지식 (2026-11-08 상태)
+
+목표는 두 가지다. (가) 성능과 비용이 맞는 가성비 모델, (나) 돈을 많이 써도 성능이 가장 좋은 모델.
+
+결정된 것:
+- (나) 최고 성능은 일단 **claude-opus-5.5**. 상위 모델 추가 실험은 안 한다.
+- (가) 가성비 1순위 후보는 **deepseek-v4.1-flash**(곡당 $0.007, 심판 77.9 / opus $0.122, 79.3, 차이는 우연 범위). 더 싼 후보 haiku-5.5($0.004, 75.9). 표와 근거는 `docs/MODEL_VALUE.md`, 다시 계산은 `python bakeoff/value.py`.
+- gemini-3.8-flash는 API 요금으로 환산하면 곡당 $0.21~0.26(생각 토큰이 대부분)이라 가성비가 나쁘다. 구독 CLI 원가 0은 공개 사이트 원가가 아니다.
+- 블라인드 청취(/listen) 결선에서 glm-5.3을 뺐다. 남은 결선: opus 5.5, sonnet 5.5, deepseek v4.1 flash, gemini 3.8 flash, gpt-5.6-terra. 청취는 8과제 × 반복 3회까지, 같은 쌍 다시 묻기 없음, 단추 A가 더 좋아/둘 다 좋아/둘 다 별로/B가 더 좋아.
+- gpt-5.6-terra는 스킬 라우터에서 심판 점수가 확실히 떨어졌다(-3.2, 범위 -6.0~-0.7). 결선에서 뺄지는 가성비까지 보고 정한다(아직 안 뺌).
+- 앞으로 비교는 AI 심판 점수로 한다. 사람 블라인드로 라우터 전후를 비교하지 않는다.
+
+음악 지식:
+- 옛 `music_skill.md`는 Claude 자체 지식으로 썼고 문법 실행만 확인했다. 그래서 음색 통일감·박 격자·엇박 지식이 없었다.
+- 이브 봇(`C:\projects\eve-scene-runtime`)의 스킬 라우터를 `skill_router.py`로 옮겼다. 조각은 `skills/music/<그룹>/<스킬>/SKILL.md`(core 늘, compose, genre, mixing). Jev가 상황에 맞는 조각만 고르고, Jev가 없으면 키워드로 고른다(맞는 장르가 없으면 장르 9개 통째, 6,845자). `OLMUSE_SKILL_ROUTER=1`일 때만 켜진다. 지금 공개 서버는 꺼져 있다.
+- 조각 내용은 GitHub 스킬(vanities/toaster-strudel, jamcgrath/music-theory-skill, calvinw/strudel-llm-docs)과 블로그·레딧 팁에서 가져왔다. 지어낸 문장은 없다. 조각에는 출처를 넣지 않고 `THIRD_PARTY_NOTICES.md`에만 고지.
+- 라우터 실험(5모델 × 8과제 × 1회, `bakeoff/results_router`): 입력 토큰 약 40% 감소, 심판 점수 opus +1.1, deepseek +1.0, gemini -0.4, sonnet -1.5, terra -3.2. terra 말고는 우연 범위.
+- 새 곡 기본 멜로디는 8칸으로 고쳤지만 악기가 드럼·베이스와 안 어울린다는 의견이 남아 있다(10-3).
+
+남은 것:
+- [ ] 10-1 가성비 모델을 확정하고 9-1(크레딧 가격)로 넘긴다. 사용자 결정.
+- [ ] 10-2 라우터를 공개 서버에서 켤지. 켜려면 `run_public.ps1`에 `OLMUSE_SKILL_ROUTER=1`. 반복을 늘려 확인하려면 OpenRouter 충전 필요(잔액 약 $1).
+- [ ] 10-3 기본 곡 멜로디 악기(`studio_frontend/app.js` DEFAULT_TRACKS, triangle+delay)를 베이스 계열로 바꿀지.
+- [ ] 10-4 Gemini(agy CLI)는 질문이 길면 음악 노트를 빼고 보낸다(studio_backend.py AgyCli). 고칠지.
 
 ## 9. 할일 (지금은 안 함)
 
