@@ -930,7 +930,7 @@ class Job:
         self.lock = threading.Lock()
         self.view = {"id": self.id, "status": "running", "stage": "editing", "iteration": 1,
                      "limit": request["rounds"] + 1, "auto": request["auto"], "candidate": None,
-                     "messages": [], "listen": None, "project_id": request.get("project_id", "")}
+                     "messages": [], "listen": None, "accepted": 0, "project_id": request.get("project_id", "")}
         self.polled = 0.0          # last time any session read this job
         self.offered = 0.0         # when the newest candidate was put up for a browser
         self.last_charge = None    # (email, cost, ref) of the newest paid call
@@ -1118,6 +1118,8 @@ class Jobs:
             if item is None or job.cancelled.is_set():
                 raise Stop("cancelled", job.text("cancelled"))
             if item.get("seq") == seq:  # a late report for an older candidate is ignored
+                if item.get("ok"):
+                    job.update(accepted=seq)  # a page that missed this report (reload, other device) can still apply it
                 return item
 
     def _run(self, job: Job):

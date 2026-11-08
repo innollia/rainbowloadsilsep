@@ -669,3 +669,16 @@ def test_agy_asks_again_only_when_a_denied_tool_call_left_the_turn_empty():
     answered = json.dumps({"status": "SUCCESS", "response": "x", "conversation_id": "c1", "denied_actions": [1]}).encode()
     assert sb.AgyCli.denied_conversation(answered) == ""
     assert sb.AgyCli.denied_conversation(json.dumps({"status": "SUCCESS", "response": ""}).encode()) == ""
+
+
+def test_accepted_marks_the_candidate_a_browser_ran():
+    """A page that reloads after the job ended still knows which candidate to apply."""
+    jobs = sb.Jobs(Fake())
+    jobs.submit("o", request())
+    snap = drive(jobs)
+    assert snap["status"] == "done" and snap["accepted"] == snap["candidate"]["seq"] == 1
+
+    jobs = sb.Jobs(Fake(edits=[{"summary": "", "bpm": 120, "changes": [change()]}]), feedback_timeout=5)
+    jobs.submit("p", request())
+    snap = drive(jobs, owner="p", respond=lambda c: {"ok": False, "error": "x"} if c["seq"] == 1 else {"ok": True})
+    assert snap["accepted"] == snap["candidate"]["seq"] == 2

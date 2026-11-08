@@ -179,6 +179,10 @@ dialog input[type=text], dialog select { background:var(--raised); border:0; bor
 #elsewhere p { margin:0; font-size:1.1rem; }
 #elsewhere button { background:var(--text); color:#111; }
 .logoutRow { margin-top:8px; }
-.wipe { display:inline-flex; align-items:center; gap:8px; color:var(--text2); font-size:.88rem; cursor:pointer; }
-.wipe input { width:20px; height:20px; accent-color:var(--text); }
+.findPayBox { margin:12px 0 0; font-size:.88rem; }
+.findPayBox summary { cursor:pointer; color:var(--text2); min-height:40px; display:flex; align-items:center; }
+.findPay .note { margin:0 0 8px; }
+.findRow { display:flex; flex-wrap:wrap; gap:8px; }
+.findRow input { flex:1 1 140px; min-width:0; min-height:40px; }
+.findAnswer { margin:8px 0 0; min-height:1.2em; color:var(--text2); }
 dialog .row input[type=text] { flex:1; min-width:0; }

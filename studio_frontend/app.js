@@ -71,11 +71,11 @@
   const { compose, songText, parseSong, locate, clean } = window.songCode;
 
   /* ---------- storage ---------- */
-  // Songs live in this browser, one key per signed-in account so a shared computer keeps people apart.
+  // Songs live in this browser, one key per signed-in account so accounts on one browser stay apart.
   // Several tabs may share a key: every write first merges what is stored, newest project wins.
   const MOVED = STORE + ':moved', TRASH_DAYS = 30, DAY = 864e5;
   const tabId = uid();
-  let storeKey = '', db = null, dirty = false, wiped = false, freshStore = false;
+  let storeKey = '', db = null, dirty = false, freshStore = false;
   const accountHash = (s) => { // cyrb53: a stable, non-reversible tag, not a secret
     let a = 0xdeadbeef, b = 0x41c6ce57;
     for (const ch of s) { const c = ch.codePointAt(0); a = Math.imul(a ^ c, 2654435761); b = Math.imul(b ^ c, 1597334677); }
@@ -140,7 +140,7 @@
   function showSave(text, color = '') { $('saveState').textContent = text; $('saveState').style.color = color; }
   function persist() {
     clearTimeout(touched.t);
-    if (!db || wiped) return true;
+    if (!db) return true;
     try {
       const stored = readStore(); if (stored) mergeFrom(stored);
       localStorage.setItem(storeKey, JSON.stringify(db));
@@ -228,7 +228,6 @@
   channel?.addEventListener('message', (e) => {
     const m = e.data || {};
     if (!db || m.key !== storeKey || m.tab === tabId) return;
-    if (m.type === 'wipe') { wiped = true; try { window.parent.location.reload(); } catch { /* host decides */ } return; }
     if (m.type === 'open' && m.project === db.current && !lockedBy) { persist(); lockHere(m.tab); return; }
     if (lockedBy === m.tab && (m.type === 'gone' || m.project !== db.current)) { continueHere(); }
   });
@@ -354,20 +353,38 @@
     return jobSong[j.id];
   }
   const jobProject = (j) => findProject(jobProjectId(j)) || db.trash.find((x) => x.id === jobProjectId(j));
+  // The song remembers the newest job it heard from (p.job: id, messages shown, candidate applied), so a reload
+  // neither repeats the chat nor applies a result twice.
+  const jobMark = (p, j) => (p?.job?.id === j.id ? p.job : { id: j.id, shown: 0, applied: 0 });
+  const applied = (p, j, seq) => jobMark(p, j).applied >= seq;
   async function handleCandidate(j) {
     const c = j.candidate, p = jobProject(j);
     const report = (extra) => send('feedback', { job_id: j.id, seq: c.seq, ...extra });
-    if (!p) { send('cancel', {}); return; }
+    if (!p) { if (!j.project_id) send('cancel', {}); return; } // a song this browser lacks may be on another device of the account
+    if (applied(p, j, c.seq)) { report(c.listen ? { ok: true, wav: '' } : { ok: true }); return; } // applied, then reloaded before the report
     const proved = await probe(compose({ bpm: c.bpm, tracks: c.tracks }, true));
     if (!proved.ok) { report({ ok: false, error: proved.error }); return; }
-    p.bpm = c.bpm; p.tracks = c.tracks;
-    const here = p.id === db.current;
+    const here = takeResult(p, j, c);
     if (here && !await play()) { report({ ok: false, error: t('play_failed_short') }); return; }
-    addVersion(p, c.summary || t('v_edit'), 'ai');
-    touched(p); render();
-    if (!here && findProject(p.id)) toast(t('result_elsewhere', { name: p.name }), t('go_see'), () => switchTo(p.id));
     if (c.listen && here) report(await listenBack(p));
     else report(c.listen ? { ok: true, wav: '' } : { ok: true });
+  }
+  function takeResult(p, j, c) {
+    p.bpm = c.bpm; p.tracks = c.tracks;
+    addVersion(p, c.summary || t('v_edit'), 'ai');
+    p.job = { ...jobMark(p, j), applied: c.seq };
+    touched(p); render();
+    const here = p.id === db.current;
+    if (!here && findProject(p.id)) toast(t('result_elsewhere', { name: p.name }), t('go_see'), () => switchTo(p.id));
+    return here;
+  }
+  // A job that ended while this page was away (reload, lost connection, another tab) still lands on its song.
+  async function catchUpResult(j) {
+    const c = j.candidate, p = jobProject(j);
+    if (!c || !p || j.accepted !== c.seq || applied(p, j, c.seq)) return;
+    p.job = { ...jobMark(p, j), applied: c.seq }; // claimed before the probe so the next render does not start a second one
+    if (!(await probe(compose({ bpm: c.bpm, tracks: c.tracks }, true))).ok) return;
+    if (takeResult(p, j, c) && playing) play();
   }
   // Records a stretch of the real output so the AI can hear its own edit.
   async function listenBack(p) {
@@ -408,17 +425,19 @@
     aiEnabled = !!args.ai_enabled; engineName = args.engine || '';
     fillChoices(args.choices);
     account = args.account || null; showCredits();
-    if (args.server_error && args.server_error !== lastServerError) say('error', args.server_error);
+    if (args.server_error && args.server_error !== lastServerError) { say('error', args.server_error); if (findWaiting != null) findAnswer(args.server_error); }
     lastServerError = args.server_error || '';
     const j = args.job;
     job = j;
     if (j) {
-      shownMsg[j.id] ??= 0;
-      const home = jobProject(j) || project();
+      const home = jobProject(j) || (j.project_id ? null : project());
+      shownMsg[j.id] ??= jobMark(home, j).shown;
       for (const m of j.messages.slice(shownMsg[j.id])) say(m.kind, m.text, m.detail, home);
+      if (home && jobMark(home, j).shown !== j.messages.length) { home.job = { ...jobMark(home, j), shown: j.messages.length }; touched(home); }
       shownMsg[j.id] = j.messages.length;
       const key = j.candidate && `${j.id}:${j.candidate.seq}`;
       if (key && key !== handledSeq && j.status === 'running') { handledSeq = key; handleCandidate(j); }
+      else if (j.status !== 'running' && key !== handledSeq) catchUpResult(j);
     }
     renderProgress();
     $('send').disabled = !aiEnabled;
@@ -433,29 +452,64 @@
     if (!account) { $('costHint').textContent = ''; return; }
     $('creditBtn').textContent = t('credits_btn', { n: account.credits });
     $('creditBtn').classList.toggle('low', account.credits < worstCost());
-    $('costHint').textContent = t('cost_hint', { n: worstCost() });
+    $('costHint').textContent = t('cost_hint', { n: worstCost() }) + (account.daily_left != null ? ' · ' + t('daily_left_short', { n: account.daily_left }) : '');
     if (account.free && !welcomed) { welcomed = true; say('status', t('welcome', { n: account.credits })); }
-    if (dlg.open && dlg.dataset.kind === 'credits') creditBody();
+    if (dlg.open && dlg.dataset.kind === 'credits') { creditBody(); findAnswer(); }
   }
+  // Rebuilt only when the account changes, so the find form keeps what is typed and where the cursor is.
   function creditBody() {
     const box = dlg.querySelector('.creditBody'); if (!box) return;
+    const key = JSON.stringify([account, i18n.lang, $('modelPick').value]);
+    if (box.dataset.key === key) return;
+    box.dataset.key = key;
     const table = el('div', { className: 'creditTable' });
     for (const o of $('modelPick').options) table.append(el('span', { textContent: o.textContent }), el('b', { textContent: `${modelCost(o.value)}` }));
     table.append(el('span', { textContent: t('deep') }), el('b', { textContent: `+${account.prices.efforts.high}` }));
-    const out = el('button', { className: 'ghost', textContent: t('logout'), onclick: () => { if (wipeOnLogout) wipeHere(); dlg.close(); send('logout', {}); } });
-    const wipe = el('input', { type: 'checkbox', checked: wipeOnLogout, onchange: () => { wipeOnLogout = wipe.checked; } });
+    const out = el('button', { className: 'ghost', textContent: t('logout'), onclick: () => { dlg.close(); send('logout', {}); } });
+    const find = box.querySelector('.findPayBox') || findForm();
     box.replaceChildren(
       el('p', { className: 'creditBig', textContent: t('credit_big', { n: account.credits }) }),
-      el('p', { className: 'note', textContent: t('credit_how') }),
-      table, creditBuy(), creditHistory(),
-      el('div', { className: 'row logoutRow' }, out, el('label', { className: 'wipe' }, wipe, el('span', { textContent: t('wipe_here') }))));
+      el('p', { className: 'note', textContent: t('credit_how') + (account.daily_left != null ? ' ' + t('daily_left', { n: account.daily_left }) : '') }),
+      table, creditBuy(), find, creditHistory(),
+      el('div', { className: 'row logoutRow' }, out));
+    findAnswer();
   }
-  let wipeOnLogout = false;
-  // Leaves no songs of this account on a shared computer. Other tabs of the account reload too.
-  function wipeHere() {
-    channel?.postMessage({ type: 'wipe', key: storeKey, tab: tabId });
-    wiped = true; clearTimeout(touched.t);
-    try { localStorage.removeItem(storeKey); } catch { /* nothing stored */ }
+  // A payment made without the code waits on the server until its payer claims it by email, amount and date.
+  let findWaiting = null, findText = '';
+  function findForm() {
+    const mail = el('input', { type: 'email', name: 'payer', value: account.email || '', placeholder: t('find_email'), autocomplete: 'email' });
+    const amount = el('input', { type: 'text', name: 'amount', inputMode: 'decimal', placeholder: t('find_amount') });
+    const day = el('input', { type: 'date', name: 'day', value: new Date().toISOString().slice(0, 10) });
+    for (const x of [mail, amount, day]) x.setAttribute('aria-label', x.placeholder || t('find_date'));
+    const go = el('button', { type: 'submit', className: 'ghost', textContent: t('find_go') });
+    const ready = () => { go.disabled = findWaiting != null || !mail.value.includes('@') || !(parseFloat(amount.value.replace(',', '')) > 0) || !day.value; };
+    for (const x of [mail, amount, day]) x.oninput = ready;
+    ready();
+    const form = el('form', { className: 'findPay' },
+      el('p', { className: 'note', textContent: t('find_how') }), el('div', { className: 'findRow' }, mail, amount, day, go),
+      el('p', { className: 'findAnswer', role: 'status' }));
+    form.onsubmit = (e) => {
+      e.preventDefault(); if (go.disabled) return;
+      findWaiting = account.find?.n ?? 0; findText = t('find_looking'); ready(); findAnswer();
+      send('find_payment', { payer_email: mail.value.trim(), amount: amount.value.trim(), date: day.value });
+    };
+    form.ready = ready;
+    return el('details', { className: 'findPayBox' }, el('summary', { textContent: t('find_title') }), form);
+  }
+  // Called on every render: a new answer has a new n; a server error ends the wait too.
+  function findAnswer(error) {
+    if (findWaiting != null) {
+      const f = account?.find;
+      if (error) { findText = error; findWaiting = null; }
+      else if (f && f.n !== findWaiting) {
+        findText = f.too_many ? t('find_too_many') : f.found ? t('find_found', { n: f.found, added: f.added }) : t('find_none');
+        findWaiting = null;
+      }
+    }
+    const form = dlg.querySelector('.findPay');
+    if (!form) return;
+    form.querySelector('.findAnswer').textContent = findText;
+    form.ready();
   }
   function creditBuy() {
     const code = el('button', { className: 'ghost creditCode', textContent: account.code, title: t('copy') });
@@ -476,7 +530,7 @@
     return list;
   }
   function creditDialog() {
-    openDialog(t('credits_title')); dlg.dataset.kind = 'credits';
+    openDialog(t('credits_title')); dlg.dataset.kind = 'credits'; findText = '';
     dlg.append(el('div', { className: 'creditBody' }));
     creditBody(); dlg.showModal();
     send('account', {});

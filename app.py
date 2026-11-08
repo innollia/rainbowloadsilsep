@@ -301,10 +301,12 @@ def handle(action, payload, manager, choices):
             return
         p = payload if isinstance(payload, dict) else {}
         try:
-            st.session_state.studio_find = ledger().find_payment(email, str(p.get("payer_email") or "")[:254],
+            found = ledger().find_payment(email, str(p.get("payer_email") or "")[:254],
                                                                  str(p.get("amount") or "")[:20], str(p.get("date") or "")[:10])
         except LedgerError as exc:
             raise ValueError(str(exc)) from None
+        # n tells the page this is a new answer, even when it reads the same as the last one
+        st.session_state.studio_find = {**found, "n": (st.session_state.get("studio_find") or {}).get("n", 0) + 1}
         account_view(refresh=True, history=True)
     elif action == "logout":
         manager.cancel(owner)
