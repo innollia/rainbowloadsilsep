@@ -285,7 +285,45 @@ def with_skill(system: str, skill: str) -> str:
     return f"{system}\n\n{skill}" if skill else system
 
 
-SYSTEM = with_skill(BASE_SYSTEM, load_skill())
+# Off by default while the blind listening runs: the whole music_skill.md stays in SYSTEM. With
+# OLMUSE_SKILL_ROUTER=1 SYSTEM keeps only the fixed core fragments (engine limits, sound names), which keeps the
+# prompt cache, and each call gets the fragments its request needs in front of the user prompt.
+SKILL_ROUTER = os.environ.get("OLMUSE_SKILL_ROUTER") == "1"
+SKILLS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "skills", "music")
+
+
+def system_prompt(routed: bool = False) -> str:
+    if not routed:
+        return with_skill(BASE_SYSTEM, load_skill())
+    import skill_router
+
+    try:
+        core = skill_router.always_block(SKILLS_DIR)
+    except OSError:
+        core = ""
+    return with_skill(BASE_SYSTEM, core)
+
+
+SYSTEM = system_prompt(SKILL_ROUTER)
+_router = None
+
+
+def with_skills(prompt: str, message: str, kind: str, recent=()) -> str:
+    """Eve's enhanceManagerPrompt order: the skill block, a blank line, then the prompt. A no-op unless routed."""
+    if not SKILL_ROUTER:
+        return prompt
+    global _router
+    import skill_router
+
+    try:
+        if _router is None:
+            _router = skill_router.SkillRouter(SKILLS_DIR)
+        budget = skill_router.allocate_context_budget(agent_document_chars=len(SYSTEM), history_chars=len(prompt))
+        block = _router(message, recent, kind, budget["remaining_chars"])
+    except Exception as exc:  # routing must never stop a job
+        skill_router.log.warning("[Skills] Skill routing failed: %s", exc)
+        block = ""
+    return f"{block}\n\n{prompt}" if block else prompt
 
 EDIT_SCHEMA = {
     "type": "OBJECT",
@@ -1165,6 +1203,10 @@ class Jobs:
             p.edits += 1
             prompt = edit_prompt(p.state, p.instruction, p.error, req["target"], req.get("history", ()),
                                  goal=req["text"] if p.tried else "", tried=p.tried, lang=job.lang)
+            kind = ("fix_after_listen" if p.tried else "new_song" if not p.state["tracks"]
+                    else "track_edit" if req["target"] else "edit")
+            prompt = with_skills(prompt, p.instruction, kind,
+                                 [f"{m['role']}: {m['text']}" for m in req.get("history", ())])
             reply = self._ask(job, model.edit, prompt)
             if isinstance(reply, dict) and reply.get("intent") == "talk":
                 job.say("reply", str(reply.get("reply") or reply.get("summary") or job.text("talk_fallback"))[:MAX_REPLY])
@@ -1201,6 +1243,7 @@ class Jobs:
         job.update(stage="analyzing")
         self._spend(job)
         prompt = listen_prompt(job.request["text"], report, tried[-1] if tried else "", job.lang)
+        prompt = with_skills(prompt, job.request["text"], "listen")
         try:
             verdict = self._ask(job, model.listen, wav, prompt)
         except ModelError as exc:
