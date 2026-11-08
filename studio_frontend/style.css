@@ -172,3 +172,13 @@ dialog input[type=text], dialog select { background:var(--raised); border:0; bor
 .creditHistory { margin:16px 0; max-height:240px; overflow:auto; }
 .creditHistory .lineItem { display:flex; gap:8px; padding:6px 0; border-top:1px solid var(--divider); font-size:.85rem; }
 .creditHistory .grow { flex:1; color:var(--text2); }
+#saveState[style*="err"] { cursor:pointer; text-decoration:underline; }
+#toast { position:fixed; left:50%; bottom:112px; transform:translateX(-50%); z-index:50; display:flex; align-items:center; gap:8px; max-width:calc(100vw - 32px); padding:8px 8px 8px 16px; background:var(--raised); color:var(--text); border:1px solid var(--divider); border-radius:14px; box-shadow:0 8px 24px rgba(0,0,0,.5); }
+#toast button { min-height:40px; color:var(--focus); }
+#elsewhere { position:fixed; inset:0; z-index:45; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; background:rgba(15,15,15,.92); text-align:center; padding:16px; }
+#elsewhere p { margin:0; font-size:1.1rem; }
+#elsewhere button { background:var(--text); color:#111; }
+.logoutRow { margin-top:8px; }
+.wipe { display:inline-flex; align-items:center; gap:8px; color:var(--text2); font-size:.88rem; cursor:pointer; }
+.wipe input { width:20px; height:20px; accent-color:var(--text); }
+dialog .row input[type=text] { flex:1; min-width:0; }

@@ -42,6 +42,7 @@
     download: '<path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>',
     game: '<path d="M7 8h10a5 5 0 0 1 4.7 6.7l-.8 2.1a2.5 2.5 0 0 1-4.1.9L14.5 15.5h-5l-2.3 2.2a2.5 2.5 0 0 1-4.1-.9l-.8-2.1A5 5 0 0 1 7 8z"/><path d="M8 10v3.5M6.2 11.750h3.6M15.5 11h.01M17.5 13h.01"/>',
     upload: '<path d="M12 20V9M7 13l5-5 5 5M5 4h14"/>',
+    trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
   };
   const setIcon = (e, name) => { e.innerHTML = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`; };
   const iconLabel = (e, name, label) => { setIcon(e, name); e.setAttribute('aria-label', label); e.title = label; };
@@ -70,28 +71,169 @@
   const { compose, songText, parseSong, locate, clean } = window.songCode;
 
   /* ---------- storage ---------- */
-  let db = { current: '', projects: [] };
-  let dirty = false;
-  function load() {
-    try { const stored = localStorage.getItem(STORE); if (stored) db = JSON.parse(stored); } catch { /* starts fresh */ }
-    if (!db.projects.length) { const p = newProject(t('first_song')); db = { current: p.id, projects: [p] }; }
+  // Songs live in this browser, one key per signed-in account so a shared computer keeps people apart.
+  // Several tabs may share a key: every write first merges what is stored, newest project wins.
+  const MOVED = STORE + ':moved', TRASH_DAYS = 30, DAY = 864e5;
+  const tabId = uid();
+  let storeKey = '', db = null, dirty = false, wiped = false, freshStore = false;
+  const accountHash = (s) => { // cyrb53: a stable, non-reversible tag, not a secret
+    let a = 0xdeadbeef, b = 0x41c6ce57;
+    for (const ch of s) { const c = ch.codePointAt(0); a = Math.imul(a ^ c, 2654435761); b = Math.imul(b ^ c, 1597334677); }
+    a = Math.imul(a ^ (a >>> 16), 2246822507) ^ Math.imul(b ^ (b >>> 13), 3266489909);
+    b = Math.imul(b ^ (b >>> 16), 2246822507) ^ Math.imul(a ^ (a >>> 13), 3266489909);
+    return (4294967296 * (2097151 & b) + (a >>> 0)).toString(36);
+  };
+  const keyFor = (acct) => (acct?.email ? `${STORE}:${accountHash(String(acct.email).trim().toLowerCase())}` : STORE);
+  function readStore(key = storeKey) { try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : null; } catch { return null; } }
+  function normalize(d) {
+    d = d && typeof d === 'object' ? d : {};
+    d.projects = Array.isArray(d.projects) ? d.projects.filter((p) => p && p.id && Array.isArray(p.tracks)) : [];
+    d.trash = Array.isArray(d.trash) ? d.trash.filter((x) => x && x.id && Date.now() - (x.deletedAt || 0) < TRASH_DAYS * DAY) : [];
+    return d;
+  }
+  // Songs made before sign-in belong to whoever signs in first on this browser, once.
+  function adoptOldSongs(key) {
+    if (key === STORE) return;
+    try {
+      if (localStorage.getItem(key) || localStorage.getItem(MOVED) || !localStorage.getItem(STORE)) return;
+      localStorage.setItem(key, localStorage.getItem(STORE));
+      localStorage.setItem(MOVED, key);
+      localStorage.removeItem(STORE);
+    } catch { /* storage blocked: nothing to move */ }
+  }
+  function load(key) {
+    storeKey = key; adoptOldSongs(key);
+    const stored = readStore();
+    db = normalize(stored);
+    freshStore = !stored;
+    if (!db.projects.length) { const p = newProject(t('first_song')); db.projects = [p]; db.current = p.id; }
+    if (!project()) db.current = db.projects[db.projects.length - 1].id;
+  }
+  // Brings another tab's writes in. Returns what changed so the view can follow.
+  function mergeFrom(other) {
+    other = normalize(other);
+    const out = { changed: false, current: false };
+    const trash = new Map(db.trash.map((x) => [x.id, x]));
+    for (const x of other.trash) if (!trash.has(x.id) || x.deletedAt > trash.get(x.id).deletedAt) trash.set(x.id, x);
+    const mine = new Map(db.projects.map((p) => [p.id, p]));
+    for (const x of other.projects) {
+      const m = mine.get(x.id), gone = trash.get(x.id);
+      if (gone && gone.deletedAt >= (x.updated || 0) && gone.deletedAt >= (m?.updated || 0)) continue;
+      if (!m) { db.projects.push(x); out.changed = true; } else if ((x.updated || 0) > (m.updated || 0)) {
+        for (const k of Object.keys(m)) delete m[k];
+        Object.assign(m, x); // in place, so code holding this project keeps a live reference
+        out.changed = true; if (x.id === db.current) out.current = true;
+      }
+    }
+    db.projects = db.projects.filter((p) => {
+      const gone = trash.get(p.id);
+      if (!gone || gone.deletedAt < (p.updated || 0)) return true;
+      out.changed = true; if (p.id === db.current) out.current = true;
+      return false;
+    });
+    const live = new Set(db.projects.map((p) => p.id));
+    const before = db.trash.length;
+    db.trash = [...trash.values()].filter((x) => !live.has(x.id));
+    if (db.trash.length !== before) out.changed = true;
+    return out;
   }
   function showSave(text, color = '') { $('saveState').textContent = text; $('saveState').style.color = color; }
   function persist() {
+    clearTimeout(touched.t);
+    if (!db || wiped) return true;
     try {
-      localStorage.setItem(STORE, JSON.stringify(db));
-      dirty = false; showSave(t('saved'));
+      const stored = readStore(); if (stored) mergeFrom(stored);
+      localStorage.setItem(storeKey, JSON.stringify(db));
+      dirty = false; showSave(t('saved')); $('saveState').onclick = null;
       return true;
     } catch {
       showSave(t('save_failed'), 'var(--err)');
+      $('saveState').onclick = projectDialog;
+      backupHint('failed');
       return false;
     }
   }
-  function touched() {
+  // p is the project that changed; null when only settings changed.
+  function touched(p = project()) {
+    if (p && typeof p === 'object' && p.id) p.updated = Date.now();
     dirty = true; showSave(t('saving'));
     clearTimeout(touched.t); touched.t = setTimeout(persist, 400);
   }
-  const project = () => db.projects.find((p) => p.id === db.current);
+  const project = () => db?.projects.find((p) => p.id === db.current);
+  const findProject = (id) => db.projects.find((p) => p.id === id);
+
+  /* ---------- toast ---------- */
+  const toastBox = el('div', { id: 'toast', hidden: true });
+  toastBox.setAttribute('role', 'status');
+  function toast(text, action, fn, ms = 7000) {
+    toastBox.replaceChildren(el('span', { textContent: text }));
+    if (action) toastBox.append(el('button', { className: 'ghost', textContent: action, onclick: () => { toastBox.hidden = true; fn(); } }));
+    (dlg.open ? dlg : document.body).append(toastBox); // inside an open modal, or it would sit under the backdrop
+    toastBox.hidden = false;
+    clearTimeout(toast.t); toast.t = setTimeout(() => { toastBox.hidden = true; }, ms);
+  }
+
+  /* ---------- keeping songs safe ---------- */
+  let hinted = false;
+  function exportAll() {
+    const day = new Date().toISOString().slice(0, 10);
+    saveFile(`olmuse-backup-${day}.ddalkkak.json`, JSON.stringify({ backup: 1, projects: db.projects }));
+  }
+  // Once: this browser may lose the songs, so offer a backup file.
+  function backupHint(kind) {
+    if (hinted || db?.backupHint) return;
+    hinted = true;
+    if (kind !== 'failed') { db.backupHint = true; touched(null); }
+    toast(t('backup_' + kind), t('backup_now'), exportAll, 15000);
+  }
+  async function guardStorage() {
+    let granted = false, quota = 0;
+    try { granted = await navigator.storage?.persist?.(); } catch { /* not offered */ }
+    try { quota = (await navigator.storage?.estimate?.())?.quota || 0; } catch { /* not offered */ }
+    const ua = navigator.userAgent;
+    const safari = /Safari\//.test(ua) && !/Chrome|Chromium|CriOS|FxiOS|Android|Edg/.test(ua);
+    const heap = performance.memory?.jsHeapSizeLimit || 1073741824;
+    if (quota && quota < heap * 2 && /Chrome/.test(ua)) backupHint('private'); // private windows get a memory-sized quota
+    else if (safari && !granted) backupHint('safari');
+  }
+
+  /* ---------- other tabs ---------- */
+  // Each tab owns the song it shows. When another tab opens the same song, this one steps back
+  // until "continue here", so two tabs never write over each other's edits of one song.
+  const channel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('olmuse-studio') : null;
+  let lockedBy = '';
+  const announce = (type = 'open') => db && channel?.postMessage({ type, key: storeKey, project: db.current, tab: tabId });
+  const lockVeil = el('div', { id: 'elsewhere', hidden: true },
+    el('p', { className: 'elseText' }), el('button', { className: 'primary elseGo', onclick: () => continueHere() }));
+  function showLock() {
+    lockVeil.querySelector('.elseText').textContent = t('elsewhere');
+    lockVeil.querySelector('.elseGo').textContent = t('continue_here');
+    lockVeil.hidden = !lockedBy;
+  }
+  function lockHere(by) {
+    lockedBy = by; stop(); if (dlg.open) dlg.close();
+    showLock();
+  }
+  function catchUp() {
+    const stored = readStore(); if (!stored) return;
+    const r = mergeFrom(stored);
+    if (!r.changed) return;
+    if (!project()) db.current = db.projects[db.projects.length - 1]?.id || '';
+    if (!project()) { const p = newProject(t('first_song')); db.projects.push(p); db.current = p.id; }
+    render();
+    if (r.current) { renderChat(); editorDirty = false; }
+    if (dlg.open && dlg.dataset.kind === 'project') projectDialog();
+  }
+  function continueHere() { catchUp(); lockedBy = ''; showLock(); renderChat(); announce(); }
+  channel?.addEventListener('message', (e) => {
+    const m = e.data || {};
+    if (!db || m.key !== storeKey || m.tab === tabId) return;
+    if (m.type === 'wipe') { wiped = true; try { window.parent.location.reload(); } catch { /* host decides */ } return; }
+    if (m.type === 'open' && m.project === db.current && !lockedBy) { persist(); lockHere(m.tab); return; }
+    if (lockedBy === m.tab && (m.type === 'gone' || m.project !== db.current)) { continueHere(); }
+  });
+  addEventListener('storage', (e) => { if (db && e.key === storeKey && e.newValue) catchUp(); });
+  addEventListener('pagehide', () => announce('gone'));
 
   /* ---------- streamlit bridge ---------- */
   const toHost = (type, extra) => window.parent.postMessage({ isStreamlitMessage: true, type, ...extra }, '*');
@@ -173,6 +315,8 @@
     return r;
   }
   async function play() {
+    if (!project()) return false;
+    iosHint();
     await engines.live.whenReady;
     pushMix();
     const r = await startLive(compose(project(), true));
@@ -201,17 +345,29 @@
   }
   const mmss = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
+  // A job belongs to the song it was asked from, whatever is open when the result lands.
+  const jobSong = {};
+  let askedFrom = '';
+  function jobProjectId(j) {
+    if (j.project_id) return j.project_id;
+    if (!(j.id in jobSong)) { jobSong[j.id] = askedFrom || db.current; askedFrom = ''; }
+    return jobSong[j.id];
+  }
+  const jobProject = (j) => findProject(jobProjectId(j)) || db.trash.find((x) => x.id === jobProjectId(j));
   async function handleCandidate(j) {
-    const c = j.candidate, p = project();
+    const c = j.candidate, p = jobProject(j);
     const report = (extra) => send('feedback', { job_id: j.id, seq: c.seq, ...extra });
+    if (!p) { send('cancel', {}); return; }
     const proved = await probe(compose({ bpm: c.bpm, tracks: c.tracks }, true));
     if (!proved.ok) { report({ ok: false, error: proved.error }); return; }
     p.bpm = c.bpm; p.tracks = c.tracks;
-    if (!await play()) { report({ ok: false, error: t('play_failed_short') }); return; }
+    const here = p.id === db.current;
+    if (here && !await play()) { report({ ok: false, error: t('play_failed_short') }); return; }
     addVersion(p, c.summary || t('v_edit'), 'ai');
-    touched(); render();
-    if (c.listen) report(await listenBack(p));
-    else report({ ok: true });
+    touched(p); render();
+    if (!here && findProject(p.id)) toast(t('result_elsewhere', { name: p.name }), t('go_see'), () => switchTo(p.id));
+    if (c.listen && here) report(await listenBack(p));
+    else report(c.listen ? { ok: true, wav: '' } : { ok: true });
   }
   // Records a stretch of the real output so the AI can hear its own edit.
   async function listenBack(p) {
@@ -231,10 +387,24 @@
     } finally { $('listenBand').hidden = true; }
   }
 
+  // The store follows the signed-in account. A signed-in render without account details keeps what is open.
+  function useStore(args) {
+    const key = args.signed_in && !args.account?.email ? (storeKey || STORE) : keyFor(args.account);
+    if (key === storeKey) return;
+    const first = !storeKey;
+    if (!first) { if (dirty) persist(); stop(); announce('gone'); }
+    lockedBy = ''; showLock();
+    load(key); applyScale(); showProject();
+    if (freshStore) say('status', t('where_saved'));
+    announce();
+    if (first) guardStorage();
+  }
+
   function onRender(args) {
     fit();
     if (args.lang === pendingLang) pendingLang = '';
     if (!pendingLang && i18n.pick(args.lang) && args.lang !== i18n.lang) setLang(args.lang);
+    useStore(args);
     aiEnabled = !!args.ai_enabled; engineName = args.engine || '';
     fillChoices(args.choices);
     account = args.account || null; showCredits();
@@ -244,7 +414,8 @@
     job = j;
     if (j) {
       shownMsg[j.id] ??= 0;
-      for (const m of j.messages.slice(shownMsg[j.id])) say(m.kind, m.text, m.detail);
+      const home = jobProject(j) || project();
+      for (const m of j.messages.slice(shownMsg[j.id])) say(m.kind, m.text, m.detail, home);
       shownMsg[j.id] = j.messages.length;
       const key = j.candidate && `${j.id}:${j.candidate.seq}`;
       if (key && key !== handledSeq && j.status === 'running') { handledSeq = key; handleCandidate(j); }
@@ -256,7 +427,7 @@
   const modelCost = (id) => account?.prices.models[id] ?? 2;
   const callCost = () => modelCost($('modelPick').value) + (account.prices.efforts[$('effortPick').value] ?? 0);
   // Most a request can cost: the first call, then one edit and one measurement per extra round.
-  const worstCost = () => (account ? callCost() * (1 + 2 * (db.autoRounds || 0) + (db.autoRounds ? 1 : 0)) : 0);
+  const worstCost = () => (account ? callCost() * (1 + 2 * (db?.autoRounds || 0) + (db?.autoRounds ? 1 : 0)) : 0);
   function showCredits() {
     $('creditBtn').hidden = !account;
     if (!account) { $('costHint').textContent = ''; return; }
@@ -271,11 +442,20 @@
     const table = el('div', { className: 'creditTable' });
     for (const o of $('modelPick').options) table.append(el('span', { textContent: o.textContent }), el('b', { textContent: `${modelCost(o.value)}` }));
     table.append(el('span', { textContent: t('deep') }), el('b', { textContent: `+${account.prices.efforts.high}` }));
-    const out = el('button', { className: 'ghost', textContent: t('logout'), onclick: () => { dlg.close(); send('logout', {}); } });
+    const out = el('button', { className: 'ghost', textContent: t('logout'), onclick: () => { if (wipeOnLogout) wipeHere(); dlg.close(); send('logout', {}); } });
+    const wipe = el('input', { type: 'checkbox', checked: wipeOnLogout, onchange: () => { wipeOnLogout = wipe.checked; } });
     box.replaceChildren(
       el('p', { className: 'creditBig', textContent: t('credit_big', { n: account.credits }) }),
       el('p', { className: 'note', textContent: t('credit_how') }),
-      table, creditBuy(), creditHistory(), out);
+      table, creditBuy(), creditHistory(),
+      el('div', { className: 'row logoutRow' }, out, el('label', { className: 'wipe' }, wipe, el('span', { textContent: t('wipe_here') }))));
+  }
+  let wipeOnLogout = false;
+  // Leaves no songs of this account on a shared computer. Other tabs of the account reload too.
+  function wipeHere() {
+    channel?.postMessage({ type: 'wipe', key: storeKey, tab: tabId });
+    wiped = true; clearTimeout(touched.t);
+    try { localStorage.removeItem(storeKey); } catch { /* nothing stored */ }
   }
   function creditBuy() {
     const code = el('button', { className: 'ghost creditCode', textContent: account.code, title: t('copy') });
@@ -326,11 +506,12 @@
   /* ---------- rendering ---------- */
   let selected = null;
 
-  function say(kind, text, detail) {
-    const p = project();
+  function say(kind, text, detail, p = project()) {
+    if (!p) return;
     p.chat.push({ kind, text, detail, at: Date.now() });
     if (p.chat.length > 500) p.chat.shift();
-    appendMsg({ kind, text, detail }); touched();
+    if (p.id === db.current) appendMsg({ kind, text, detail });
+    touched(p);
   }
   function appendMsg(m) {
     const d = el('div', { className: 'msg ' + m.kind });
@@ -415,7 +596,7 @@
     gain.value = s.gain; gain.setAttribute('aria-label', t('vol_x', { name: tr.name }));
     gain.disabled = !!tr.raw; mute.disabled = !!tr.raw;
     gain.oninput = () => { p.mix[tr.id] = { ...mixOf(p, tr.id), gain: +gain.value }; pushMix(); };
-    gain.onchange = touched;
+    gain.onchange = () => touched(p);
     row.dataset.track = tr.id;
     return row;
   }
@@ -446,7 +627,8 @@
     $('ask').placeholder = aiEnabled ? t('ask_ph') : t('ask_ph_off');
     if (tab === 'score' && scoreShown !== p.versionId) showScore();
   }
-  function renderChat() { $('log').textContent = ''; project().chat.forEach(appendMsg); }
+  function renderChat() { $('log').textContent = ''; project()?.chat.forEach(appendMsg); }
+  function showProject() { render(); renderChat(); $('ask').value = project()?.draft || ''; }
 
   const calm = matchMedia('(prefers-reduced-motion: reduce)');
 
@@ -530,7 +712,38 @@
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = name; a.click();
   }
-  function switchTo(id) { stop(); db.current = id; selected = null; editorDirty = false; touched(); render(); renderChat(); if (dlg.open) dlg.close(); }
+  function switchTo(id) {
+    const from = job?.status === 'running' ? jobProject(job) : null;
+    stop(); db.current = id; selected = null; editorDirty = false; touched(null); showProject(); if (dlg.open) dlg.close();
+    announce();
+    if (from && from.id !== id) toast(t('job_stays', { name: from.name }));
+  }
+  // Deleting never asks: the song goes to the trash for 30 days and the toast can take it back.
+  function trashProject(id) {
+    const i = db.projects.findIndex((p) => p.id === id); if (i < 0) return;
+    const [p] = db.projects.splice(i, 1);
+    db.trash.push({ ...p, deletedAt: Date.now() });
+    let stand = '';
+    const wasOpen = db.current === id;
+    if (wasOpen) {
+      if (!db.projects.length) { const n = newProject(t('new_song_name')); db.projects.push(n); stand = n.id; }
+      switchTo(db.projects[db.projects.length - 1].id);
+    } else if (dlg.open && dlg.dataset.kind === 'project') projectDialog();
+    persist();
+    toast(t('trashed', { name: p.name }), t('undo'), () => {
+      const s = findProject(stand); // the empty song made to stand in goes away again
+      if (s && s.versions.length === 1 && !s.chat.length) db.projects = db.projects.filter((x) => x !== s);
+      restoreProject(id, wasOpen);
+    }, 8000);
+  }
+  function restoreProject(id, open) {
+    const i = db.trash.findIndex((x) => x.id === id); if (i < 0) return;
+    const [p] = db.trash.splice(i, 1);
+    delete p.deletedAt; p.updated = Date.now();
+    db.projects.push(p);
+    if (open) switchTo(id); else if (dlg.open && dlg.dataset.kind === 'project') projectDialog();
+    persist();
+  }
 
   // Plays a saved version without touching the project. Closing the dialog returns to what was playing.
   let audition = null;
@@ -554,17 +767,24 @@
   });
 
   function projectDialog() {
-    const p = project(); openDialog(t('project'));
-    const name = el('input', { type: 'text', value: p.name });
+    const p = project(), wasOpen = dlg.open;
+    openDialog(t('project')); dlg.dataset.kind = 'project';
+    const name = el('input', { type: 'text', value: p.name, translate: false });
     name.setAttribute('aria-label', t('song_name'));
     name.oninput = () => { p.name = name.value.slice(0, 80) || t('untitled'); touched(); render(); };
-    dlg.append(name);
-    for (const x of db.projects) if (x !== p) dlg.append(row(x.name, iconButton('folder', t('open_x', { name: x.name }), () => switchTo(x.id))));
+    const bin = (x) => iconButton('trash', t('delete_x', { name: x.name }), () => trashProject(x.id));
+    dlg.append(el('div', { className: 'row' }, name, bin(p)));
+    for (const x of db.projects) if (x !== p) dlg.append(row(x.name, iconButton('folder', t('open_x', { name: x.name }), () => switchTo(x.id)), bin(x)));
     dlg.append(row('', iconButton('plus', t('new_song'), () => { const n = newProject(t('new_song_name')); db.projects.push(n); switchTo(n.id); }),
-      iconButton('upload', t('import_file'), importFile), iconButton('download', t('export_project'), () => saveFile(`${p.name}.ddalkkak.json`, JSON.stringify(p)))));
+      iconButton('upload', t('import_file'), importFile), iconButton('download', t('export_project'), () => saveFile(`${p.name}.ddalkkak.json`, JSON.stringify(p))),
+      button(t('backup_all'), exportAll)));
     dlg.append(heading('h3', t('prev_versions')));
     for (const v of [...p.versions].reverse().slice(0, 30)) dlg.append(versionRow(p, v));
-    dlg.showModal();
+    if (db.trash.length) {
+      dlg.append(heading('h3', t('trash_title', { n: TRASH_DAYS })));
+      for (const x of [...db.trash].reverse()) dlg.append(row(x.name, iconButton('restore', t('restore_x', { name: x.name }), () => restoreProject(x.id, false))));
+    }
+    if (!wasOpen) dlg.showModal();
   }
   function versionRow(p, v) {
     const back = iconButton('restore', t('restore'), async () => {
@@ -577,23 +797,55 @@
     hear.disabled = job?.status === 'running'; // auto-improve captures the live output
     return row(`${new Date(v.at).toLocaleString(i18n.lang === 'ko' ? 'ko-KR' : 'en-US')} · ${v.summary}`, hear, back);
   }
+  // Song files are small text. Pictures, archives, huge or empty files are turned away before reading.
+  const MAX_IMPORT_MB = 5;
+  const NOT_SONG_TYPE = /^(image|audio|video|font)\/|pdf|zip|rar|7z|gzip|tar|msword|officedocument|excel|powerpoint|octet-stream|x-msdownload/;
+  function importProblem(f) {
+    if (!f.size) return t('import_empty');
+    if (f.size > MAX_IMPORT_MB * 1048576) return t('import_big', { mb: MAX_IMPORT_MB });
+    if (NOT_SONG_TYPE.test(f.type)) return t('import_not_song');
+    return '';
+  }
+  const looksBinary = (s) => s.includes('\0') || (s.match(/�/g) || []).length > 4;
+  const asProject = (n, fallback) => {
+    if (!n || !Array.isArray(n.tracks) || typeof n.bpm !== 'number') return null;
+    const base = newProject(String(n.name || fallback).slice(0, 80)), kept = Array.isArray(n.versions) && n.versions.length;
+    return { ...base, bpm: n.bpm, tracks: n.tracks, head: n.head || '', mix: n.mix || {}, chat: Array.isArray(n.chat) ? n.chat : [],
+      versions: kept ? n.versions : base.versions, versionId: kept ? n.versionId || n.versions[n.versions.length - 1].id : base.versionId,
+      artSeed: n.artSeed, artHistory: n.artHistory };
+  };
+  async function readSong(f) {
+    const why = importProblem(f);
+    if (why) { toast(why); return; }
+    let text;
+    try {
+      if (looksBinary(await f.slice(0, 4096).text())) { toast(t('import_not_song')); return; }
+      text = await f.text();
+    } catch { toast(t('import_unreadable')); return; }
+    if (!text.trim()) { toast(t('import_empty')); return; }
+    if (looksBinary(text)) { toast(t('import_not_song')); return; }
+    let json = null;
+    try { json = JSON.parse(text); } catch { /* code, not JSON */ }
+    if (Array.isArray(json?.projects)) { // a backup of every song
+      const list = json.projects.map((x) => asProject(x, t('imported_song'))).filter(Boolean);
+      if (!list.length) { toast(t('import_not_song')); return; }
+      db.projects.push(...list); switchTo(list[0].id);
+      toast(t('imported_n', { n: list.length }));
+      return;
+    }
+    let n = json && asProject(json, t('imported_song'));
+    if (json && !n) { toast(t('import_not_song')); return; }
+    if (!n) {
+      n = newProject(f.name);
+      const parsed = parseSong(text, n);
+      n.bpm = parsed.bpm; n.head = parsed.head; n.tracks = parsed.tracks.map(clean);
+      addVersion(n, t('imported_code'), 'user');
+    }
+    db.projects.push(n); switchTo(n.id);
+  }
   function importFile() {
     const input = el('input', { type: 'file', accept: '.json,.js,.txt,.strudel' });
-    input.onchange = async () => {
-      const text = await input.files[0].text();
-      let n;
-      try {
-        n = JSON.parse(text);
-        if (!Array.isArray(n.tracks) || typeof n.bpm !== 'number') throw 0;
-        n = { ...newProject(n.name || t('imported_song')), bpm: n.bpm, tracks: n.tracks, mix: n.mix || {}, chat: n.chat || [], versions: n.versions || [], id: uid() };
-      } catch {
-        n = newProject(input.files[0].name);
-        const parsed = parseSong(text, n);
-        n.bpm = parsed.bpm; n.head = parsed.head; n.tracks = parsed.tracks.map(clean);
-        addVersion(n, t('imported_code'), 'user');
-      }
-      db.projects.push(n); switchTo(n.id);
-    };
+    input.onchange = () => { if (input.files[0]) readSong(input.files[0]); };
     input.click();
   }
   function settingsDialog() {
@@ -602,7 +854,7 @@
     scale.setAttribute('aria-label', t('font_size'));
     for (const v of [100, 125, 150, 200]) scale.add(new Option(v + '%', v));
     scale.value = db.scale || 100;
-    scale.onchange = () => { db.scale = +scale.value; applyScale(); touched(); };
+    scale.onchange = () => { db.scale = +scale.value; applyScale(); touched(null); };
     dlg.append(row(t('font_size'), scale));
     const langPick = el('select');
     langPick.setAttribute('aria-label', t('language'));
@@ -696,17 +948,19 @@
     if (account && account.credits < callCost()) { say('error', t('low_credits')); creditDialog(); return; }
     const history = p.chat.filter((m) => ['user', 'reply', 'change', 'heard', 'measured'].includes(m.kind)).slice(-10)
       .map((m) => ({ role: m.kind === 'user' ? 'user' : 'assistant', text: m.detail ? m.text + ' ' + m.detail : m.text }));
-    say('user', text); $('ask').value = '';
-    send('generate', { text, tracks: p.tracks, bpm: p.bpm, target: selected, auto: !!db.autoRounds, rounds: db.autoRounds || 0, model: $('modelPick').value, effort: $('effortPick').value, base_version: p.versionId, history, lang: i18n.lang });
+    say('user', text); $('ask').value = ''; p.draft = '';
+    askedFrom = p.id;
+    send('generate', { project_id: p.id, text, tracks: p.tracks, bpm: p.bpm, target: selected, auto: !!db.autoRounds, rounds: db.autoRounds || 0, model: $('modelPick').value, effort: $('effortPick').value, base_version: p.versionId, history, lang: i18n.lang });
   }
+  $('ask').oninput = () => { const p = project(); if (p) { p.draft = $('ask').value.slice(0, 4000); touched(p); } };
   $('askForm').onsubmit = (e) => { e.preventDefault(); submit(); };
   $('ask').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); } };
   $('stopAi').onclick = () => send('cancel', {});
   $('play').onclick = () => (playing ? stop() : play());
-  $('modelPick').onchange = (e) => { db.model = e.target.value; touched(); showCredits(); };
-  $('effortPick').onchange = (e) => { db.effort = e.target.value; touched(); showCredits(); };
+  $('modelPick').onchange = (e) => { db.model = e.target.value; touched(null); showCredits(); };
+  $('effortPick').onchange = (e) => { db.effort = e.target.value; touched(null); showCredits(); };
   $('creditBtn').onclick = creditDialog;
-  $('autoRounds').oninput = (e) => { db.autoRounds = +e.target.value; touched(); render(); showCredits(); };
+  $('autoRounds').oninput = (e) => { db.autoRounds = +e.target.value; touched(null); render(); showCredits(); };
   $('projectBtn').onclick = projectDialog;
   $('settingsBtn').onclick = settingsDialog;
   $('codeRun').onclick = applyCode;
@@ -755,7 +1009,7 @@
     const p = project(), v = Math.min(400, Math.max(20, +value || p.bpm));
     p.bpm = v; $('bpm').value = v;
     clearTimeout(bpmWait);
-    bpmWait = setTimeout(async () => { addVersion(p, `BPM ${v}`, 'user'); touched(); render(); if (playing) await play(); }, 350);
+    bpmWait = setTimeout(async () => { addVersion(p, `BPM ${v}`, 'user'); touched(p); render(); if (playing) await play(); }, 350);
   }
   $('bpm').onchange = () => setBpm($('bpm').value);
   $('bpmDown').onclick = () => setBpm(+$('bpm').value - 10);
@@ -851,7 +1105,7 @@
   function setLang(next) {
     if (!i18n.pick(next) || next === i18n.lang) return;
     i18n.lang = next;
-    applyStatic(); renderPlay(); render(); renderProgress(); showCredits();
+    applyStatic(); renderPlay(); render(); renderProgress(); showCredits(); showLock();
     if (dlg.open) dlg.close();
     if (tab === 'score') showScore(); else scoreShown = '';
     if (frame.getAttribute('src')) frame.contentWindow?.postMessage({ type: 'asset:lang', lang: next }, '*');
@@ -859,9 +1113,20 @@
   }
   // Until Streamlit echoes the new language back, older renders must not switch it back.
 
+  /* ---------- sound output ---------- */
+  // Unplugging earphones must not move a loud song to the classroom speaker.
+  navigator.mediaDevices?.addEventListener?.('devicechange', () => { if (playing) { stop(); toast(t('device_paused')); } });
+  const ios = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* older iOS */ }
+  function iosHint() {
+    if (!ios || db.iosHint) return;
+    db.iosHint = true; touched(null);
+    toast(t('ios_silent'), '', null, 9000);
+  }
+
   /* ---------- start ---------- */
   (async () => {
-    load(); applyScale(); render(); renderChat();
+    document.body.append(lockVeil);
     addEventListener('resize', fit);
     try { window.parent.addEventListener('resize', fit); } catch { /* cross-origin host */ }
     requestAnimationFrame(drawLoop);

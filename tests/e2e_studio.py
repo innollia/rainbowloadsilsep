@@ -33,6 +33,8 @@ class Fake(BaseHTTPRequestHandler):
                      "score": 50 + calls["listen"], "goal_met": done, "next_instruction": "베이스를 키워"}
         else:
             calls["edit"] += 1
+            if calls["edit"] >= 4:
+                time.sleep(2)  # late enough that the user has switched songs meanwhile
             code = "note(\"c2 g1\").s(\"sawtooth\")" if calls["edit"] != 2 else "this is ( broken"
             reply = {"summary": f"베이스 수정 {calls['edit']}", "bpm": 120,
                      "changes": [{"id": "bass", "name": "베이스", "role": "bass", "code": code, "remove": False}]}
@@ -57,7 +59,7 @@ try:
             time.sleep(0.5)
     with sync_playwright() as p:
         browser = p.chromium.launch(channel="chrome", headless=True)
-        page = browser.new_page(viewport={"width": 1440, "height": 900})
+        page = browser.new_context(viewport={"width": 1440, "height": 900}).new_page()  # one context: tabs share storage
         errors = []
         page.on("pageerror", lambda e: errors.append(str(e)[:200]))
         page.goto(f"http://127.0.0.1:{PORT}/?lang=ko")  # the checks below read Korean text
@@ -77,6 +79,7 @@ try:
         frame.locator("#ask").press("Enter")
         inner.wait_for_function("document.querySelector('.msg.status')&&/목표/.test(document.getElementById('log').textContent)", timeout=90000)
         log = inner.evaluate("[...document.querySelectorAll('.msg')].map(m=>m.className+': '+m.textContent)")
+        edits_main = calls["edit"]
         stored = inner.evaluate("JSON.parse(localStorage.getItem('strudel-ddalkkak-v1')).projects[0]")
         page.screenshot(path=str(Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "artifacts-e2e.png"))
         same_iframe = inner.evaluate("window.__marker") == 1
@@ -149,6 +152,58 @@ try:
         frame.locator(".score-paper svg").first.wait_for(timeout=20000)
         score_notes = inner.evaluate("document.querySelectorAll('.score-paper svg path').length")
         frame.locator("#tabTracks").click()
+        songs = lambda f=inner: f.evaluate("JSON.parse(localStorage.getItem('strudel-ddalkkak-v1'))")
+        # 1: an AI result lands in the song it was asked from, even after switching to another song
+        home = songs()["current"]
+        home_versions = len(next(x for x in songs()["projects"] if x["id"] == home)["versions"])
+        frame.locator("#autoRounds").fill("0")
+        frame.locator("#ask").fill("베이스 조금만")
+        frame.locator("#ask").press("Enter")
+        frame.locator("#projectBtn").click()
+        frame.locator("#dialog").get_by_role("button", name="새 곡 만들기").click()
+        inner.wait_for_function("/결과가 들어갔어/.test(document.getElementById('toast')?.textContent||'')", timeout=60000)
+        time.sleep(1)
+        after = songs()
+        other = next(x for x in after["projects"] if x["id"] == after["current"])
+        home_song = next(x for x in after["projects"] if x["id"] == home)
+        result_bound = (other["id"] != home and len(other["versions"]) == 1 and not any(m["kind"] == "change" for m in other["chat"])
+                        and len(home_song["versions"]) == home_versions + 1 and home_song["versions"][-1]["by"] == "ai")
+        frame.locator("#toast").get_by_role("button", name="가 보기").click()
+        time.sleep(.8)
+        went_back = songs()["current"] == home
+        # 5: delete goes to the trash without asking, and the toast takes it back
+        spare = other["id"]
+        frame.locator("#projectBtn").click()
+        frame.locator("#dialog").get_by_role("button", name="새 곡 지우기").first.click()
+        time.sleep(.3)
+        gone = songs(); trashed = spare not in [x["id"] for x in gone["projects"]] and spare in [x["id"] for x in gone["trash"]]
+        frame.locator("#toast").get_by_role("button", name="되돌리기").click()
+        time.sleep(.3)
+        back = songs(); undone = spare in [x["id"] for x in back["projects"]] and not back["trash"]
+        page.keyboard.press("Escape")
+        # 2: a second tab neither wipes this tab's songs nor edits the same song at once
+        count = len(songs()["projects"])
+        page2 = page.context.new_page()
+        page2.goto(f"http://127.0.0.1:{PORT}/?lang=ko")
+        frame2 = page2.frame_locator('iframe[title*="studio"]')
+        frame2.locator("#play").wait_for(timeout=30000)
+        inner.wait_for_function("!document.getElementById('elsewhere').hidden", timeout=15000)
+        frame2.locator("#projectBtn").click()
+        frame2.locator("#dialog").get_by_role("button", name="새 곡 만들기").click()
+        inner.wait_for_function("document.getElementById('elsewhere').hidden", timeout=15000)
+        bpm_before = next(x for x in songs()["projects"] if x["id"] == home)["bpm"]
+        frame.locator("#bpmUp").click()
+        time.sleep(1.5)
+        merged = songs()
+        tabs_merge = len(merged["projects"]) == count + 1 and next(x for x in merged["projects"] if x["id"] == home)["bpm"] == bpm_before + 10
+        frame2.locator("#projectBtn").click()
+        frame2.locator("#dialog").get_by_role("button", name="첫 곡 열기").click()
+        inner.wait_for_function("!document.getElementById('elsewhere').hidden", timeout=15000)
+        frame.locator("#elsewhere button").click()
+        inner2 = next(f for f in page2.frames if "studio_frontend" in f.url or "component" in f.url)
+        inner2.wait_for_function("!document.getElementById('elsewhere').hidden", timeout=15000)
+        tabs_handover = inner.evaluate("document.getElementById('elsewhere').hidden")
+        page2.close()
         frame.locator("#settingsBtn").click()
         frame.get_by_role("button", name="게임하기").click()
         page.get_by_text("음악 작업실로 돌아가기").wait_for(timeout=15000)
@@ -156,7 +211,7 @@ try:
     checks = {
         "iframe kept across reruns": same_iframe,
         "two heard reports": sum("heard" in x for x in log) == 2,
-        "broken code fixed": calls["edit"] == 3,
+        "broken code fixed": edits_main == 3,
         "drums untouched": stored["tracks"][0]["code"].startswith("stack(s(\"bd*4\")"),
         "versions saved": len(stored["versions"]) >= 3,
         "real audio sent": calls["audio_bytes"] > 1_000_000,
@@ -179,6 +234,12 @@ try:
         "cover long press shows history": history_count >= 2,
         "escape closes cover shelf": shelf_closed,
         "bpm steps by ten as one version": bpm_step[1] == f"BPM {bpm_step[0]}",
+        "ai result stays with its song": result_bound,
+        "toast goes to that song": went_back,
+        "delete moves to trash": trashed,
+        "undo restores deleted song": undone,
+        "second tab keeps both tabs' songs": tabs_merge,
+        "same song in two tabs hands over": tabs_handover,
     }
     print(calls, errors[:3])
     for name, ok in checks.items():

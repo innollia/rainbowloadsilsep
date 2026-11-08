@@ -23,7 +23,7 @@
       <div class="hero">
         <svg id="art" viewBox="0 0 100 100" role="button" tabindex="0" aria-label="Change album art. Long-press to pick a past cover" title="Click to change · long-press for past covers" data-i18n-aria="art_aria" data-i18n-title="art_title"></svg>
         <div class="heroText">
-          <h1 id="songTitle"></h1>
+          <h1 id="songTitle" translate="no"></h1>
           <p id="songMeta"></p>
           <canvas id="viz" height="110" aria-label="Live output visualizer" data-i18n-aria="viz_aria"></canvas>
           <div id="listenBand" hidden></div>
@@ -36,7 +36,7 @@
         <span class="spacer"></span>
         <button id="allMute" class="ghost iconBtn" data-icon="sound" aria-label="Mute all" title="Mute all"></button>
       </div>
-      <div id="tracks" role="tabpanel"></div>
+      <div id="tracks" role="tabpanel" translate="no"></div>
       <div id="scorePanel" role="tabpanel" hidden></div>
       <div id="codePanel" role="tabpanel" hidden>
         <div class="codeBar">
@@ -46,7 +46,7 @@
           <button id="codeImport" class="ghost iconBtn" data-icon="upload" aria-label="Import" title="Import" data-i18n-aria="import" data-i18n-title="import"></button>
           <button id="codeExport" class="ghost iconBtn" data-icon="download" aria-label="Export code" title="Export code" data-i18n-aria="export_code" data-i18n-title="export_code"></button>
         </div>
-        <div id="codeHost"></div>
+        <div id="codeHost" translate="no"></div>
       </div>
     </section>
     <div id="divider" role="separator" aria-orientation="vertical" aria-label="Chat width" data-i18n-aria="chat_width" tabindex="0"></div>
