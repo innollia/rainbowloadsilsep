@@ -63,7 +63,15 @@
     }
   }
 
+  // A sound the user brought in. A request plays it faster or slower, which moves pitch and length together.
+  function fromSource(asset, change) {
+    const src = asset.source, speed = (change.shift ?? 1) / (change.stretch ?? 1);
+    const length = Math.max(1, Math.floor(src.length / speed)), data = new Float32Array(length);
+    for (let i = 0; i < length; i++) { const at = i * speed, j = Math.floor(at), f = at - j; data[i] = (src[j] || 0) * (1 - f) + (src[j + 1] || 0) * f; }
+    return finish([{ name: 'main', data }], length, change, change.level ?? 1);
+  }
   function render(asset, change = {}) {
+    if (asset.source) return fromSource(asset, change);
     const shift = change.shift ?? 1, stretch = change.stretch ?? 1, level = (change.level ?? 1) * (asset.loud ?? 1);
     const end = (l) => {
       if (l.kind === 'seq') return l.notes.length * l.step;
@@ -97,6 +105,9 @@
         for (let i = 0; i < length; i++) g.data[i] -= mean;
       }
     }
+    return finish(groups, length, change, level);
+  }
+  function finish(groups, length, change, level) {
     const mix = new Float32Array(length);
     for (const g of groups) for (let i = 0; i < length; i++) { g.data[i] *= level; mix[i] += g.data[i]; }
     if (change.ceiling) {
@@ -140,7 +151,21 @@
       lead: Math.max(0, lead) / rate * 1000, tail: (mix.length - 1 - last) / rate * 1000,
       dc: Math.abs(total / mix.length), seam: Math.abs(mix[0] - mix[mix.length - 1]) / steep,
       wrap: Math.abs(db(rms(0, span)) - db(rms(mix.length - span, span))), dip: db(Math.sqrt(sum / mix.length)) - db(Math.min(...frames)),
+      ...bands(mix, rate),
     };
+  }
+  // Where the energy sits: share below 250 Hz, 250 Hz to 4 kHz, above 4 kHz, and a brightness from the zero-crossing rate.
+  function bands(mix, rate) {
+    const k = (f) => 1 - Math.exp(-2 * Math.PI * f / rate);
+    const a = k(250), b = k(4000);
+    let l1 = 0, l2 = 0, low = 0, mid = 0, high = 0, cross = 0;
+    for (let i = 0; i < mix.length; i++) {
+      const x = mix[i]; l1 += (x - l1) * a; l2 += (x - l2) * b;
+      low += l1 * l1; mid += (l2 - l1) ** 2; high += (x - l2) ** 2;
+      if (i && (x >= 0) !== (mix[i - 1] >= 0)) cross++;
+    }
+    const all = low + mid + high || 1, pct = (v) => Math.round(v / all * 100);
+    return { low: pct(low), mid: pct(mid), high: pct(high), bright: Math.round(cross / Math.max(1, mix.length) * rate / 2) };
   }
 
   function peaks(data, count) {

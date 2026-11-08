@@ -21,6 +21,7 @@
     next: '<path d="m9 6 6 6-6 6"/>',
     check: '<path d="m5 13 4 4 10-11"/>',
     flag: '<path d="M6 21V4h12l-3 4 3 4H6"/>',
+    upload: '<path d="M12 15V4M7 8l5-5 5 5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/>',
   };
   const setIcon = (el, name) => { el.innerHTML = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`; };
   const iconButton = (name, label, fn, cls = 'iconBtn') => { const b = el('button', cls); setIcon(b, name); b.setAttribute('aria-label', label); b.title = label; b.onclick = fn; return b; };
@@ -93,10 +94,27 @@ ${p.form}`,
       moreRemoved: (n) => `${n} more removed`, startWithSpec: 'Start with this spec', addOnly: 'Add only, remove nothing',
       specApplied: (n) => `Spec applied. ${n} new assets`,
       exportIssues: (n, names) => `${n} assets with spec issues will also be exported: ${names}`, exportUnapproved: (n) => `${n} unapproved assets will be left out.`,
-      inBundle: 'In the bundle', bundleItems: ['Approved sound files', 'Spec game-audio.spec.json', 'CREDITS.md and license texts'], licenses: 'Licenses',
-      exportBundle: 'Export bundle', shellOnly: 'This is only a shell, so no files are made yet', restart: 'Start again from samples',
+      inBundle: 'In the bundle', bundleItems: ['Approved sound files audio/*.wav', 'Spec game-audio.spec.json, which Import reads back', 'CREDITS.md and lint-report.json'], licenses: 'Licenses',
+      exportBundle: 'Export bundle', exported: (n) => `Bundled ${n} sounds`, restart: 'Start again from samples',
+      importShort: 'Import', importTitle: 'Bring in what you already have', importIntro: 'Already made sounds, or have a list of what the game needs? Start from there.',
+      dropHere: 'Drop sound files, a folder or an exported bundle',
+      importFilesHead: 'Sound files', importFilesHelp: 'wav, mp3 or ogg, several at once. You can also drop a whole folder anywhere on this screen. Name and category are guessed from the file and folder names; fix them right here.',
+      pickFiles: 'Choose files', pickFolder: 'Choose a folder',
+      importBundleHead: 'Exported bundle', importBundleHelp: 'The .zip that Export made, or its unzipped folder. You carry on where you left off.', pickBundle: 'Open bundle',
+      importListHead: 'List of sounds the game needs', importListHelp: 'One per line, or CSV with a header (id, name, category, when, description). They go on the board as empty slots for the AI to fill.',
+      listPlaceholder: 'Button click\nSword hit, combat, short and dry\nbgm_title\nForest, ambience', listCount: (n) => `${n} sounds`, addSlots: (n) => `Add ${n} empty slot${n === 1 ? '' : 's'}`,
+      justImported: 'Just brought in', imported: 'Brought in', importedN: (n) => `Brought in ${n} sound${n === 1 ? '' : 's'}`, bundleLoaded: (g, n) => `Opened ${g}: ${n} assets`,
+      slotsAdded: (n) => `Added ${n} empty slots`, importFailed: (names) => `Could not read: ${names}`, nothingToImport: 'No sound files, bundle or list found here',
+      nameLabel: 'Name', guessed: 'Guessed, check it', licenseLater: 'License (fill in later)', holderLater: 'Holder', licenseOf: (n) => `License of ${n}`,
+      importedLicense: 'You brought this sound in, so its license is yours to record. It goes into CREDITS.md.', noLicenseYet: 'license not recorded',
+      originHead: 'Source', fillLeft: (n) => `${n} empty slot${n === 1 ? '' : 's'} to make.`, fillAll: 'Fill with AI', filling: (n) => `Making ${n}`,
+      likeThis: 'Drafts in this feel', likeName: (n) => `${n} (like)`, likeMade: (n) => `Making ${n} in this feel`, promptHead: 'AI prompt',
+      fromPrompt: 'Made from the prompt', importedNote: 'Brought in', fromBundle: 'From the bundle', importHint: 'Already have sounds or a sound list? Drop them here or import them.',
+      fillPrompt: (p) => `Make the game sound "${p.name}" (${p.id}, ${p.cat}) for ${p.game}.\n${p.when ? `When it plays: ${p.when}\n` : ''}${p.description ? `What it sounds like: ${p.description}\n` : ''}Form: ${p.loop ? 'seamless loop' : 'one shot'}${p.length ? `, about ${p.length}s` : ''}.${p.style ? `\nGame sound direction: ${p.style}` : ''}${p.ref}`,
+      refPrompt: (r) => `\n\nReference: make it in the feel of "${r.name}", the user's own sound (${r.file}). Measured from that file:\n- length ${r.seconds}s, ${r.loop ? 'loop' : 'one shot'}\n- peak ${r.peak} dB, loudness ${r.loud} LUFS\n- energy: low (<250 Hz) ${r.low}% · mid ${r.mid}% · high (>4 kHz) ${r.high}%, brightness about ${r.bright} Hz\n- leading silence ${r.lead} ms, trailing silence ${r.tail} ms\nStay close to its length, loudness and band balance. Do not copy it.`,
       tutorialTitle: 'How to make game sounds',
       steps: [
+        ['Bring in what you have', 'Already have sounds, a list of the sounds the game needs, or a bundle exported here? Import puts them on the board.'],
         ['Get a spec', 'From the Spec button, copy the prompt, send it to the AI that has the game design doc, and paste back the spec it returns.'],
         ['Check samples', 'Key sounds come first. Hover over a tile to listen, then approve.'],
         ['Make the rest', 'The rest are made at once in the style of the approved samples.'],
@@ -166,10 +184,27 @@ ${p.form}`,
       moreRemoved: (n) => `외 ${n}개 삭제`, startWithSpec: '이 명세로 작업 시작', addOnly: '삭제 없이 추가만',
       specApplied: (n) => `명세를 적용했어요. 새 에셋 ${n}개`,
       exportIssues: (n, names) => `규격 문제가 남은 에셋 ${n}개도 함께 나갑니다: ${names}`, exportUnapproved: (n) => `아직 승인되지 않은 에셋 ${n}개는 빠집니다.`,
-      inBundle: '묶음에 들어가는 것', bundleItems: ['승인한 소리 파일', '명세 game-audio.spec.json', 'CREDITS.md와 라이선스 원문'], licenses: '저작권',
-      exportBundle: '묶음 내보내기', shellOnly: '껍데기라 실제 파일은 아직 만들지 않아요', restart: '샘플 단계부터 다시',
+      inBundle: '묶음에 들어가는 것', bundleItems: ['승인한 소리 파일 audio/*.wav', '명세 game-audio.spec.json (가져오기로 다시 읽음)', 'CREDITS.md와 lint-report.json'], licenses: '저작권',
+      exportBundle: '묶음 내보내기', exported: (n) => `소리 ${n}개를 묶었어요`, restart: '샘플 단계부터 다시',
+      importShort: '가져오기', importTitle: '이미 만든 작업 가져오기', importIntro: '만들어 둔 소리나 게임에 필요한 소리 목록이 있으면 거기서 시작하세요.',
+      dropHere: '소리 파일, 폴더, 내보낸 묶음을 여기에 놓으세요',
+      importFilesHead: '소리 파일', importFilesHelp: 'wav, mp3, ogg 여러 개를 한 번에. 폴더째 이 화면 아무 데나 끌어다 놓아도 돼요. 이름과 분류는 파일·폴더 이름으로 짐작하니 여기서 바로 고치세요.',
+      pickFiles: '파일 고르기', pickFolder: '폴더 고르기',
+      importBundleHead: '내보낸 묶음', importBundleHelp: '내보내기로 받은 .zip이나 그 압축을 푼 폴더. 하던 데서 이어서 합니다.', pickBundle: '묶음 열기',
+      importListHead: '게임에 필요한 소리 목록', importListHelp: '한 줄에 하나, 또는 머리줄(id, name, category, when, description)이 있는 CSV. 빈 칸으로 올라가고 AI가 채웁니다.',
+      listPlaceholder: '버튼 클릭\n칼 타격, 전투, 짧고 건조하게\nbgm_title\n숲, 환경', listCount: (n) => `소리 ${n}개`, addSlots: (n) => `빈 칸 ${n}개 올리기`,
+      justImported: '방금 가져온 소리', imported: '직접 가져옴', importedN: (n) => `소리 ${n}개를 가져왔어요`, bundleLoaded: (g, n) => `${g} 묶음을 열었어요. 에셋 ${n}개`,
+      slotsAdded: (n) => `빈 칸 ${n}개를 올렸어요`, importFailed: (names) => `읽지 못한 파일: ${names}`, nothingToImport: '소리 파일, 묶음, 목록을 찾지 못했어요',
+      nameLabel: '이름', guessed: '짐작한 분류예요, 확인하세요', licenseLater: '라이선스 (나중에 적어도 돼요)', holderLater: '저작권자', licenseOf: (n) => `${n} 라이선스`,
+      importedLicense: '직접 가져온 소리라 라이선스는 직접 적어 주세요. CREDITS.md에 들어갑니다.', noLicenseYet: '라이선스 기록 없음',
+      originHead: '출처', fillLeft: (n) => `만들 빈 칸 ${n}개.`, fillAll: 'AI로 채우기', filling: (n) => `${n}개를 만드는 중`,
+      likeThis: '이 느낌으로 시안', likeName: (n) => `${n} 느낌`, likeMade: (n) => `이 느낌으로 ${n}개를 만들어요`, promptHead: 'AI 프롬프트',
+      fromPrompt: '프롬프트로 생성', importedNote: '직접 가져옴', fromBundle: '묶음에서 가져옴', importHint: '이미 만든 소리나 소리 목록이 있나요? 여기에 끌어다 놓거나 가져오세요.',
+      fillPrompt: (p) => `${p.game}에 쓸 게임 소리 "${p.name}"(${p.id}, ${p.cat})를 만들어 주세요.\n${p.when ? `나는 때: ${p.when}\n` : ''}${p.description ? `어떤 소리: ${p.description}\n` : ''}형태: ${p.loop ? '끊김 없는 반복' : '한 번 재생'}${p.length ? `, 약 ${p.length}초` : ''}.${p.style ? `\n게임 소리 방향: ${p.style}` : ''}${p.ref}`,
+      refPrompt: (r) => `\n\n기준 소리: 사용자가 가져온 "${r.name}"(${r.file})의 느낌으로 만들어 주세요. 그 파일을 잰 값:\n- 길이 ${r.seconds}초, ${r.loop ? '반복' : '한 번 재생'}\n- 최대 ${r.peak} dB, 음량 ${r.loud} LUFS\n- 에너지: 저역(250 Hz 아래) ${r.low}% · 중역 ${r.mid}% · 고역(4 kHz 위) ${r.high}%, 밝기 약 ${r.bright} Hz\n- 앞 무음 ${r.lead} ms, 뒤 무음 ${r.tail} ms\n길이, 음량, 대역 균형을 비슷하게 맞추되 그대로 베끼지는 마세요.`,
       tutorialTitle: '게임 소리 만드는 법',
       steps: [
+        ['가진 것 가져오기', '만들어 둔 소리, 게임에 필요한 소리 목록, 여기서 내보낸 묶음이 있으면 가져오기로 보드에 올려요.'],
         ['명세 받기', '명세 버튼에서 프롬프트를 복사해 게임 기획서를 가진 AI에게 보내고, 돌아온 명세를 붙여 넣어요.'],
         ['샘플 확인', '대표 소리가 먼저 나와요. 타일에 마우스를 올려 듣고 승인하세요.'],
         ['나머지 만들기', '승인한 샘플의 스타일로 나머지를 한 번에 만들어요.'],
@@ -179,6 +214,7 @@ ${p.form}`,
     },
   };
   const t = (key, ...args) => { const v = TEXT[lang][key] ?? TEXT.en[key]; return typeof v === 'function' ? v(...args) : v; };
+  const tr = (...args) => t(...args); // for scopes where t is a tile
   const tx = (v) => (v && typeof v === 'object' ? v[lang] ?? v.en : v); // data fields shaped { en, ko }; plain strings pass through
   const nm = (x) => tx(x.name);
   const statusText = (s) => t('status')[s];
@@ -198,7 +234,9 @@ ${p.form}`,
   /* ---------- state ---------- */
   const assets = ASSETS.map((d) => ({ ...d, status: d.sample ? 'draft' : 'pending', versions: [], current: 0, drafts: [], pick: -1, chat: [], progress: 0 }));
   const byId = (id) => assets.find((a) => a.id === id);
-  let stage = 'sample', filter = { cat: null, status: null }, focused = null, anchor = null, openAsset = null, detailTab = 'chat';
+  let stage = 'sample', filter = { cat: null, status: null, imported: false }, focused = null, anchor = null, openAsset = null, detailTab = 'chat';
+  // The board starts on stand-in work. The first import of the user's own work replaces it.
+  let game = GAME, brief = BRIEF, platform = 'mobile', demo = true;
   const selected = new Set();
   let drafts = 1;
 
@@ -226,8 +264,9 @@ ${p.form}`,
       const old = a.id; a.id = `sfx_${old.replace(/_sfx$/, '')}`;
       if (focused === old) focused = a.id;
     }
-    if (left.some((r) => r.id === 'lic')) a.noLicense = false;
-    return left.some((r) => r.text);
+    // A brought-in sound's license is the user's to record, so the AI does not fill it in.
+    if (left.some((r) => r.id === 'lic') && !a.imported) a.noLicense = false;
+    return left.some((r) => r.text && !(r.id === 'lic' && a.imported));
   }
   function checked(a, change, note) {
     let v = build(a, change, note);
@@ -295,7 +334,7 @@ ${p.form}`,
 
   /* ---------- board ---------- */
   const tileOf = (a) => document.querySelector(`.tile[data-id="${a.id}"]`);
-  const visible = () => assets.filter((a) => (!filter.cat || a.cat === filter.cat) && (!filter.status || a.status === filter.status));
+  const visible = () => assets.filter((a) => (!filter.cat || a.cat === filter.cat) && (!filter.status || a.status === filter.status) && (!filter.imported || a.imported));
   const ready = (list) => list.filter((a) => a.versions.length);
 
   function drawPeaks(canvas, peaks, hue, cut) {
@@ -322,6 +361,7 @@ ${p.form}`,
     if (selected.has(a.id)) t.classList.add('selected');
     if (player?.asset === a) t.classList.add('playing');
     if (a.versions.length) t.append(el('canvas'));
+    if (a.imported) { t.classList.add('imported'); t.append(el('span', 'origin', tr('imported'))); }
     if (a.status === 'working') { const bar = el('div', 'bar'); bar.style.setProperty('--p', a.progress); t.append(bar); }
     if (a.status === 'review') {
       t.append(reviewRow(a, () => { drawTile(a); play(a); }));
@@ -379,22 +419,38 @@ ${p.form}`,
     assets.filter((a) => a.versions.length).forEach(drawTile);
     renderSide(); renderHeader(); syncDock();
   }
+  function importHint() {
+    const box = el('div', 'note importHint'), text = el('span', '', t('importHint')), b = el('button', 'primary', t('importShort'));
+    text.style.flex = '1'; b.id = 'importHintBtn'; b.prepend(Object.assign(el('span', 'importIco'), { innerHTML: `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS.upload}</svg>` }));
+    b.onclick = () => importDialog(); box.append(text, b);
+    return box;
+  }
   function banner() {
     const unchecked = assets.filter((a) => a.status === 'draft');
     const box = el('div', 'note'); box.style.cssText = 'display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px';
     const all = el('button', 'ghost', t('approveAll')); all.id = 'approveAll'; all.onclick = () => { unchecked.forEach(approve); renderBoard(); };
     if (stage !== 'sample') {
-      if (!unchecked.length) return [];
-      const text = el('span', '', t('leftToCheck', unchecked.length)); text.style.flex = '1';
-      box.append(text, all);
-      return [box];
+      const out = [], empty = assets.filter((a) => a.status === 'pending');
+      if (empty.length) {
+        const row = box.cloneNode(), text = el('span', '', t('fillLeft', empty.length)), go = el('button', 'primary', t('fillAll'));
+        text.style.flex = '1'; go.id = 'fillBtn'; go.onclick = () => fill(empty); row.append(text, go); out.push(row);
+      }
+      if (unchecked.length) {
+        const text = el('span', '', t('leftToCheck', unchecked.length)); text.style.flex = '1';
+        box.append(text, all); out.push(box);
+      }
+      return out;
     }
+    if (demo) return [importHint(), sampleBanner(box, all)];
+    return [sampleBanner(box, all)];
+  }
+  function sampleBanner(box, all) {
     const samples = assets.filter((a) => a.sample), done = samples.filter((a) => a.status === 'approved').length, rest = assets.filter((a) => a.status === 'pending').length;
     const text = el('span', '', done === samples.length ? t('samplesDone', samples.length, rest) : t('samplesProgress', samples.length, done, rest));
     text.style.flex = '1';
     const go = el('button', 'primary', t('makeRest')); go.id = 'expandBtn'; go.disabled = done !== samples.length; go.onclick = expand;
     box.append(text, all, go);
-    return [box];
+    return box;
   }
   function renderSide() {
     const side = $('side'); side.textContent = '';
@@ -411,9 +467,11 @@ ${p.form}`,
       const n = assets.filter((a) => a.status === id).length;
       if (n) side.append(item(label, n, filter.status === id, () => { filter.status = filter.status === id ? null : id; renderBoard(); }));
     }
+    const mine = assets.filter((a) => a.imported).length;
+    if (mine) side.append(el('h2', '', t('originHead')), item(t('imported'), mine, filter.imported, () => { filter.imported = !filter.imported; renderBoard(); }));
   }
   function renderHeader() {
-    $('gameTitle').textContent = tx(GAME);
+    $('gameTitle').textContent = tx(game);
     const order = Object.entries(t('stages')), at = order.findIndex(([id]) => id === stage);
     $('stages').textContent = '';
     order.forEach(([, label], i) => { const li = el('li', i < at ? 'done' : '', label); if (i === at) li.setAttribute('aria-current', 'step'); $('stages').append(li); });
@@ -654,14 +712,23 @@ ${p.form}`,
     const a = openAsset, v = heard(a), m = v.measure, box = $('detailView'), left = issues(a);
     box.textContent = '';
     const main = el('div', 'dMain'), head = el('div', 'dHead');
-    const title = el('div'); title.style.minWidth = '0'; title.append(el('h1', '', nm(a)), el('div', 'file', `${a.id}.wav`));
+    const title = el('div'); title.style.cssText = 'min-width:0;flex:1';
+    // Name and category apply as they are typed; there is nothing to save.
+    const name = el('input', 'dName'); name.value = nm(a); name.setAttribute('aria-label', t('nameLabel'));
+    name.oninput = () => { a.name = name.value; renderHeader(); };
+    const h1 = el('h1'); h1.append(name);
+    const fileRow = el('div', 'file', a.imported && a.file ? `${a.file} → ${a.id}.wav` : `${a.id}.wav`);
+    title.append(h1, fileRow);
     const play = iconButton('play', t('play'), toggleDetailPlay); play.id = 'dPlay'; play.classList.add('primary');
     const approveBtn = el('button', a.status === 'approved' ? '' : 'primary', a.status === 'approved' ? t('approved') : t('approve'));
     approveBtn.onclick = () => { if (a.status === 'approved') a.status = 'draft'; else approve(a); renderDetail(); };
     approveBtn.disabled = a.status === 'working' || a.status === 'review';
-    head.append(iconButton('back', t('toBoard'), closeDetail, 'ghost iconBtn'), title, el('span', 'spacer'), iconButton('prev', t('prevAsset'), () => step(-1), 'ghost iconBtn'), iconButton('next', t('nextAsset'), () => step(1), 'ghost iconBtn'), play, approveBtn);
+    head.append(iconButton('back', t('toBoard'), closeDetail, 'ghost iconBtn'), title, iconButton('prev', t('prevAsset'), () => step(-1), 'ghost iconBtn'), iconButton('next', t('nextAsset'), () => step(1), 'ghost iconBtn'), play, approveBtn);
     const facts = el('p', 'dFacts');
+    facts.append(catPicker(a, () => renderDetail()));
+    if (a.imported) facts.append(el('span', 'originTag', t('imported')));
     for (const f of [seconds(m.seconds), t('peak', m.peak.toFixed(1)), t('loud', m.loud.toFixed(1)), a.loop ? t('loop') : t('oneShot'), statusText(a.status)]) facts.append(el('span', '', f));
+    if (a.imported) { const like = el('button', '', t('likeThis')); like.id = 'likeThis'; like.onclick = () => likeThis(a); facts.append(like); }
     const wave = el('div', 'dWave'), canvas = el('canvas'); wave.append(canvas);
     wave.onclick = (e) => { const r = wave.getBoundingClientRect(); window.setTimeout(renderPlayButton); playFrom((e.clientX - r.left) / r.width * m.seconds); };
     if (a.status === 'review') {
@@ -697,7 +764,8 @@ ${p.form}`,
     return row;
   }
   function sourceOf(a) {
-    return a.layers.map((l) => {
+    if (a.source) return `// ${a.file || `${a.id}.wav`}\nsample("${a.id}.wav") |> out(%)`;
+    return (a.layers || []).map((l) => {
       if (l.kind === 'bed') return `// ${stemName(l.stem)}\nnoise() |> lp(%, ${Math.round(l.cutoff * 8000)}) * ${l.gain} |> out(%)`;
       if (l.kind === 'tone') return `// ${nm(a)}\nsweep(${l.from}, ${l.to}, ${l.len}) |> ${l.wave}(%) * adsr(0, ${l.len}, 0, 0) * ${l.gain} |> out(%)`;
       if (l.kind === 'noise') return `noise() |> lp(%, ${Math.round(l.cutoff * 8000)}) * ar(${l.attack}, ${l.len}) * ${l.gain} |> out(%)`;
@@ -715,7 +783,10 @@ ${p.form}`,
     if (detailTab === 'chat') {
       if (!a.chat.length) body.append(el('p', 'msg ai', t('chatEmpty', nm(a))));
       a.chat.forEach((m) => body.append(el('div', 'msg ' + (m.me ? 'me' : 'ai'), chatText(m))));
-    } else if (detailTab === 'code') body.append(el('pre', 'code', sourceOf(a)));
+    } else if (detailTab === 'code') {
+      if (a.prompt) { const p = el('pre', 'code prompt', a.prompt); p.id = 'promptText'; body.append(el('h3', 'tabHead', t('promptHead')), p); }
+      body.append(el('pre', 'code', sourceOf(a)));
+    }
     else if (detailTab === 'versions') {
       [...a.versions].reverse().forEach((v) => {
         const i = a.versions.indexOf(v), row = el('div', 'lineItem'), text = el('span', 'grow', `v${i + 1} · ${noteText(v.note)}`);
@@ -724,7 +795,8 @@ ${p.form}`,
         body.append(row);
       });
     } else {
-      body.append(...licenseRows());
+      if (a.imported) body.append(el('p', 'msg ai', t('importedLicense')), ...licenseFields(a));
+      else body.append(...licenseRows());
       const copy = el('button', '', t('copyLicenses')); copy.onclick = copyLicenses; body.append(copy);
     }
     const dock = el('form', 'detailDock'), input = el('input'); input.placeholder = t('askThis'); input.setAttribute('aria-label', t('askThis'));
@@ -785,13 +857,13 @@ ${p.form}`,
     }
     toast(done);
   }
-  const licenseText = () => `${t('licenseTitle', tx(GAME))}\n\n` + LICENSES.map((l) => `${l.name}\n  ${t('use')}: ${tx(l.use)}\n  ${t('license')}: ${l.license}\n  ${t('holder')}: ${l.holder}`).join('\n\n') + '\n';
+  const licenseText = () => `${t('licenseTitle', tx(game))}\n\n` + [...LICENSES.map((l) => `${l.name}\n  ${t('use')}: ${tx(l.use)}\n  ${t('license')}: ${l.license}\n  ${t('holder')}: ${l.holder}`), ...assets.filter((a) => a.imported).map((a) => `${a.file || a.id} (${nm(a)})\n  ${t('license')}: ${a.license || t('noLicenseYet')}\n  ${t('holder')}: ${a.holder || '-'}`)].join('\n\n') + '\n';
   const copyLicenses = () => copy(licenseText(), t('copiedLicenses'));
   const licenseRows = () => LICENSES.map((l) => { const r = el('div', 'lineItem'); r.append(el('span', 'grow', `${l.name} · ${tx(l.use)}`), el('span', 'tag', l.license)); return r; });
 
   const specExample = () => {
     const ex = t('example'), ids = [['sfx_ui_click', 'ui', 0.1, false], ['sfx_combat_parry', 'combat', 0.3, false], ['bgm_garden', 'bgm', 60, true]];
-    return JSON.stringify({ game: tx(GAME), platform: 'mobile', style: ex.style, assets: ids.map(([id, category, length, loop], k) => ({ id, name: ex.assets[k].name, category, length, loop, when: ex.assets[k].when, description: ex.assets[k].description })), questions: [] }, null, 2);
+    return JSON.stringify({ game: tx(game), platform: 'mobile', style: ex.style, assets: ids.map(([id, category, length, loop], k) => ({ id, name: ex.assets[k].name, category, length, loop, when: ex.assets[k].when, description: ex.assets[k].description })), questions: [] }, null, 2);
   };
   const specForm = () => JSON.stringify({ game: '', platform: '', style: '', assets: [{ id: '', name: '', category: '', length: 0, loop: false, when: '', description: '' }], questions: [] }, null, 2);
   // Only what this tool knows goes in. The game itself is the other agent's to fill in.
@@ -843,7 +915,10 @@ ${p.form}`,
     const row = el('div', 'dlgRow'), run = el('button', 'primary', t('startWithSpec')), keep = el('button', '', t('addOnly'));
     const apply = (remove) => {
       const target = PROFILES.find((f) => f.id === spec.platform);
-      if (target) rule('loud').range = [...target.loud];
+      if (target) { rule('loud').range = [...target.loud]; platform = target.id; }
+      if (spec.game) game = spec.game;
+      if (spec.style) brief = spec.style;
+      demo = false;
       added.forEach((x) => { const a = { id: x.id, name: x.name, cat: x.category, music: false, loop: !!x.loop || x.id.startsWith('amb_'), layers: x.id.startsWith('amb_') ? [STUDIO_DATA.bed(x.name, x.length >= 16 ? 16 : 8, 0.1, 0.4, [[1, 0.25, 0], [3, 0.15, 1]])] : [{ kind: 'tone', from: 500, to: 700, len: Math.min(0.6, x.length || 0.3), wave: 'triangle', gain: 0.4, at: 0 }], status: 'draft', versions: [], current: 0, drafts: [], pick: -1, chat: [], progress: 0 }; assets.push(a); make(a, {}, { key: 'fromSpec' }); });
       changed.forEach((x) => { byId(x.id).name = x.name; });
       if (remove) gone.forEach((a) => assets.splice(assets.indexOf(a), 1));
@@ -864,13 +939,13 @@ ${p.form}`,
     dlg.append(el('h3', '', t('licenses')));
     dlg.append(...licenseRows());
     const row = el('div', 'dlgRow'), go = el('button', 'primary', t('exportBundle')), lic = el('button', '', t('copyLicenses'));
-    go.id = 'exportGo'; go.onclick = () => { dlg.close(); stage = 'export'; renderHeader(); toast(t('shellOnly')); };
+    go.id = 'exportGo'; go.onclick = () => { dlg.close(); stage = 'export'; renderHeader(); exportBundle(); };
     lic.onclick = copyLicenses; row.append(lic, go); dlg.append(row);
     dlg.showModal();
   }
   function gameDialog() {
-    openDialog(tx(GAME)); reopen = gameDialog;
-    dlg.append(el('p', '', tx(BRIEF)));
+    openDialog(tx(game)); reopen = gameDialog;
+    dlg.append(el('p', '', tx(brief)));
     const b = el('button', '', t('restart')); b.onclick = () => location.reload(); dlg.append(b);
     dlg.showModal();
   }
@@ -879,7 +954,237 @@ ${p.form}`,
     openDialog(t('tutorialTitle')); reopen = tutorial;
     const list = el('ol', 'steps');
     for (const [what, how] of t('steps')) { const li = el('li'); li.append(el('b', '', what), el('span', '', how)); list.append(li); }
-    dlg.append(list); dlg.showModal();
+    const row = el('div', 'dlgRow'), b = el('button', 'primary', t('importShort')); b.id = 'tutorialImport';
+    b.onclick = () => { dlg.close(); importDialog(); };
+    row.append(b); dlg.append(list, row); dlg.showModal();
+  }
+
+  /* ---------- bringing existing work in ---------- */
+  const { AUDIO, SPEC } = importer;
+  const blank = (o) => ({ status: 'pending', versions: [], current: 0, drafts: [], pick: -1, chat: [], progress: 0, music: false, loop: false, layers: [], ...o });
+  const takenIds = () => new Set(assets.map((a) => a.id));
+  const base = (path) => path.split(/[\\/]/).pop();
+  const stem = (path) => base(path).replace(/\.[^.]+$/, '');
+  // Leaves the stand-in board the first time the user's own work comes in.
+  function leaveDemo(name) {
+    if (!demo) return;
+    demo = false; stopSound(); queue = null; selected.clear(); filter = { cat: null, status: null, imported: false };
+    assets.length = 0; stage = 'expand';
+    if (name) { game = name; brief = ''; }
+  }
+  // Decoded at the synth's rate so a brought-in sound plays, measures and renders like a made one.
+  async function decode(bytes) {
+    const ac = new OfflineAudioContext(1, 1, 22050);
+    const buf = await ac.decodeAudioData(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+    const data = new Float32Array(buf.length);
+    for (let c = 0; c < buf.numberOfChannels; c++) { const ch = buf.getChannelData(c); for (let i = 0; i < data.length; i++) data[i] += ch[i] / buf.numberOfChannels; }
+    return data;
+  }
+  function fromAudio(a, data, note) {
+    a.source = data; a.layers = [];
+    const sound = synth.render(a);
+    a.versions = [{ sound, note: { key: note }, change: {}, at: new Date(), peaks: synth.peaks(sound.mix, 200), measure: synth.measure(sound) }];
+    a.current = 0;
+  }
+  // Every way in ends here: picked files, a dropped folder, a zip, or an unzipped bundle.
+  async function intake(entries) {
+    const found = [];
+    for (const e of entries) {
+      if (/\.zip$/i.test(e.path)) { try { (await importer.unzip(await e.bytes())).forEach((z) => found.push({ path: z.path, bytes: async () => z.bytes })); } catch { found.push({ path: e.path, bad: true }); } }
+      else found.push(e);
+    }
+    const spec = found.find((e) => base(e.path) === SPEC) || found.find((e) => /\.json$/i.test(e.path));
+    if (spec) {
+      let parsed = null;
+      try { parsed = JSON.parse(new TextDecoder().decode(await spec.bytes())); } catch { /* not a bundle */ }
+      if (parsed && Array.isArray(parsed.assets)) return openBundle(parsed, found);
+    }
+    const sounds = found.filter((e) => AUDIO.test(e.path));
+    if (!sounds.length) { toast(t('nothingToImport')); return; }
+    return addSounds(sounds);
+  }
+  async function addSounds(files) {
+    const dirs = files.map((f) => f.path.split('/')), root = dirs.every((d) => d.length > 1 && d[0] === dirs[0][0]) ? dirs[0][0] : '';
+    leaveDemo(root);
+    const taken = takenIds(), added = [], failed = [];
+    for (const f of files) {
+      try {
+        const data = await decode(await f.bytes()), path = root ? f.path.slice(root.length + 1) : f.path, secs = data.length / 22050;
+        const { cat, sure } = importer.guessCategory(path, secs), name = importer.guessName(path);
+        const loopy = cat === 'env' || cat === 'bgm' || /loop/i.test(path);
+        const a = blank({ id: importer.makeId(name, cat, taken), name, cat, music: cat === 'bgm', loop: loopy, imported: true, file: f.path, license: '', holder: '', guessed: !sure, status: 'approved' });
+        fromAudio(a, data, 'importedNote');
+        assets.push(a); added.push(a);
+      } catch { failed.push(base(f.path)); }
+    }
+    if (stage === 'sample') stage = 'expand';
+    renderOpen();
+    if (failed.length) toast(t('importFailed', failed.join(', '))); else toast(t('importedN', added.length));
+    if (added.length) importDialog(added);
+  }
+  // A bundle this screen exported: the spec says what each sound is, the audio files are the sounds.
+  async function openBundle(spec, files) {
+    leaveDemo();
+    assets.length = 0; selected.clear(); stopSound();
+    game = spec.game || game; brief = spec.style || '';
+    const target = PROFILES.find((f) => f.id === spec.platform);
+    if (target) { platform = target.id; rule('loud').range = [...target.loud]; }
+    const failed = [];
+    for (const x of spec.assets) {
+      if (!x || !x.id) continue;
+      const audio = files.find((f) => AUDIO.test(f.path) && ((x.file && f.path.endsWith(x.file)) || stem(f.path) === x.id));
+      const a = blank({ id: x.id, name: x.name || x.id, cat: CATEGORIES.some((c) => c.id === x.category) ? x.category : importer.guessCategory(x.id, x.length || 0).cat,
+        loop: !!x.loop, music: x.category === 'bgm', when: x.when || '', description: x.description || '', length: x.length ?? null,
+        imported: x.origin === 'imported', file: x.source_file || '', license: x.license || '', holder: x.holder || '', prompt: x.prompt || '' });
+      if (audio) {
+        try { fromAudio(a, await decode(await audio.bytes()), a.imported ? 'importedNote' : 'fromBundle'); a.status = x.status === 'approved' || !x.status ? 'approved' : 'draft'; }
+        catch { failed.push(base(audio.path)); }
+      }
+      assets.push(a);
+    }
+    stage = 'expand'; renderOpen();
+    toast(failed.length ? t('importFailed', failed.join(', ')) : t('bundleLoaded', tx(game), assets.length));
+  }
+  // The pasted list becomes empty slots that "Fill with AI" makes.
+  function addSlots(list) {
+    leaveDemo();
+    const taken = takenIds();
+    for (const x of list) {
+      const id = x.id && !taken.has(x.id) ? (taken.add(x.id), x.id) : importer.makeId(x.name, x.cat, taken);
+      assets.push(blank({ id, name: x.name, cat: x.cat, loop: x.loop, music: x.cat === 'bgm', when: x.when, description: x.description, length: x.length }));
+    }
+    if (stage === 'sample') stage = 'expand';
+    renderOpen(); toast(t('slotsAdded', list.length));
+  }
+
+  /* ---------- filling empty slots, optionally in the feel of a brought-in sound ---------- */
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const referenceFor = (a) => (a.ref && byId(a.ref)) || assets.find((r) => r.imported && r.versions.length && r.cat === a.cat) || null;
+  function promptFor(a, ref) {
+    let refText = '';
+    if (ref) {
+      const m = heard(ref).measure, r1 = (v) => Math.round(v * 10) / 10;
+      refText = t('refPrompt', { name: nm(ref), file: ref.file || `${ref.id}.wav`, seconds: r1(m.seconds), loop: !!ref.loop, peak: r1(m.peak), loud: r1(m.loud), low: m.low, mid: m.mid, high: m.high, bright: m.bright, lead: Math.round(m.lead), tail: Math.round(m.tail) });
+    }
+    const cat = CATEGORIES.find((c) => c.id === a.cat);
+    return t('fillPrompt', { name: nm(a), id: a.id, cat: cat ? tx(cat.name) : a.cat, game: tx(game), when: a.when, description: a.description, loop: !!a.loop, length: a.length, style: tx(brief), ref: refText });
+  }
+  // Stands in for the model that reads the prompt; it at least follows the reference's length and band balance.
+  function layersFor(a, m) {
+    if (a.cat === 'bgm') { a.music = true; return STUDIO_DATA.music(a.id, a.name, 100, 57, 'bright').layers; }
+    if (a.loop) return [STUDIO_DATA.bed('main', (a.length || m?.seconds || 8) >= 12 ? 16 : 8, m ? clamp(m.bright / 6000, 0.03, 0.6) : 0.1, 0.4, [[1, 0.25, 0], [3, 0.15, 1]])];
+    const len = clamp(m ? m.seconds : a.length || 0.3, 0.05, 2), f = m ? clamp(m.bright, 150, 3000) : 600, airy = m ? m.high / 100 : 0.3;
+    return [{ kind: 'tone', from: f * 1.2, to: f * 0.8, len, wave: 'triangle', gain: 0.45 * (1 - airy / 2), at: 0 }, { kind: 'noise', len: len * 0.8, cutoff: clamp(airy + 0.2, 0.1, 0.95), gain: 0.35 * (0.3 + airy), attack: 0.002, at: 0 }];
+  }
+  function fill(list, ref) {
+    list.forEach((a) => {
+      const r = ref || referenceFor(a);
+      if (r) a.ref = r.id;
+      a.prompt = promptFor(a, r);
+      if (!a.layers?.length) a.layers = layersFor(a, r && heard(r).measure);
+      a.status = 'working'; a.progress = 0;
+      if (inHost) parent.postMessage({ type: 'asset:prompt', id: a.id, prompt: a.prompt }, '*');
+    });
+    toast(t('filling', list.length));
+    list.forEach((a, i) => setTimeout(() => { make(a, {}, { key: 'fromPrompt' }); a.status = 'draft'; a.progress = 1; renderOpen(); }, 300 + i * 120));
+    renderOpen();
+  }
+  function likeThis(ref) {
+    let list = assets.filter((a) => a.status === 'pending' && a.cat === ref.cat);
+    if (!list.length) {
+      const a = blank({ id: importer.makeId(`${nm(ref)} like`, ref.cat, takenIds()), name: t('likeName', nm(ref)), cat: ref.cat, loop: !!ref.loop, music: !!ref.music });
+      assets.push(a); list = [a];
+    }
+    closeDetail(); fill(list, ref); toast(t('likeMade', list.length));
+  }
+
+  /* ---------- import dialog ---------- */
+  function catPicker(a, done) {
+    const pick = el('select', 'catPick' + (a.guessed ? ' unsure' : ''));
+    for (const c of CATEGORIES) pick.append(Object.assign(el('option', '', tx(c.name)), { value: c.id }));
+    pick.value = a.cat; pick.setAttribute('aria-label', t('category'));
+    if (a.guessed) pick.title = t('guessed');
+    pick.onchange = () => { a.cat = pick.value; a.guessed = false; pick.classList.remove('unsure'); if (a.cat === 'bgm') a.music = true; done?.(); };
+    return pick;
+  }
+  function licenseFields(a) {
+    const field = (key, label) => { const i = el('input', 'licIn'); i.value = a[key] || ''; i.placeholder = label; i.setAttribute('aria-label', label); i.oninput = () => { a[key] = i.value.trim(); }; return i; };
+    return [field('license', t('licenseLater')), field('holder', t('holderLater'))];
+  }
+  function importDialog(just = []) {
+    openDialog(t('importTitle')); reopen = () => importDialog(just);
+    dlg.append(el('p', '', t('importIntro')));
+    if (just.length) {
+      dlg.append(el('h3', '', t('justImported')));
+      const box = el('div', 'justList');
+      for (const a of just) {
+        const row = el('div', 'lineItem justRow'), name = el('input', 'grow'); name.value = nm(a); name.setAttribute('aria-label', t('nameLabel'));
+        name.oninput = () => { a.name = name.value; renderBoard(); };
+        const [lic] = licenseFields(a);
+        row.append(name, catPicker(a, renderBoard), lic, el('span', 'tag', base(a.file)));
+        box.append(row);
+      }
+      dlg.append(box);
+    }
+    const section = (head, help, ...buttons) => { const s = el('section', 'importPart'), row = el('div', 'dlgRow'); row.style.justifyContent = 'flex-start'; row.append(...buttons); s.append(el('h3', '', head), el('p', '', help), row); return s; };
+    const pickFiles = el('button', 'primary', t('pickFiles')); pickFiles.id = 'pickFiles'; pickFiles.onclick = () => $('importFiles').click();
+    const pickFolder = el('button', '', t('pickFolder')); pickFolder.id = 'pickFolder'; pickFolder.onclick = () => $('importFolder').click();
+    const pickBundle = el('button', '', t('pickBundle')); pickBundle.id = 'pickBundle'; pickBundle.onclick = () => $('importFiles').click();
+    dlg.append(section(t('importFilesHead'), t('importFilesHelp'), pickFiles, pickFolder), section(t('importBundleHead'), t('importBundleHelp'), pickBundle));
+    const area = el('textarea'); area.id = 'listIn'; area.placeholder = t('listPlaceholder'); area.setAttribute('aria-label', t('importListHead')); area.style.minHeight = '110px';
+    const add = el('button', 'primary', t('addSlots', 0)); add.id = 'addSlots'; add.disabled = true;
+    const count = el('span', 'listCount');
+    area.oninput = () => { const n = importer.parseList(area.value).length; add.textContent = t('addSlots', n); add.disabled = !n; count.textContent = n ? t('listCount', n) : ''; };
+    add.onclick = () => { const list = importer.parseList(area.value); if (!list.length) return; dlg.close(); addSlots(list); };
+    const list = section(t('importListHead'), t('importListHelp'), count, add); list.insertBefore(area, list.lastChild);
+    dlg.append(list);
+    if (!dlg.open) dlg.showModal();
+  }
+  const filesOf = (input) => [...input.files].map((f) => ({ path: f.webkitRelativePath || f.name, bytes: async () => new Uint8Array(await f.arrayBuffer()) }));
+  for (const id of ['importFiles', 'importFolder']) $(id).onchange = (e) => { const list = filesOf(e.target); e.target.value = ''; if (dlg.open) dlg.close(); intake(list); };
+  // A dropped folder arrives as directory entries; walk them so nested files keep their folder path.
+  async function walkEntry(entry, out) {
+    if (entry.isFile) { const f = await new Promise((ok, no) => entry.file(ok, no)); out.push({ path: entry.fullPath.replace(/^\//, ''), bytes: async () => new Uint8Array(await f.arrayBuffer()) }); return; }
+    const reader = entry.createReader();
+    for (;;) { const batch = await new Promise((ok, no) => reader.readEntries(ok, no)); if (!batch.length) break; for (const e of batch) await walkEntry(e, out); }
+  }
+  let dragDepth = 0;
+  const carriesFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+  addEventListener('dragenter', (e) => { if (!carriesFiles(e)) return; dragDepth++; $('dropZone').hidden = false; });
+  addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) $('dropZone').hidden = true; });
+  addEventListener('dragover', (e) => { if (carriesFiles(e)) e.preventDefault(); });
+  addEventListener('drop', async (e) => {
+    if (!carriesFiles(e)) return;
+    e.preventDefault(); dragDepth = 0; $('dropZone').hidden = true;
+    const entries = [...e.dataTransfer.items].map((i) => i.webkitGetAsEntry?.()).filter(Boolean), out = [];
+    if (entries.length) for (const x of entries) await walkEntry(x, out);
+    else out.push(...[...e.dataTransfer.files].map((f) => ({ path: f.name, bytes: async () => new Uint8Array(await f.arrayBuffer()) })));
+    if (dlg.open) dlg.close();
+    intake(out);
+  });
+
+  /* ---------- export ---------- */
+  function exportBundle() {
+    const going = assets.filter((a) => a.status === 'approved' && a.versions.length), utf8 = (s) => new TextEncoder().encode(s);
+    const spec = {
+      game: tx(game), platform, style: tx(brief) || '',
+      assets: assets.map((a) => {
+        const v = a.versions.length ? heard(a) : null;
+        return { id: a.id, name: nm(a), category: a.cat, length: v ? Math.round(v.measure.seconds * 100) / 100 : a.length ?? null, loop: !!a.loop, when: a.when || '', description: a.description || '',
+          file: going.includes(a) ? `audio/${a.id}.wav` : null, status: a.status === 'approved' ? 'approved' : a.versions.length ? 'draft' : 'pending',
+          origin: a.imported ? 'imported' : 'made', ...(a.imported ? { source_file: a.file || '', license: a.license || '', holder: a.holder || '' } : {}), ...(a.prompt ? { prompt: a.prompt } : {}) };
+      }),
+      questions: [],
+    };
+    const credits = `# ${tx(game)}\n\n${licenseText().split('\n').slice(2).join('\n')}`;
+    const lint = going.map((a) => ({ id: a.id, issues: issues(a).map((r) => r.id) }));
+    const files = [{ path: SPEC, bytes: utf8(JSON.stringify(spec, null, 2)) }, { path: 'CREDITS.md', bytes: utf8(credits) }, { path: 'lint-report.json', bytes: utf8(JSON.stringify(lint, null, 2)) },
+      ...going.map((a) => ({ path: `audio/${a.id}.wav`, bytes: importer.encodeWav(heard(a).sound.mix, heard(a).sound.rate) }))];
+    const link = el('a'); link.href = URL.createObjectURL(importer.zip(files));
+    link.download = `${(tx(game) || 'game').replace(/[\\/:*?"<>|\s]+/g, '-')}-audio.zip`;
+    document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+    toast(t('exported', going.length));
   }
 
   /* ---------- host page ---------- */
@@ -906,6 +1211,7 @@ ${p.form}`,
   /* ---------- start ---------- */
   applyStatic();
   setIcon($('backBtn'), 'music'); setIcon($('send'), 'send'); setIcon($('playAll'), 'play'); setIcon($('gameName'), 'folder'); setIcon($('specBtn'), 'spec'); setIcon($('exportBtn'), 'download'); setIcon($('helpBtn'), 'help');
+  $('importBtn').querySelector('.importIco').innerHTML = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS.upload}</svg>`; $('importBtn').onclick = () => importDialog();
   $('helpBtn').onclick = tutorial; $('specBtn').onclick = specDialog; $('exportBtn').onclick = exportDialog; $('gameName').onclick = gameDialog;
   addEventListener('resize', () => { if (openAsset) renderDetail(); else assets.filter((a) => a.versions.length).forEach(drawTile); });
   $('draftSlot').append(draftPicker());

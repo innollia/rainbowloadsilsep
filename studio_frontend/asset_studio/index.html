@@ -15,6 +15,7 @@
     <ol id="stages" aria-label="Progress" data-i18n-aria="stagesLabel"></ol>
     <span class="spacer"></span>
     <span id="counts"></span>
+    <button id="importBtn" class="importBtn"><span class="importIco"></span><span data-i18n="importShort">Import</span></button>
     <button id="helpBtn" class="iconBtn" aria-label="How to use" title="How to use" data-i18n-aria="help" data-i18n-title="help"></button>
     <button id="specBtn" class="iconBtn" aria-label="Spec" title="Spec" data-i18n-aria="spec" data-i18n-title="spec"></button>
     <button id="exportBtn" class="iconBtn" aria-label="Export" title="Export" data-i18n-aria="export" data-i18n-title="export"></button>
@@ -51,8 +52,12 @@
 <div id="lasso" hidden></div>
 <div id="toast" role="status" hidden></div>
 <dialog id="dialog"></dialog>
+<div id="dropZone" hidden><div><span data-i18n="dropHere">Drop sound files, a folder or an exported bundle</span></div></div>
+<input id="importFiles" type="file" multiple accept="audio/*,.wav,.mp3,.ogg,.zip,.json" hidden>
+<input id="importFolder" type="file" webkitdirectory multiple hidden>
 <script src="data.js"></script>
 <script src="synth.js"></script>
+<script src="importer.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

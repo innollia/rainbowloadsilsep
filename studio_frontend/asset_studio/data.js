@@ -87,7 +87,7 @@
     { id: 'wrap', name: L('Seam level gap', '이음매 음량 차'), unit: 'dB', limit: 3, level: 'warn', applies: (a) => a.loop && !a.music, read: (m) => m.wrap, bad: (v, r) => v > r.limit, hint: L('A level jump between end and start makes the loop audible', '끝과 처음의 음량이 다르면 반복이 들림') },
     { id: 'steady', name: L('Dropout', '끊김'), unit: 'dB', limit: 12, level: 'warn', applies: (a) => a.loop && !a.music, read: (m) => m.dip, bad: (v, r) => v > r.limit, hint: L('Ambience must not fade out midway', '환경음은 중간에 잦아들면 안 됨') },
     { id: 'name', name: L('Name', '이름'), text: true, level: 'error', read: (m, a) => /^(sfx|amb|bgm)_[a-z0-9_]+$/.test(a.id), hint: L('Starts with sfx_, amb_ or bgm_', 'sfx_, amb_, bgm_ 로 시작') },
-    { id: 'lic', name: L('License', '저작권'), text: true, level: 'error', read: (m, a) => !a.noLicense, hint: L('Tools and sources recorded', '사용 도구·음원 기록') },
+    { id: 'lic', name: L('License', '저작권'), text: true, level: 'error', read: (m, a) => !a.noLicense && (!a.imported || !!a.license), hint: L('Tools and sources recorded', '사용 도구·음원 기록') },
   ];
 
   const LICENSES = [
@@ -96,5 +96,5 @@
     { name: 'Kenney Audio', license: 'CC0-1.0', holder: 'Kenney.nl', use: L('SFX source material', '효과음 재료') },
   ];
 
-  window.STUDIO_DATA = { bed, GAME: L('Starlight Garden', '별빛 정원'), BRIEF: L('A calm fantasy collecting game. Cute and warm.', '잔잔한 판타지 수집 게임. 귀엽고 따뜻하게.'), CATEGORIES, ASSETS, PROFILES, RULES, LICENSES };
+  window.STUDIO_DATA = { bed, music: bgm, GAME: L('Starlight Garden', '별빛 정원'), BRIEF: L('A calm fantasy collecting game. Cute and warm.', '잔잔한 판타지 수집 게임. 귀엽고 따뜻하게.'), CATEGORIES, ASSETS, PROFILES, RULES, LICENSES };
 })();
