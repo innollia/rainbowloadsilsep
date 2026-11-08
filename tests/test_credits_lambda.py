@@ -351,3 +351,15 @@ def test_word_code_collisions_are_redrawn(lf, monkeypatch):
     assert api(lf, "/api/account", {"email": "two@example.com"})[1]["code"] in ("brave-otter-lamp",)
     w = lf.words()
     assert len(w["adjectives"]) * len(w["nouns"]) ** 2 > 10_000_000
+
+
+def test_replayed_forward_from_blog_credits_once_and_still_says_credit(lf):
+    """블로그 입구가 장부 장애 뒤 같은 결제를 다시 넘겨도(BMC attempt 값이 달라도) 한 번만 들어가고 credit 판정은 같다."""
+    code = api(lf, "/api/account", {"email": "retry@example.com"})[1]["code"]
+    p = donation(901, amount=2, note=code)
+    first = hook(lf, p)[1]
+    assert first["applied"] is True and first["credit"] is True
+    for attempt in (2, 3):
+        again = hook(lf, {**p, "attempt": attempt})[1]
+        assert again.get("duplicate") is True and again["credit"] is True
+    assert credits(lf, "retry@example.com") == 20 + 40

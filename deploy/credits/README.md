@@ -31,7 +31,7 @@ AWS Lambda(Function URL, 인증 없음) + DynamoDB 테이블 1개, 리전 `ap-no
 
 ## BMC 웹훅은 블로그 Lambda를 거쳐 온다
 
-BMC 대시보드에 웹훅을 따로 등록하지 않는다(관제 결정, 2026-11-07). 블로그의 `bmc-webhook`(`C:\projects\all-tomorrow\deploy\bmc-webhook`)이 모든 후원을 받고, 서명이 맞으면 모든 이벤트를 원문과 서명 그대로 이 Lambda의 `/webhooks/bmc`로 넘긴다(2026-11-08부터, 결제 찾기 때문). 넘기기가 실패하면 그쪽이 502를 돌려 BMC가 다시 보낸다.
+BMC 대시보드에 웹훅을 따로 등록하지 않는다(관제 결정, 2026-11-07). 블로그의 `bmc-webhook`(`C:\projects\all-tomorrow\deploy\bmc-webhook`)이 모든 후원을 받고, 서명이 맞으면 모든 이벤트를 원문과 서명 그대로 이 Lambda의 `/webhooks/bmc`로 넘긴다(2026-11-08부터, 결제 찾기 때문). 넘기기가 실패해도 그쪽은 BMC에 200으로 답하고, 이벤트를 자기 표에 `fwd#...`로 남겨 10분마다(EventBridge `bmc-webhook-retry`)와 다음 웹훅 때 다시 넘긴다(2026-11-08). 여기 장부는 결제 id로 멱등이라 여러 번 와도 한 번만 들어간다. 6번 넘게 실패한 것은 그쪽 로그에 `ALERT bmc forward stuck`, 콘솔 pending 응답의 `forward_failing`에 보인다.
 
 - 이 Lambda는 웹훅 응답에 `credit`(코드를 적은 크레딧 구매인지)을 넣는다. 블로그 입구는 `credit: true`인 건을 후원 대기에 넣지 않는다. 공개 후원자 명단(`innollia.github.io/tools/bmc_supporters.py`)도 같은 코드 꼴을 걸러 낸다.
 - 코드가 없는 블로그 후원은 여기에 결제 이메일 HMAC·금액·통화·시각만 남는다(이름·이메일·메모 원문은 남기지 않음).
