@@ -8,5 +8,6 @@ description: 조성, 코드와 보이싱, 베이스 라인, 아르페지오, 진
 - Bass from chords: `chord("<Am F C G>").rootNotes(2)`.
 - Arpeggio: `chord("<Am F>").voicing().arp("0 1 2 1")`.
 - Progressions: pop I-V-vi-IV; emotional vi-IV-I-V; jazz ii-V-I; epic minor i-VI-III-VII; dark i-iv-VI-V; lofi IVmaj7-iiim7-iim7-Imaj7.
+- Harmonic rhythm: house every bar or two; downtempo every bar or two, jazzier sections twice a bar; DnB every 1, 2 or 4 bars. Slower harmonic rhythm = more atmospheric; faster = more "song", more jazz.
 - Bass moves on chord changes and stays out of the melody's rhythm. Melody uses chord tones on strong beats and steps between; leave rests. Answer a 2-bar phrase with a varied 2-bar phrase.
 - Counterpoint: when melody rises let a second line fall; `.off(1/8,x=>x.add(note(12)))` gives an echo line; `.rev()` or a slower copy gives a counter-line.

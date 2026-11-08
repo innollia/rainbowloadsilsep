@@ -1,6 +1,6 @@
 ---
 name: Mixing
-description: 목표 음량, 트랙별 시작 gain, 대역 비율, 측정값별 코드 수정 표
+description: 목표 음량, 트랙별 시작 gain, 대역 나누기와 좌우·앞뒤 배치, 측정값별 코드 수정 표
 ---
 
 Target: integrated -18 to -12 LUFS, true peak under -1 dBFS. Ambient and intros may sit lower.
@@ -9,6 +9,10 @@ Solo levels at gain .5: one saw or sine line -22 LUFS, kick bd -20, cp -23, `hh`
 Starting gains: kick .5-.6; snare or clap .4-.5; `hh` .3-.5; linnhats, 808oh, cr .1-.25; synth bass .4-.6; moog and bass1 .2-.3; lead .3-.45; chords .2-.3 per voice, lower when doubled (.12-.15 with octaves plus superimpose).
 
 Bands: sub and bass carry weight, mid carries the music, high and air carry presence. For most music aim for mid the largest share, high and air together at least 5%.
+
+Every voice owns a band. Full-range pads are the #1 culprit: high-pass them at 200-400 Hz. The mud zone is 200-500 Hz; cut non-bass parts there instead of boosting your way out. A sine sub alone vanishes on laptops; use triangle or sawtooth with lpf around 600-800.
+The center is sacred: kick, bass, lead. Width lives in the mids and highs (hats, pads, secondary percussion); pan in graduated steps like `.pan(.3)` / `.pan(.7)`.
+Depth: kick, bass and snare dry and in front; lead a short room; counter-melody medium reverb and some delay; pads long reverb and high delay feedback. Reverb on the low end = mud: don't reverb the kick or bass.
 
 | Measurement | Code change |
 | --- | --- |

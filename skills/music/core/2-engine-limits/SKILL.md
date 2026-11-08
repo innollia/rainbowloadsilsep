@@ -4,7 +4,7 @@ description: 이 엔진에서 안 되는 함수와 대신 쓸 것
 ---
 
 <!-- broken -->
-Do not write `.drive()`, `.bank()` or `s("bytebeat")`; they do nothing useful here. Any `gm_` or `wt_` sound and `s("piano")` do not exist.
+Do not write `.drive()`, `.bank()` or `s("bytebeat")`; they do nothing useful here. Any `gm_` or `wt_` sound and `s("piano")` do not exist. The filter envelope depth is `.lpenv()`, not `.lpe()`.
 Available effects: `.room()` with `.size()` for reverb, `.shape()` and `.distort()` for saturation, `.crush()`, `.coarse()`, `.phaser()`, `.tremolo()`, and the synths `s("supersaw")`, `s("pulse")`. `.shape()` and `.distort()` raise the level a lot, so lower that track's gain to about half.
 <!-- /broken -->
 
@@ -15,3 +15,4 @@ Replacements:
 - Edge: `.lpf(1200).lpenv(3).lpa(.01).lpd(.2)`, `.fm(2).fmh(2)`, or `.vowel("a")`.
 
 Also working: `.lpf .hpf .bpf .lpq .attack .decay .sustain .release .vib .vibmod .fm .fmh .penv .pdecay .vowel .compressor .pan .jux .orbit .duck .duckdepth .velocity .clip .chop .fit`.
+Timing and layering: `.early .late .swingBy .layer`.
