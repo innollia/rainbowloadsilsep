@@ -1,6 +1,7 @@
 ---
 name: Jazz
 description: 재즈: 스윙 라이드, 워킹 베이스, ii-V-I
+keywords: 재즈, jazz
 ---
 
 Jazz, 90-180 bpm, ride swing, walking bass, ii-V-I shells.

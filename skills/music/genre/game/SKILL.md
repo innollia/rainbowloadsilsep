@@ -1,6 +1,7 @@
 ---
 name: Game music
 description: 게임 음악: 칩튠이나 오케스트라 루프, 짧고 귀에 남는 모티프, 스퀘어와 트라이앵글, 아르페지오
+keywords: 게임, 칩튠, 8비트, 보스, 던전, 필드, game, chiptune, 8-bit, boss
 ---
 
 Game music, 120-160 bpm chiptune or 90-120 orchestral loop, catchy short motif, square and triangle, arpeggios.

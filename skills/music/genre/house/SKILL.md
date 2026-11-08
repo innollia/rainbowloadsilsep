@@ -1,6 +1,7 @@
 ---
 name: House
 description: 하우스: 120-128 bpm 포온더플로어, 오프비트 하이햇, 마이너 세븐스 스탭
+keywords: 하우스, house
 ---
 
 House, 120-128 bpm, four-on-floor, offbeat hats, minor seventh stabs, pumping bass.

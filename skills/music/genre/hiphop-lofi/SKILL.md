@@ -1,6 +1,7 @@
 ---
 name: Hip-hop and lofi
 description: 힙합·로파이: 70-90 bpm 스윙 드럼, 재즈 세븐스, 부드러운 건반, 잡음
+keywords: 힙합, 로파이, hip-hop, hiphop, lofi, lo-fi
 ---
 
 Hip-hop and lofi, 70-90 bpm, swung lazy drums, jazzy sevenths, soft keys, crackle.

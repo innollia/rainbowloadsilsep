@@ -1,6 +1,7 @@
 ---
 name: Trap
 description: 트랩: 130-160 bpm 하프타임, 808, 롤링 하이햇, 어두운 마이너
+keywords: 트랩, trap
 ---
 
 Trap, 130-160 bpm felt in half time, 808 slides, rolling hats, dark minor.

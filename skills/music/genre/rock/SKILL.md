@@ -1,6 +1,7 @@
 ---
 name: Rock
 description: 록: 100-140 bpm 백비트, 파워 코드, 8분음표 베이스
+keywords: 록, 락, rock
 ---
 
 Rock, 100-140 bpm, backbeat, power chords, driving eighth bass.

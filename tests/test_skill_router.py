@@ -40,13 +40,29 @@ def test_routed_system_keeps_only_the_core_fragments():
     assert "## Mixing" not in system and "House, 120-128 bpm" not in system
 
 
-def test_keyword_fallback_gives_only_the_index():
+def test_keyword_fallback_injects_matched_skill_bodies():
     route = sr.SkillRouter(DIR, api_key="")
-    block = route("하우스 느낌으로 새 곡 만들어줘", kind="new_song")
+    block = route("하우스 느낌으로 바꿔줘", kind="edit")
     assert route.last_route == "keyword"
-    assert "(index)" in block and "- House:" in block
-    assert "four-on-floor" not in block  # bodies are never injected by keywords
+    assert "## House" in block and "four-on-floor" in block  # the body, not a file index
+    assert "## Trap" not in block and "## Mixing" not in block
     assert route("음", kind="edit") == ""
+
+
+def test_keyword_fallback_without_skill_hit_takes_the_group_within_budget():
+    block = sr.SkillRouter(DIR, api_key="", budget_chars=3000)("소리가 작아", kind="edit")
+    assert "## Mixing" in block and len(block) <= 3000 + 200
+
+
+def test_key_falls_back_to_the_pool_jev_name(tmp_path, monkeypatch):
+    for name in sr.KEY_NAMES:
+        monkeypatch.delenv(name, raising=False)
+    pool = tmp_path / "key-pool.env"
+    pool.write_text("OTHER=x\nJEV__BELLASIL2085=pool-key\n", encoding="utf-8")
+    assert sr.read_key(str(pool)) == "pool-key"
+    monkeypatch.setenv("TYPESAFE_API_KEY", "env-key")
+    assert sr.read_key(str(pool)) == "env-key"
+    assert sr.read_key(str(tmp_path / "missing.env")) == "env-key"
 
 
 def test_listen_kind_always_brings_the_mixing_table_even_without_a_key():
@@ -103,7 +119,7 @@ def test_jev_failure_falls_back_to_keywords():
         raise OSError("down")
 
     route = sr.SkillRouter(DIR, api_key="test", opener=FakeJev([broken]))
-    assert "(index)" in route("재즈로 바꿔줘", kind="edit") and route.last_route == "keyword"
+    assert "## Jazz" in route("재즈로 바꿔줘", kind="edit") and route.last_route == "keyword"
 
 
 def test_decide_skills_thresholds():

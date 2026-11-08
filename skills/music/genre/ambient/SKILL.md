@@ -1,6 +1,7 @@
 ---
 name: Ambient
 description: 앰비언트: 드럼 없이 느린 패드, 긴 딜레이, 드문 벨
+keywords: 앰비언트, ambient
 ---
 
 Ambient, 60-80 bpm, no drums, slow drifting pads, long delays, sparse bells.

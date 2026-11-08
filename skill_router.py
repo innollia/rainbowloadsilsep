@@ -8,7 +8,8 @@ Layout:
 Every other group is judged per call: Jev decides whether the request needs the group (Noul >= 0.7) and which
 skill in it (Choice; a runner-up >= 0.25 is added), and code injects the bodies within a character budget.
 A group listing the call's request kind in "kinds" is injected without asking (the listen prompt points at the
-mixing table). Without a Jev key, or when Jev fails, a keyword hit on a group injects only the skill index.
+mixing table). Without a Jev key, or when Jev fails, a keyword hit on a group injects the bodies of its
+keyword-matched skills within the budget (Eve injects an index there, but these models cannot open files).
 """
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ import urllib.request
 
 JEV_URL = "https://api.typesafe.ai/v1/systemone"
 KEY_NAMES = ("TYPESAFE_API_KEY", "JEV_API_KEY")  # Eve's names (config-schema.mjs)
+POOL_NAMES = KEY_NAMES + ("JEV__BELLASIL2085",)  # the shared key pool stores the Jev key under this name
 KEY_POOL = os.path.join(os.path.expanduser("~"), ".all-tomorrow", "key-pool.env")
 
 SKILL_RULES = {
@@ -95,6 +97,7 @@ def load_skill_catalog(path: str) -> list[dict]:
             with open(file, encoding="utf-8") as stream:
                 meta, _ = parse_frontmatter(stream.read())
             skills.append({"name": meta.get("name") or skill_name, "description": meta.get("description") or skill_name,
+                           "keywords": [k.strip() for k in meta.get("keywords", "").split(",") if k.strip()],
                            "file": file})
         if skills:
             groups.append({
@@ -156,7 +159,7 @@ def read_key(pool: str = KEY_POOL) -> str:
                           if "=" in line and not line.lstrip().startswith("#"))
     except OSError:
         return ""
-    for name in KEY_NAMES:
+    for name in POOL_NAMES:
         value = values.get(name, "").strip().strip("\"'")
         if value:
             return value
@@ -208,6 +211,13 @@ def keyword_hit(group: dict, texts) -> bool:
     return any(k.strip() and _squash(k) in haystack for k in group["keywords"])
 
 
+def keyword_skills(group: dict, texts) -> list:
+    """Skills of a keyword-hit group: those whose own keywords hit, or every skill when none has a hit.
+    The app's models cannot open files, so the fallback injects bodies (within the budget), not Eve's index."""
+    hits = [s for s in group["skills"] if keyword_hit({"keywords": s.get("keywords", [])}, texts)]
+    return hits or group["skills"]
+
+
 def render_bodies(picked: list, budget_chars: int) -> str:
     left, sections = budget_chars, []
     for item in picked:
@@ -228,11 +238,6 @@ def render_bodies(picked: list, budget_chars: int) -> str:
                       "", *sections])
 
 
-def render_index(groups: list) -> str:
-    return "\n".join(["# Craft notes that may apply (index)",
-                      "Index of notes that may relate to this request. Use them only when actually needed.", "",
-                      *[line for g in groups for line in [f"## {g['description']}",
-                                                         *[f"- {s['name']}: {s['file']}" for s in g["skills"]]]]])
 
 
 def _chat_text(value) -> str:
@@ -287,7 +292,8 @@ class SkillRouter:
             except (OSError, ValueError, RuntimeError, AttributeError, TypeError) as exc:
                 log.warning("[Skills] Jev routing failed, using keyword index: %s", exc)
         self.last_route = "keyword"
-        bodies = render_bodies(picked, budget)
-        hits = [g for g in judged if keyword_hit(g, [state["current_message"], *state["recent_messages"][-2:]])]
-        index = render_index(hits)[:max(0, budget - len(bodies))] if hits else ""
-        return "\n\n".join(b for b in (bodies, index) if b)
+        texts = [state["current_message"], *state["recent_messages"][-2:]]
+        for group in judged:
+            if keyword_hit(group, texts):
+                picked += [{"group": group, "skill": s, "probability": 0.0} for s in keyword_skills(group, texts)]
+        return render_bodies(picked, budget)

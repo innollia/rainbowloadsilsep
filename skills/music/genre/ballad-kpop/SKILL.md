@@ -1,6 +1,7 @@
 ---
 name: Ballad and K-pop
 description: 발라드·케이팝: vi-IV-I-V, 피아노 다음 현악, 후렴에서 올라가기
+keywords: 발라드, 케이팝, k-pop, kpop, ballad, pop
 ---
 
 Ballad and K-pop, 65-85 bpm ballad or 100-125 pop, emotional vi-IV-I-V, piano then strings, chorus lifts.

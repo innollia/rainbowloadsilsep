@@ -1,6 +1,7 @@
 ---
 name: Orchestra and symphony
 description: 오케스트라·심포니: 마이너 i-VI-III-VII, 악기군별 음역, 팀파니와 오스티나토, 웅장한 곡
+keywords: 오케스트라, 교향, 심포니, orchestra, orchestral, symphony
 ---
 
 Orchestra and symphony, 60-110 bpm, minor i-VI-III-VII, every family in its own register, timpani and ostinato. Grand means many mid and high layers, not low held sines. Saws for strings and brass; sine alone never reads as orchestra.
