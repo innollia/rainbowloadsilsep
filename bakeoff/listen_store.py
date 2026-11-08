@@ -28,6 +28,13 @@ def load_manifest(path: Path = MANIFEST) -> dict | None:
         return None
 
 
+def every_clip(manifest: dict) -> list[dict]:
+    """Served clips and retired ones (models that left the finalists): votes on either still count."""
+    out = [c for t in manifest["tasks"] for c in t["clips"]]
+    out += manifest.get("retired", [])
+    return out
+
+
 def clean_name(name: str) -> str:
     return " ".join(str(name or "").split())[:MAX_NAME]
 
@@ -115,11 +122,10 @@ def bradley_terry(pairs: list[tuple[str, str, float]], iterations: int = 200) ->
 def tally(manifest: dict, votes: list[dict]) -> dict:
     """Per model: mean score, Bradley-Terry strength from score comparisons, mismatch marks; per listener: consistency."""
     clip_model, dup_of = {}, {}
-    for task in manifest["tasks"]:
-        for clip in task["clips"]:
-            clip_model[clip["clip"]] = clip["model"]
-            if clip.get("dup_of"):
-                dup_of[clip["clip"]] = clip["dup_of"]
+    for clip in every_clip(manifest):
+        clip_model[clip["clip"]] = clip["model"]
+        if clip.get("dup_of"):
+            dup_of[clip["clip"]] = clip["dup_of"]
     scores = {}
     for v in votes:
         if v["score"] is not None and v["clip"] in clip_model:
@@ -162,14 +168,17 @@ REPEAT_EVERY = 8  # every 8th pair repeats an earlier one with sides swapped, to
 
 
 def pair_queue(voter: str, manifest: dict) -> list[dict]:
-    """All pairs of a task's clips (duplicates left out), in an order of the listener's own, tasks mixed."""
+    """All pairs of a task's clips (duplicates left out), in an order of the listener's own, tasks mixed.
+    Which clip sits left depends only on the listener and the pair, so a pair kept through a new manifest keeps its sides."""
     seed = int(hashlib.sha256(f"pairs|{voter}".encode()).hexdigest()[:12], 16)
     rng = random.Random(seed)
     base = []
     for task in manifest["tasks"]:
         clips = [c["clip"] for c in task["clips"] if not c.get("dup_of")]
         for a, b in combinations(clips, 2):
-            left, right = (a, b) if rng.random() < 0.5 else (b, a)
+            x, y = sorted((a, b))
+            side = hashlib.sha256(f"side|{voter}|{task['id']}|{x}|{y}".encode()).digest()[0]
+            left, right = (x, y) if side < 128 else (y, x)
             base.append({"task": task["id"], "left": left, "right": right, "repeat": 0})
     rng.shuffle(base)
     out = []
@@ -259,7 +268,7 @@ class Pairs:
 
 def tally_pairs(manifest: dict, pairs: list[dict]) -> dict:
     """Bradley-Terry strength per model from the first-time choices; repeats only measure consistency."""
-    clip_model = {c["clip"]: c["model"] for t in manifest["tasks"] for c in t["clips"]}
+    clip_model = {c["clip"]: c["model"] for c in every_clip(manifest)}
     games, wins = [], {}
     for p in pairs:
         if p["repeat"] or p["left"] not in clip_model or p["right"] not in clip_model:
@@ -280,8 +289,10 @@ def tally_pairs(manifest: dict, pairs: list[dict]) -> dict:
     for p in pairs:
         if p["repeat"]:
             original = first.get((p["voter"], p["task"], p["right"], p["left"]))
-            if original:
+            same_side = first.get((p["voter"], p["task"], p["left"], p["right"]))
+            if original or same_side:
                 total[p["voter"]] = total.get(p["voter"], 0) + 1
-                agree[p["voter"]] = agree.get(p["voter"], 0) + (flip[p["winner"]] == original)
+                agree[p["voter"]] = agree.get(p["voter"], 0) + (flip[p["winner"]] == original if original
+                                                                else p["winner"] == same_side)
     consistency = [{"voter": v, "same": agree.get(v, 0), "repeats": n} for v, n in sorted(total.items())]
     return {"models": models, "consistency": consistency, "voters": len({p["voter"] for p in pairs}), "choices": len(games)}

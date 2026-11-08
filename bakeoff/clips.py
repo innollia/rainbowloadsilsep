@@ -4,8 +4,12 @@ Takes the final song of each finalist on each star task (first successful repeti
 the same length, levels loudness to the same LUFS and writes it under a random name to static/bakeoff/
 (served at /app/static/bakeoff/). One clip per task is added again under another name to check listener
 consistency. The model behind each name is kept only in results/listen/manifest.json on this PC.
-  python bakeoff/clips.py                      # finalists from results/report.json
+  python bakeoff/clips.py                      # finalists from results/report2.md (listening referees)
+  python bakeoff/clips.py --source report      # finalists from results/report.json (old measurement-table referees)
   python bakeoff/clips.py --models a,b,c       # or name them
+
+A rerun keeps the clip name of every (task, model, source song) that stays, so votes already cast on it still
+line up. Clips of models that leave go to the manifest's "retired" list: no longer served, still counted.
 """
 from __future__ import annotations
 
@@ -27,10 +31,12 @@ sys.path.insert(0, str(HERE))
 
 import core  # noqa: E402
 import analyze_audio  # noqa: E402
-from listen_store import MANIFEST  # noqa: E402
+from listen_store import MANIFEST, load_manifest  # noqa: E402
 from referee import final_wav  # noqa: E402
 
 STATIC = core.ROOT / "static" / "bakeoff"
+BASELINE = "anthropic/claude-opus-5.5"  # the user's baseline: always a finalist
+SIZE = 6
 TARGET_LUFS = -16.0
 CEILING = 10 ** (-1 / 20)  # -1 dBFS sample peak after levelling
 
@@ -77,20 +83,46 @@ def pick_song(model_id: str, task_id: str, config: dict, root: Path) -> Path | N
     return None
 
 
+def report2_finalists(root: Path, size: int = SIZE) -> list[str]:
+    """Top models by the listening referees' combined score (report2.md "합산"), qualified models only
+    (results/report.json), the baseline always in."""
+    text = (root / "report2.md").read_text(encoding="utf-8")
+    section = text.split("## 모델별 종합", 1)[1].split("\n## ", 1)[0]
+    rows = [[c.strip() for c in line.strip().strip("|").split("|")] for line in section.splitlines() if line.startswith("|")]
+    header, body = rows[0], [r for r in rows[2:] if len(r) == len(rows[0])]
+    col = header.index("합산")
+    score = {r[0]: float(r[col].split()[0]) for r in body}
+    try:
+        summary = json.loads((root / "report.json").read_text(encoding="utf-8"))["summary"]
+        unqualified = {s["model"] for s in summary if not s.get("qualified")}
+    except (OSError, ValueError, KeyError):
+        unqualified = set()
+    ranked = sorted((m for m in score if m not in unqualified), key=lambda m: -score[m])
+    picks = [BASELINE] if BASELINE in score else []
+    picks += [m for m in ranked if m not in picks]
+    return picks[:size]
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--models", default="")
+    ap.add_argument("--source", choices=("report2", "report"), default="report2")
     ap.add_argument("--results", default=str(core.RESULTS))
     args = ap.parse_args(argv)
     config, root = core.load_config(), Path(args.results)
     models = [m.strip() for m in args.models.split(",") if m.strip()]
     if not models:
         try:
-            models = json.loads((root / "report.json").read_text(encoding="utf-8"))["finalists"]
-        except (OSError, ValueError, KeyError):
-            sys.exit("no finalists: run bakeoff/report.py first or pass --models")
-    if STATIC.exists():
-        shutil.rmtree(STATIC)  # old clips would still be reachable by URL
+            if args.source == "report2":
+                models = report2_finalists(root)
+            else:
+                models = json.loads((root / "report.json").read_text(encoding="utf-8"))["finalists"]
+        except (OSError, ValueError, KeyError, IndexError):
+            sys.exit(f"no finalists in {args.source}: write it first or pass --models")
+    previous = load_manifest() or {"tasks": [], "retired": []}
+    keep = {(t["id"], c["model"], c["source"]): c["clip"] for t in previous["tasks"] for c in t["clips"] if not c.get("dup_of")}
+    old_dup = {t["id"]: c for t in previous["tasks"] for c in t["clips"] if c.get("dup_of")}
+    STATIC.mkdir(parents=True, exist_ok=True)
     rng = random.Random()
     tasks = []
     with tempfile.TemporaryDirectory() as tmp:
@@ -102,22 +134,40 @@ def main(argv=None):
             seconds = min(analyze_audio.read_wav(str(w))[0].shape[0] / analyze_audio.read_wav(str(w))[1] for w in found.values())
             clips = []
             for model, wav in found.items():
-                name = secrets.token_hex(8)
+                name = keep.get((task["id"], model, str(wav.relative_to(core.ROOT)))) or secrets.token_hex(8)
                 leveled = Path(tmp) / f"{name}.wav"
                 level(wav, leveled, seconds)
                 clips.append({"clip": name, "file": encode(leveled, name), "model": model, "source": str(wav.relative_to(core.ROOT)),
                               "dup_of": None})
-            twin = rng.choice(clips)
-            name = secrets.token_hex(8)
+            dup = old_dup.get(task["id"])
+            twin = next((c for c in clips if dup and c["clip"] == dup["dup_of"]), None) or rng.choice(clips)
+            name = dup["clip"] if dup and dup["dup_of"] == twin["clip"] else secrets.token_hex(8)
             src = STATIC / twin["file"]
             copy = STATIC / f"{name}{src.suffix}"
             shutil.copyfile(src, copy)
             clips.append({**twin, "clip": name, "file": copy.name, "dup_of": twin["clip"]})
             tasks.append({"id": task["id"], "genre": task["genre"], "text": task["text"], "seconds": round(seconds, 1),
                           "clips": clips})
+    served = {c["clip"] for t in tasks for c in t["clips"]}
+    retired = [r for r in previous.get("retired", []) if r["clip"] not in served]
+    seen = {r["clip"] for r in retired}
+    for t in previous["tasks"]:
+        for c in t["clips"]:
+            if c["clip"] not in served and c["clip"] not in seen:
+                retired.append({"task": t["id"], "clip": c["clip"], "model": c["model"], "source": c.get("source"),
+                                "dup_of": c.get("dup_of")})
+    files = {c["file"] for t in tasks for c in t["clips"]}
+    for f in STATIC.iterdir():
+        if f.name not in files:
+            f.unlink()  # retired clips must not stay reachable by URL
     MANIFEST.parent.mkdir(parents=True, exist_ok=True)
-    MANIFEST.write_text(json.dumps({"models": models, "tasks": tasks}, ensure_ascii=False, indent=1), encoding="utf-8")
-    print(f"{sum(len(t['clips']) for t in tasks)} clips for {len(tasks)} tasks -> {STATIC}; manifest {MANIFEST}")
+    staged = MANIFEST.with_suffix(".tmp")
+    staged.write_text(json.dumps({"models": models, "tasks": tasks, "retired": retired}, ensure_ascii=False, indent=1),
+                      encoding="utf-8")
+    staged.replace(MANIFEST)
+    print(f"models: {', '.join(models)}")
+    print(f"{sum(len(t['clips']) for t in tasks)} clips for {len(tasks)} tasks -> {STATIC}; {len(retired)} retired; "
+          f"manifest {MANIFEST}")
     return 0
 
 
