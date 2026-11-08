@@ -191,3 +191,6 @@ def test_both_bad_is_a_tie_counted_apart(tmp_path):
     rows = {r["model"]: r for r in listen_store.tally_pairs(manifest, store.all())["models"]}
     assert rows["M1"]["win_rate"] == 0.25 and rows["M2"]["win_rate"] == 0.75
     assert rows["M1"]["bad_rate"] == rows["M2"]["bad_rate"] == 0.5
+    store.save("지훈", {"task": "1", "left": "a", "right": "b", "repeat": 0}, "good")
+    rows = {r["model"]: r for r in listen_store.tally_pairs(manifest, store.all())["models"]}
+    assert rows["M1"]["good_rate"] == rows["M2"]["good_rate"] == 1 / 3

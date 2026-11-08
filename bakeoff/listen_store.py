@@ -207,7 +207,7 @@ class Pairs:
 
     def save(self, voter: str, item: dict, winner: str, token: str = "", name: str = ""):
         voter = clean_name(voter)
-        if not voter or winner not in ("left", "right", "same", "bad"):
+        if not voter or winner not in ("left", "right", "same", "good", "bad"):
             raise ValueError("name and a choice are required")
         with self._db() as db:
             db.execute("INSERT OR REPLACE INTO pairs VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -266,25 +266,27 @@ class Pairs:
 def tally_pairs(manifest: dict, pairs: list[dict]) -> dict:
     """Bradley-Terry strength per model from the first-time choices; repeats only measure consistency."""
     clip_model = {c["clip"]: c["model"] for c in every_clip(manifest)}
-    games, wins, bad = [], {}, {}
+    games, wins, bad, good = [], {}, {}, {}
     for p in pairs:
         if p["repeat"] or p["left"] not in clip_model or p["right"] not in clip_model:
             continue
         a, b = clip_model[p["left"]], clip_model[p["right"]]
         r = 1.0 if p["winner"] == "left" else 0.0 if p["winner"] == "right" else 0.5
         games.append((a, b, r))
-        if p["winner"] == "bad":  # both sounded poor: a tie for strength, counted on its own
-            for m in (a, b):
-                bad[m] = bad.get(m, 0) + 1
+        # both sounded poor / both good: a tie for strength, counted on its own ("same" is the older tie button)
+        for kind, counter in (("bad", bad), ("good", good)):
+            if p["winner"] == kind:
+                for m in (a, b):
+                    counter[m] = counter.get(m, 0) + 1
         for m, s in ((a, r), (b, 1 - r)):
             w = wins.setdefault(m, [0.0, 0])
             w[0] += s
             w[1] += 1
     strength = bradley_terry(games)
-    models = sorted(({"model": m, "bt": strength.get(m), "win_rate": w / n, "bad_rate": bad.get(m, 0) / n, "n": n} for m, (w, n) in wins.items()),
+    models = sorted(({"model": m, "bt": strength.get(m), "win_rate": w / n, "bad_rate": bad.get(m, 0) / n, "good_rate": good.get(m, 0) / n, "n": n} for m, (w, n) in wins.items()),
                     key=lambda r: -(r["bt"] or 0))
     first = {(p["voter"], p["task"], p["left"], p["right"]): p["winner"] for p in pairs if not p["repeat"]}
-    flip = {"left": "right", "right": "left", "same": "same", "bad": "bad"}
+    flip = {"left": "right", "right": "left", "same": "same", "good": "good", "bad": "bad"}
     agree, total = {}, {}
     for p in pairs:
         if p["repeat"]:

@@ -95,7 +95,7 @@ iframe[title="streamlit_components_v1.html"], [data-testid="stIFrame"] {{ border
 @media (hover: hover) {{
   .st-key-olm_choices [class*="st-key-pick-left"] button:hover {{ background: {A_COLOR}; color: #0f0f0f; }}
   .st-key-olm_choices [class*="st-key-pick-right"] button:hover {{ background: {B_COLOR}; color: #0f0f0f; }}
-  .st-key-olm_choices [class*="st-key-pick-same"] button:hover, .st-key-olm_choices [class*="st-key-pick-bad"] button:hover {{ background: #333; border-color: #777; color: #fff; }}
+  .st-key-olm_choices [class*="st-key-pick-good"] button:hover, .st-key-olm_choices [class*="st-key-pick-bad"] button:hover {{ background: #333; border-color: #777; color: #fff; }}
 }}
 .st-key-olm_choices button:focus:not(:active) {{ box-shadow: none; }}
 body:not(.olm-heard) .st-key-olm_choices button {{ opacity: .5; }}
@@ -283,8 +283,8 @@ if name and voter:
                 '<p class="olm-nudge">두 곡을 모두 들어 보고 골라 주세요</p>')
         with st.container(key="olm_choices"):
             choice = st.columns(4)
-            for col, label, winner in zip(choice, ("A가 더 좋아", "비슷해", "둘 다 별로", "B가 더 좋아"),
-                                          ("left", "same", "bad", "right")):
+            for col, label, winner in zip(choice, ("A가 더 좋아", "둘 다 좋아", "둘 다 별로", "B가 더 좋아"),
+                                          ("left", "good", "bad", "right")):
                 if col.button(label, key=f"pick-{winner}-{len(done)}", use_container_width=True):
                     pairs.save(voter, item, winner, token=token, name=name)
                     st.rerun()
@@ -305,9 +305,9 @@ with st.container(key="olm_results"):
     if entered and secret and hmac.compare_digest(entered.encode(), secret.encode()):
         result = tally_pairs(manifest, everyone)
         st.write(f"청취자 {result['voters']}명, 선택 {result['choices']}번. 강도는 Bradley–Terry 값(평균 1, 높을수록 많이 이김). "
-                 "'둘 다 별로'는 강도에서 비김으로 세고, 그 모델이 낀 대결 중 그렇게 고른 비율을 따로 보여 줘요.")
+                 "'둘 다 좋아'·'둘 다 별로'(예전 '비슷해'도)는 강도에서 비김으로 세고, 그 모델이 낀 대결 중 그렇게 고른 비율을 따로 보여 줘요.")
         table([{"모델": r["model"], "강도": None if r["bt"] is None else round(r["bt"], 2),
-                "승률": f"{100 * r['win_rate']:.0f}%", "둘 다 별로": f"{100 * r['bad_rate']:.0f}%", "대결 수": r["n"]}
+                "승률": f"{100 * r['win_rate']:.0f}%", "둘 다 좋아": f"{100 * r['good_rate']:.0f}%", "둘 다 별로": f"{100 * r['bad_rate']:.0f}%", "대결 수": r["n"]}
                for r in result["models"]])
         st.caption("참여자별 고른 쌍")
         table([{"이름": v, "고른 쌍": n} for v, n in sorted(counts.items())])
