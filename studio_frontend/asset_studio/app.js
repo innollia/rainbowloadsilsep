@@ -104,7 +104,7 @@ ${p.form}`,
       importListHead: 'List of sounds the game needs', importListHelp: 'One per line, or CSV with a header (id, name, category, when, description). They go on the board as empty slots for the AI to fill.',
       listPlaceholder: 'Button click\nSword hit, combat, short and dry\nbgm_title\nForest, ambience', listCount: (n) => `${n} sounds`, addSlots: (n) => `Add ${n} empty slot${n === 1 ? '' : 's'}`,
       justImported: 'Just brought in', imported: 'Brought in', importedN: (n) => `Brought in ${n} sound${n === 1 ? '' : 's'}`, bundleLoaded: (g, n) => `Opened ${g}: ${n} assets`,
-      slotsAdded: (n) => `Added ${n} empty slots`, importFailed: (names) => `Could not read: ${names}`, nothingToImport: 'No sound files, bundle or list found here',
+      slotsAdded: (n) => `Added ${n} empty slots`, nothingToImport: 'No sound files, bundle or list found here',
       nameLabel: 'Name', guessed: 'Guessed, check it', licenseLater: 'License (fill in later)', holderLater: 'Holder', licenseOf: (n) => `License of ${n}`,
       importedLicense: 'You brought this sound in, so its license is yours to record. It goes into CREDITS.md.', noLicenseYet: 'license not recorded',
       originHead: 'Source', fillLeft: (n) => `${n} empty slot${n === 1 ? '' : 's'} to make.`, fillAll: 'Fill with AI', filling: (n) => `Making ${n}`,
@@ -112,6 +112,9 @@ ${p.form}`,
       fromPrompt: 'Made from the prompt', importedNote: 'Brought in', fromBundle: 'From the bundle', importHint: 'Already have sounds or a sound list? Drop them here or import them.',
       fillPrompt: (p) => `Make the game sound "${p.name}" (${p.id}, ${p.cat}) for ${p.game}.\n${p.when ? `When it plays: ${p.when}\n` : ''}${p.description ? `What it sounds like: ${p.description}\n` : ''}Form: ${p.loop ? 'seamless loop' : 'one shot'}${p.length ? `, about ${p.length}s` : ''}.${p.style ? `\nGame sound direction: ${p.style}` : ''}${p.ref}`,
       refPrompt: (r) => `\n\nReference: make it in the feel of "${r.name}", the user's own sound (${r.file}). Measured from that file:\n- length ${r.seconds}s, ${r.loop ? 'loop' : 'one shot'}\n- peak ${r.peak} dB, loudness ${r.loud} LUFS\n- energy: low (<250 Hz) ${r.low}% · mid ${r.mid}% · high (>4 kHz) ${r.high}%, brightness about ${r.bright} Hz\n- leading silence ${r.lead} ms, trailing silence ${r.tail} ms\nStay close to its length, loudness and band balance. Do not copy it.`,
+      importing: (i, n) => `Bringing in ${i} of ${n}`, skipped: (n, why) => `Skipped ${n}: ${why}`,
+      whyType: (n) => `${n} not sound files`, whyBig: (n) => `${n} over 50 MB or past 500 MB in all`, whyBad: (n) => `${n} could not be read`, whyMany: (n) => `${n} past the first 2000`,
+      pruned: (n) => `Storage was full, so ${n} old discarded drafts were cleared.`, saveFull: 'Storage is full and the board could not be saved. Export a bundle to keep it.',
       tutorialTitle: 'How to make game sounds',
       steps: [
         ['Bring in what you have', 'Already have sounds, a list of the sounds the game needs, or a bundle exported here? Import puts them on the board.'],
@@ -194,7 +197,7 @@ ${p.form}`,
       importListHead: '게임에 필요한 소리 목록', importListHelp: '한 줄에 하나, 또는 머리줄(id, name, category, when, description)이 있는 CSV. 빈 칸으로 올라가고 AI가 채웁니다.',
       listPlaceholder: '버튼 클릭\n칼 타격, 전투, 짧고 건조하게\nbgm_title\n숲, 환경', listCount: (n) => `소리 ${n}개`, addSlots: (n) => `빈 칸 ${n}개 올리기`,
       justImported: '방금 가져온 소리', imported: '직접 가져옴', importedN: (n) => `소리 ${n}개를 가져왔어요`, bundleLoaded: (g, n) => `${g} 묶음을 열었어요. 에셋 ${n}개`,
-      slotsAdded: (n) => `빈 칸 ${n}개를 올렸어요`, importFailed: (names) => `읽지 못한 파일: ${names}`, nothingToImport: '소리 파일, 묶음, 목록을 찾지 못했어요',
+      slotsAdded: (n) => `빈 칸 ${n}개를 올렸어요`, nothingToImport: '소리 파일, 묶음, 목록을 찾지 못했어요',
       nameLabel: '이름', guessed: '짐작한 분류예요, 확인하세요', licenseLater: '라이선스 (나중에 적어도 돼요)', holderLater: '저작권자', licenseOf: (n) => `${n} 라이선스`,
       importedLicense: '직접 가져온 소리라 라이선스는 직접 적어 주세요. CREDITS.md에 들어갑니다.', noLicenseYet: '라이선스 기록 없음',
       originHead: '출처', fillLeft: (n) => `만들 빈 칸 ${n}개.`, fillAll: 'AI로 채우기', filling: (n) => `${n}개를 만드는 중`,
@@ -202,6 +205,9 @@ ${p.form}`,
       fromPrompt: '프롬프트로 생성', importedNote: '직접 가져옴', fromBundle: '묶음에서 가져옴', importHint: '이미 만든 소리나 소리 목록이 있나요? 여기에 끌어다 놓거나 가져오세요.',
       fillPrompt: (p) => `${p.game}에 쓸 게임 소리 "${p.name}"(${p.id}, ${p.cat})를 만들어 주세요.\n${p.when ? `나는 때: ${p.when}\n` : ''}${p.description ? `어떤 소리: ${p.description}\n` : ''}형태: ${p.loop ? '끊김 없는 반복' : '한 번 재생'}${p.length ? `, 약 ${p.length}초` : ''}.${p.style ? `\n게임 소리 방향: ${p.style}` : ''}${p.ref}`,
       refPrompt: (r) => `\n\n기준 소리: 사용자가 가져온 "${r.name}"(${r.file})의 느낌으로 만들어 주세요. 그 파일을 잰 값:\n- 길이 ${r.seconds}초, ${r.loop ? '반복' : '한 번 재생'}\n- 최대 ${r.peak} dB, 음량 ${r.loud} LUFS\n- 에너지: 저역(250 Hz 아래) ${r.low}% · 중역 ${r.mid}% · 고역(4 kHz 위) ${r.high}%, 밝기 약 ${r.bright} Hz\n- 앞 무음 ${r.lead} ms, 뒤 무음 ${r.tail} ms\n길이, 음량, 대역 균형을 비슷하게 맞추되 그대로 베끼지는 마세요.`,
+      importing: (i, n) => `가져오는 중 ${i}/${n}`, skipped: (n, why) => `${n}개 건너뜀: ${why}`,
+      whyType: (n) => `소리 파일 아님 ${n}`, whyBig: (n) => `50MB 넘음·합계 500MB 넘음 ${n}`, whyBad: (n) => `읽지 못함 ${n}`, whyMany: (n) => `2000개 넘음 ${n}`,
+      pruned: (n) => `저장 공간이 모자라 오래된 버린 시안 ${n}개를 정리했어요.`, saveFull: '저장 공간이 가득 차 자동 저장하지 못했어요. 내보내기로 묶음을 받아 두세요.',
       tutorialTitle: '게임 소리 만드는 법',
       steps: [
         ['가진 것 가져오기', '만들어 둔 소리, 게임에 필요한 소리 목록, 여기서 내보낸 묶음이 있으면 가져오기로 보드에 올려요.'],
@@ -284,7 +290,12 @@ ${p.form}`,
     a.current = a.versions.length - 1;
   }
   const version = (a) => a.versions[a.current];
-  const heard = (a) => (a.pick >= 0 && a.drafts[a.pick]) || version(a);
+  // A restored version is only its recipe (change + note); it is rendered the first time it is heard.
+  const filled = (a, v) => {
+    if (v && !v.sound) { const sound = synth.render(a, v.change); Object.assign(v, { sound, peaks: synth.peaks(sound.mix, 200), measure: synth.measure(sound) }); }
+    return v;
+  };
+  const heard = (a) => filled(a, (a.pick >= 0 && a.drafts[a.pick]) || version(a));
   const issues = (a) => (a.versions.length ? broken(a, heard(a).measure) : []);
   const approve = (a) => { a.status = 'approved'; };
   assets.filter((a) => a.sample).forEach((a) => make(a));
@@ -479,6 +490,7 @@ ${p.form}`,
     $('counts').textContent = t('counts', assets.length, approved);
     const waiting = assets.filter((a) => a.status === 'review').length;
     $('review').hidden = !waiting || !!openAsset; $('reviewText').textContent = t('reviewCount', waiting);
+    autosave();
   }
   function syncDock() {
     const count = selected.size, target = focused && byId(focused);
@@ -846,9 +858,10 @@ ${p.form}`,
     dlg.textContent = '';
     dlg.append(iconButton('close', t('close'), () => dlg.close(), 'ghost iconBtn dlgClose'), el('h2', '', title));
   }
-  function toast(text) {
+  // ms 0 keeps it up until the next toast (progress).
+  function toast(text, ms = 2200) {
     const t = $('toast'); t.textContent = text; t.hidden = false;
-    clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 2200);
+    clearTimeout(toast.t); if (ms) toast.t = setTimeout(() => { t.hidden = true; }, ms);
   }
   async function copy(text, done) {
     try { await navigator.clipboard.writeText(text); }
@@ -946,7 +959,7 @@ ${p.form}`,
   function gameDialog() {
     openDialog(tx(game)); reopen = gameDialog;
     dlg.append(el('p', '', tx(brief)));
-    const b = el('button', '', t('restart')); b.onclick = () => location.reload(); dlg.append(b);
+    const b = el('button', '', t('restart')); b.onclick = async () => { await forget(); location.reload(); }; dlg.append(b);
     dlg.showModal();
   }
 
@@ -987,50 +1000,80 @@ ${p.form}`,
     a.current = 0;
   }
   // Every way in ends here: picked files, a dropped folder, a zip, or an unzipped bundle.
+  // Sizes are checked before anything is read, so a 10 GB file or a folder of photos cannot freeze the tab.
+  const { LIMITS } = importer;
+  const tally = () => ({ type: 0, big: 0, bad: 0, many: 0 });
+  function skippedText(sk) {
+    const why = [['whyType', sk.type], ['whyBig', sk.big], ['whyBad', sk.bad], ['whyMany', sk.many]].filter(([, n]) => n).map(([k, n]) => t(k, n));
+    const n = sk.type + sk.big + sk.bad + sk.many;
+    return n ? t('skipped', n, why.join(', ')) : '';
+  }
+  const report = (done, sk) => { const extra = skippedText(sk); toast(extra ? `${done} · ${extra}` : done, extra ? 6000 : 2200); };
   async function intake(entries) {
-    const found = [];
-    for (const e of entries) {
-      if (/\.zip$/i.test(e.path)) { try { (await importer.unzip(await e.bytes())).forEach((z) => found.push({ path: z.path, bytes: async () => z.bytes })); } catch { found.push({ path: e.path, bad: true }); } }
-      else found.push(e);
+    const found = [], sk = tally();
+    let total = 0;
+    for (const e of entries.filter((x) => !importer.junk(x.path))) {
+      const zipped = /\.zip$/i.test(e.path), size = e.size || 0;
+      if (!zipped && !AUDIO.test(e.path) && !/\.json$/i.test(e.path)) { if (!/\.(md|txt)$/i.test(e.path)) sk.type++; continue; }
+      if (size > (zipped ? LIMITS.total : LIMITS.file) || total + size > LIMITS.total) { sk.big++; continue; }
+      total += size;
+      if (!zipped) { found.push(e); continue; }
+      try {
+        const inside = await importer.unzip(await e.bytes(), LIMITS.file);
+        sk.big += inside.skipped.filter((x) => x.why === 'big').length; sk.bad += inside.skipped.filter((x) => x.why === 'bad').length;
+        for (const z of inside) {
+          if (importer.junk(z.path)) continue;
+          if (AUDIO.test(z.path) || /\.json$/i.test(z.path)) found.push({ path: z.path, size: z.size, bytes: async () => z.bytes });
+          else if (!/\.(md|txt)$/i.test(z.path)) sk.type++;
+        }
+      } catch { sk.bad++; }
     }
     const spec = found.find((e) => base(e.path) === SPEC) || found.find((e) => /\.json$/i.test(e.path));
     if (spec) {
       let parsed = null;
       try { parsed = JSON.parse(new TextDecoder().decode(await spec.bytes())); } catch { /* not a bundle */ }
-      if (parsed && Array.isArray(parsed.assets)) return openBundle(parsed, found);
+      if (parsed && Array.isArray(parsed.assets)) return openBundle(parsed, found, sk);
     }
-    const sounds = found.filter((e) => AUDIO.test(e.path));
-    if (!sounds.length) { toast(t('nothingToImport')); return; }
-    return addSounds(sounds);
+    let sounds = found.filter((e) => AUDIO.test(e.path));
+    sk.type += found.length - sounds.length;
+    if (sounds.length > LIMITS.count) { sk.many += sounds.length - LIMITS.count; sounds = sounds.slice(0, LIMITS.count); }
+    if (!sounds.length) { toast([t('nothingToImport'), skippedText(sk)].filter(Boolean).join(' · '), 5000); return; }
+    return addSounds(sounds, sk);
   }
-  async function addSounds(files) {
+  // One file at a time, with a breath between them so the progress can paint.
+  const breathe = () => new Promise((r) => setTimeout(r, 0));
+  async function addSounds(files, sk = tally()) {
     const dirs = files.map((f) => f.path.split('/')), root = dirs.every((d) => d.length > 1 && d[0] === dirs[0][0]) ? dirs[0][0] : '';
-    leaveDemo(root);
-    const taken = takenIds(), added = [], failed = [];
-    for (const f of files) {
+    const added = [];
+    let left = false, taken = null;
+    for (const [i, f] of files.entries()) {
+      if (files.length > 1) { toast(t('importing', i + 1, files.length), 0); await breathe(); }
       try {
         const data = await decode(await f.bytes()), path = root ? f.path.slice(root.length + 1) : f.path, secs = data.length / 22050;
+        if (!data.length) throw new Error('empty');
+        if (!left) { leaveDemo(root); left = true; taken = takenIds(); }
         const { cat, sure } = importer.guessCategory(path, secs), name = importer.guessName(path);
         const loopy = cat === 'env' || cat === 'bgm' || /loop/i.test(path);
         const a = blank({ id: importer.makeId(name, cat, taken), name, cat, music: cat === 'bgm', loop: loopy, imported: true, file: f.path, license: '', holder: '', guessed: !sure, status: 'approved' });
         fromAudio(a, data, 'importedNote');
         assets.push(a); added.push(a);
-      } catch { failed.push(base(f.path)); }
+      } catch { sk.bad++; }
     }
-    if (stage === 'sample') stage = 'expand';
+    if (added.length && stage === 'sample') stage = 'expand';
     renderOpen();
-    if (failed.length) toast(t('importFailed', failed.join(', '))); else toast(t('importedN', added.length));
+    report(added.length ? t('importedN', added.length) : t('nothingToImport'), sk);
     if (added.length) importDialog(added);
   }
   // A bundle this screen exported: the spec says what each sound is, the audio files are the sounds.
-  async function openBundle(spec, files) {
+  async function openBundle(spec, files, sk = tally()) {
     leaveDemo();
     assets.length = 0; selected.clear(); stopSound();
     game = spec.game || game; brief = spec.style || '';
     const target = PROFILES.find((f) => f.id === spec.platform);
     if (target) { platform = target.id; rule('loud').range = [...target.loud]; }
-    const failed = [];
+    let done = 0;
     for (const x of spec.assets) {
+      if (spec.assets.length > 1) { toast(t('importing', ++done, spec.assets.length), 0); await breathe(); }
       if (!x || !x.id) continue;
       const audio = files.find((f) => AUDIO.test(f.path) && ((x.file && f.path.endsWith(x.file)) || stem(f.path) === x.id));
       const a = blank({ id: x.id, name: x.name || x.id, cat: CATEGORIES.some((c) => c.id === x.category) ? x.category : importer.guessCategory(x.id, x.length || 0).cat,
@@ -1038,12 +1081,12 @@ ${p.form}`,
         imported: x.origin === 'imported', file: x.source_file || '', license: x.license || '', holder: x.holder || '', prompt: x.prompt || '' });
       if (audio) {
         try { fromAudio(a, await decode(await audio.bytes()), a.imported ? 'importedNote' : 'fromBundle'); a.status = x.status === 'approved' || !x.status ? 'approved' : 'draft'; }
-        catch { failed.push(base(audio.path)); }
+        catch { sk.bad++; }
       }
       assets.push(a);
     }
     stage = 'expand'; renderOpen();
-    toast(failed.length ? t('importFailed', failed.join(', ')) : t('bundleLoaded', tx(game), assets.length));
+    report(t('bundleLoaded', tx(game), assets.length), sk);
   }
   // The pasted list becomes empty slots that "Fill with AI" makes.
   function addSlots(list) {
@@ -1108,7 +1151,7 @@ ${p.form}`,
     return pick;
   }
   function licenseFields(a) {
-    const field = (key, label) => { const i = el('input', 'licIn'); i.value = a[key] || ''; i.placeholder = label; i.setAttribute('aria-label', label); i.oninput = () => { a[key] = i.value.trim(); }; return i; };
+    const field = (key, label) => { const i = el('input', 'licIn'); i.value = a[key] || ''; i.placeholder = label; i.setAttribute('aria-label', label); i.oninput = () => { a[key] = i.value.trim(); autosave(); }; return i; };
     return [field('license', t('licenseLater')), field('holder', t('holderLater'))];
   }
   function importDialog(just = []) {
@@ -1140,11 +1183,12 @@ ${p.form}`,
     dlg.append(list);
     if (!dlg.open) dlg.showModal();
   }
-  const filesOf = (input) => [...input.files].map((f) => ({ path: f.webkitRelativePath || f.name, bytes: async () => new Uint8Array(await f.arrayBuffer()) }));
+  const fileEntry = (f, path) => ({ path, size: f.size, bytes: async () => new Uint8Array(await f.arrayBuffer()) });
+  const filesOf = (input) => [...input.files].map((f) => fileEntry(f, f.webkitRelativePath || f.name));
   for (const id of ['importFiles', 'importFolder']) $(id).onchange = (e) => { const list = filesOf(e.target); e.target.value = ''; if (dlg.open) dlg.close(); intake(list); };
   // A dropped folder arrives as directory entries; walk them so nested files keep their folder path.
   async function walkEntry(entry, out) {
-    if (entry.isFile) { const f = await new Promise((ok, no) => entry.file(ok, no)); out.push({ path: entry.fullPath.replace(/^\//, ''), bytes: async () => new Uint8Array(await f.arrayBuffer()) }); return; }
+    if (entry.isFile) { const f = await new Promise((ok, no) => entry.file(ok, no)); out.push(fileEntry(f, entry.fullPath.replace(/^\//, ''))); return; }
     const reader = entry.createReader();
     for (;;) { const batch = await new Promise((ok, no) => reader.readEntries(ok, no)); if (!batch.length) break; for (const e of batch) await walkEntry(e, out); }
   }
@@ -1158,7 +1202,7 @@ ${p.form}`,
     e.preventDefault(); dragDepth = 0; $('dropZone').hidden = true;
     const entries = [...e.dataTransfer.items].map((i) => i.webkitGetAsEntry?.()).filter(Boolean), out = [];
     if (entries.length) for (const x of entries) await walkEntry(x, out);
-    else out.push(...[...e.dataTransfer.files].map((f) => ({ path: f.name, bytes: async () => new Uint8Array(await f.arrayBuffer()) })));
+    else out.push(...[...e.dataTransfer.files].map((f) => fileEntry(f, f.name)));
     if (dlg.open) dlg.close();
     intake(out);
   });
@@ -1187,15 +1231,113 @@ ${p.form}`,
     toast(t('exported', going.length));
   }
 
+  /* ---------- autosave: the board survives a reload, a closed tab and a trip to the game ---------- */
+  // IndexedDB holds the board as recipes (each version is its change + note, re-rendered when heard) and every
+  // brought-in sound as a Blob. Nothing to press: every change is written shortly after it happens.
+  const SAVE_DB = 'olmuse-asset-board';
+  let dbOpen = null, saveTimer = 0, chain = Promise.resolve(), paused = true, warnedFull = false;
+  const savedAudio = new Set();
+  const idb = () => (dbOpen ||= new Promise((ok, no) => {
+    const r = indexedDB.open(SAVE_DB, 1);
+    r.onupgradeneeded = () => { r.result.createObjectStore('board'); r.result.createObjectStore('audio'); };
+    r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); r.onblocked = () => no(new Error('blocked'));
+  }));
+  const done = (q) => new Promise((ok, no) => { q.oncomplete = () => ok(); q.onerror = () => no(q.error); q.onabort = () => no(q.error || new Error('abort')); });
+  const asked = (q) => new Promise((ok, no) => { q.onsuccess = () => ok(q.result); q.onerror = () => no(q.error); });
+  const keyOf = (a) => (a.key ||= `k${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`);
+  const recipe = (v) => ({ change: v.change, note: v.note, at: v.at });
+  function snapshot() {
+    return {
+      v: 1, game, brief, platform, demo, stage, loud: [...rule('loud').range],
+      assets: assets.map((a) => {
+        const { versions, drafts: options, source, progress, ...rest } = a;
+        // Work that was still running comes back as it was before the request; it can be asked again.
+        const status = a.status === 'working' ? (versions.length ? 'draft' : 'pending') : a.status;
+        return { ...rest, key: source ? keyOf(a) : a.key, status, versions: versions.map(recipe), drafts: status === 'review' ? options.map(recipe) : [], pick: status === 'review' ? a.pick : -1, hasSource: !!source };
+      }),
+    };
+  }
+  async function write() {
+    const data = snapshot(), d = await idb(), keep = new Set(assets.filter((a) => a.source).map(keyOf));
+    const q = d.transaction(['board', 'audio'], 'readwrite');
+    q.objectStore('board').put(data, 'board');
+    for (const a of assets) if (a.source && !savedAudio.has(a.key)) q.objectStore('audio').put(new Blob([a.source]), a.key);
+    for (const k of savedAudio) if (!keep.has(k)) q.objectStore('audio').delete(k);
+    await done(q);
+    savedAudio.clear(); keep.forEach((k) => savedAudio.add(k));
+  }
+  // Oldest versions that are not the one in use go first: drafts that lost a comparison stay in the history.
+  function prune() {
+    const old = assets.flatMap((a) => a.versions.map((v) => ({ a, v })).filter((x) => x.v !== x.a.versions[x.a.current])).sort((x, y) => x.v.at - y.v.at);
+    const cut = old.slice(0, Math.max(1, Math.ceil(old.length / 2)));
+    for (const { a, v } of cut) { const now = a.versions[a.current]; a.versions.splice(a.versions.indexOf(v), 1); a.current = a.versions.indexOf(now); }
+    return old.length ? cut.length : 0;
+  }
+  const full = (e) => e && (e.name === 'QuotaExceededError' || /quota/i.test(e.message || ''));
+  async function job() {
+    try { await write(); navigator.storage?.persist?.().catch(() => {}); }
+    catch (e) {
+      if (!full(e)) return;
+      let cleared = 0;
+      for (let n = prune(); n; n = prune()) {
+        cleared += n;
+        try { await write(); toast(t('pruned', cleared), 5000); return; } catch (again) { if (!full(again)) return; }
+      }
+      if (!warnedFull) { warnedFull = true; toast(t('saveFull'), 8000); }
+    }
+  }
+  // Writes queue up one after another, so an older snapshot never lands after a newer one.
+  function saveNow() {
+    clearTimeout(saveTimer);
+    if (!paused) chain = chain.then(job, job);
+    return chain;
+  }
+  function autosave() { if (paused) return; clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 500); }
+  addEventListener('pagehide', saveNow);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) saveNow(); });
+  async function restore() {
+    let data = null;
+    const blobs = new Map();
+    try {
+      const d = await Promise.race([idb(), new Promise((_, no) => setTimeout(() => no(new Error('slow')), 3000))]);
+      const q = d.transaction(['board', 'audio']);
+      data = await asked(q.objectStore('board').get('board'));
+      const keys = await asked(q.objectStore('audio').getAllKeys()), values = await asked(q.objectStore('audio').getAll());
+      keys.forEach((k, i) => blobs.set(k, values[i]));
+    } catch { return false; }
+    if (!data || !Array.isArray(data.assets)) return false;
+    ({ game, brief, platform, demo, stage } = data);
+    if (Array.isArray(data.loud)) rule('loud').range = data.loud;
+    assets.length = 0;
+    for (const x of data.assets) {
+      const { hasSource, ...a } = x;
+      a.progress = 0;
+      if (hasSource) {
+        const blob = blobs.get(a.key);
+        let source = null;
+        try { source = blob && new Float32Array(await blob.arrayBuffer()); } catch { /* unreadable blob */ }
+        if (source) { a.source = source; savedAudio.add(a.key); }
+        else Object.assign(a, { versions: [], drafts: [], pick: -1, current: 0, status: 'pending' }); // the browser dropped the audio
+      }
+      assets.push(a);
+    }
+    return true;
+  }
+  // "Start again from samples" really starts again.
+  async function forget() {
+    paused = true; clearTimeout(saveTimer); await chain;
+    try { const q = (await idb()).transaction(['board', 'audio'], 'readwrite'); q.objectStore('board').clear(); q.objectStore('audio').clear(); await done(q); } catch { /* nothing saved */ }
+  }
+
   /* ---------- host page ---------- */
   const inHost = window.parent !== window;
-  $('backBtn').onclick = () => { stopSound(); queue = null; if (inHost) parent.postMessage({ type: 'asset:back' }, '*'); };
+  $('backBtn').onclick = () => { stopSound(); queue = null; saveNow(); if (inHost) parent.postMessage({ type: 'asset:back' }, '*'); };
   addEventListener('message', (e) => {
     if (e.data?.type === 'asset:measure') {
       const tiles = [...document.querySelectorAll('.tile')].slice(0, 40).map((t) => { const q = t.getBoundingClientRect(); return { x: q.left, y: q.top, w: q.width, h: q.height, c: resolved(color(byId(t.dataset.id).cat)) }; });
       e.source?.postMessage({ type: 'asset:tiles', tiles }, '*');
     }
-    if (e.data?.type === 'asset:hide') { queue = null; stopSound(); }
+    if (e.data?.type === 'asset:hide') { queue = null; stopSound(); saveNow(); }
   });
   function setLang(next) {
     if (!LANGS.includes(next)) return;
@@ -1215,8 +1357,11 @@ ${p.form}`,
   $('helpBtn').onclick = tutorial; $('specBtn').onclick = specDialog; $('exportBtn').onclick = exportDialog; $('gameName').onclick = gameDialog;
   addEventListener('resize', () => { if (openAsset) renderDetail(); else assets.filter((a) => a.versions.length).forEach(drawTile); });
   $('draftSlot').append(draftPicker());
-  renderBoard(); liveLoop();
-  let seen = false;
-  try { seen = !!localStorage.getItem('asset-tutorial-seen'); localStorage.setItem('asset-tutorial-seen', '1'); } catch { /* shows again next time */ }
-  if (!seen) tutorial();
+  (async () => {
+    await restore().catch(() => false);
+    paused = false; renderBoard(); liveLoop();
+    let seen = false;
+    try { seen = !!localStorage.getItem('asset-tutorial-seen'); localStorage.setItem('asset-tutorial-seen', '1'); } catch { /* shows again next time */ }
+    if (!seen) tutorial();
+  })();
 })();

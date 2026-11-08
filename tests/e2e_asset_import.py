@@ -94,6 +94,15 @@ def main():
         page.wait_for_function("!document.querySelector('.tile[data-status=pending]') && !document.querySelector('.tile[data-status=working]')", timeout=15000)
         check("slots filled", page.locator(".tile[data-status=draft]").count() == 3)
 
+        # A reload (or closing the tab, or going to the game) loses nothing: the board is saved as it changes.
+        page.wait_for_timeout(1200)
+        page.reload()
+        page.wait_for_function("document.querySelectorAll('.tile').length === 7", timeout=15000)
+        g = groups(page)
+        check("board survives a reload", page.inner_text("#gameTitle") == "MyGame" and "버튼 누름" in g.get("UI", [])
+              and page.locator(".tile.imported").count() == 4 and page.locator(".tile[data-status=draft]").count() == 3, json.dumps(g, ensure_ascii=False))
+        check("reload opens no tutorial again", not page.is_visible("#dialog[open]"))
+
         # Drafts in the feel of a brought-in sound: the prompt carries its measurements.
         page.locator(".tile.imported", has_text="Sword swing 01").focus()
         page.keyboard.press("Enter")
@@ -131,6 +140,30 @@ def main():
         fresh.wait_for_function("document.querySelectorAll('.tile.imported').length === 4", timeout=15000)
         check("bundle re-opens with every asset", fresh.locator(".tile").count() == len(spec["assets"]) and fresh.inner_text("#gameTitle") == "MyGame")
         check("re-opened names kept", "버튼 누름" in fresh.inner_text("#board"))
+        # Odd things dropped in: a photo, a broken .wav, a file over 50 MB, and a zip from Windows Explorer (CP949 name).
+        odd = tmp / "odd"
+        odd.mkdir()
+        (odd / "photo.jpg").write_bytes(bytes([0xFF, 0xD8, 0xFF, 0xE0]) + bytes(2000))
+        (odd / "broken.wav").write_bytes(b"RIFF" + bytes(range(256)) * 8)
+        with open(odd / "huge.wav", "wb") as f:
+            f.truncate(51 * 1024 * 1024)
+        write_wav(odd / "good.wav", 0.2, 600)
+        write_wav(tmp / "inner.wav", 0.15, 900)
+        with zipfile.ZipFile(odd / "explorer.zip", "w") as z:
+            z.write(tmp / "inner.wav", "xxxxxx.wav")
+        raw = (odd / "explorer.zip").read_bytes()
+        (odd / "explorer.zip").write_bytes(raw.replace(b"xxxxxx", "발소리".encode("cp949")))
+        odd_page = browser.new_page(viewport={"width": 1440, "height": 900})
+        odd_page.on("pageerror", lambda e: errors.append(str(e)))
+        odd_page.goto(url)
+        odd_page.wait_for_selector("#dialog[open]")
+        odd_page.keyboard.press("Escape")
+        odd_page.set_input_files("#importFiles", [str(odd / n) for n in ("photo.jpg", "broken.wav", "huge.wav", "good.wav", "explorer.zip")])
+        odd_page.wait_for_function("document.querySelectorAll('.tile.imported').length === 2", timeout=15000)
+        odd_page.wait_for_function("document.querySelector('#toast').textContent.includes('건너뜀')", timeout=5000)
+        note = odd_page.inner_text("#toast")
+        check("odd files skipped and counted", all(k in note for k in ("3개 건너뜀", "소리 파일 아님 1", "읽지 못함 1", "1")), note)
+        check("CP949 zip name read as Korean", "발소리" in odd_page.inner_text("#board"), odd_page.inner_text("#board"))
         check("no page errors", not errors, errors)
         browser.close()
     server.shutdown()

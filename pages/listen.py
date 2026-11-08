@@ -3,7 +3,10 @@
 같은 요청으로 만든 곡 두 개를 들려주고 더 듣기 좋은 쪽만 고르게 한다. 장르를 몰라도 고를 수 있다.
 모델 이름은 숨기고, 순서는 사람마다 다르다. 고르는 즉시 이 PC의 .studio-data/listen.sqlite에 저장된다.
 가끔 앞서 고른 쌍을 좌우를 바꿔 다시 내서, 같은 답이 나오는지(일관성)를 본다.
-모델 이름을 밝힌 결과는 STUDIO_PASSWORD를 넣어야 보인다.
+모델 이름을 밝힌 결과와 참여자 이름 목록은 STUDIO_PASSWORD를 넣어야 보인다. 공개 영역에는 인원수와 선택 수만.
+
+사람 구분: 이름 + 이 브라우저 토큰(쿠키 olm_listener, 1년). 같은 이름을 다른 브라우저에서 쓰면 한 번
+"이어서 할까요, 다른 사람인가요?"를 묻고, 다른 사람이면 "이름#2"로 따로 센다. 토큰 전의 표는 이름 그대로 인정.
 
 화면은 휴대폰(375px) 먼저: 큰 재생 단추가 달린 곡 카드(components.html 한 iframe 안에 A·B를 함께 두어
 한쪽을 틀면 다른 쪽이 멈춘다)와 높이 60px짜리 선택 단추. 두 곡을 다 틀어 보기 전에는 선택 단추를 흐리게만
@@ -13,6 +16,8 @@ import hmac
 import html
 import json
 import os
+import re
+import secrets
 import sys
 from pathlib import Path
 
@@ -65,6 +70,14 @@ body.olm-heard .olm-nudge {{ opacity: 0; }}
 .olm-done {{ text-align: center; padding: 28px 16px; background: #181818; border-radius: 20px; border: 1px solid #2a2a2a; }}
 .olm-done b {{ font-size: 22px; display: block; margin-bottom: 6px; }}
 .olm-sec {{ font-size: 20px; font-weight: 800; margin: 8px 0 0; }}
+.olm-count {{ font-size: 16px; color: #cfcfcf; margin: 4px 0 8px; }}
+.olm-count b {{ color: #fff; font-size: 20px; }}
+.st-key-olm_who button {{ min-height: 56px; border-radius: 16px; font-size: 17px; font-weight: 800; }}
+.st-key-olm_who button p {{ font-size: 17px !important; font-weight: 800; }}
+@media (max-width: 640px) {{
+  .st-key-olm_who [data-testid="stHorizontalBlock"] {{ flex-direction: column; gap: 10px; }}
+  .st-key-olm_who [data-testid="stColumn"] {{ width: 100% !important; flex: 1 1 auto !important; min-width: 100% !important; }}
+}}
 iframe[title="streamlit_components_v1.html"], [data-testid="stIFrame"] {{ border: 0; }}
 
 /* 이름 입력 */
@@ -118,6 +131,20 @@ def table(rows: list[dict]):
                           + ["| " + " | ".join(clean(r[h]) for h in head) + " |" for r in rows]))
 
 
+COOKIE = "olm_listener"
+
+
+def browser_token() -> str:
+    """This browser's own random id, kept in a cookie so two people with the same name stay apart."""
+    if "olm_token" not in st.session_state:
+        try:
+            got = st.context.cookies.get(COOKIE) or ""
+        except Exception:
+            got = ""
+        st.session_state.olm_token = got if re.fullmatch(r"[A-Za-z0-9_-]{16,64}", got) else secrets.token_urlsafe(18)
+    return st.session_state.olm_token
+
+
 def password():
     value = os.environ.get("STUDIO_PASSWORD")
     if value:
@@ -158,6 +185,7 @@ const ICON = {
 const g = document.getElementById('g');
 let parentBody = null;
 try { parentBody = window.parent.document.body; parentBody.classList.remove('olm-heard'); } catch (e) {}
+try { window.parent.document.cookie = 'olm_listener=__TOKEN__; max-age=31536000; path=/; SameSite=Lax'; } catch (e) {}
 const fmt = s => isFinite(s) ? Math.floor(s/60) + ':' + String(Math.floor(s%60)).padStart(2,'0') : '-:--';
 const players = CLIPS.map(c => {
   const el = document.createElement('div');
@@ -210,7 +238,7 @@ new ResizeObserver(fit).observe(g); fit();
 def players(left: str, right: str):
     clips = [{"label": "A", "color": A_COLOR, "src": f"/app/static/bakeoff/{files[left]}"},
              {"label": "B", "color": B_COLOR, "src": f"/app/static/bakeoff/{files[right]}"}]
-    components.html(PLAYER.replace("__CLIPS__", json.dumps(clips)), height=240)
+    components.html(PLAYER.replace("__CLIPS__", json.dumps(clips)).replace("__TOKEN__", browser_token()), height=240)
 
 
 st.html('<p class="olm-lead">같은 요청으로 AI들이 만든 곡 두 개를 들려드려요. 누가 만들었는지는 숨겨져 있어요. '
@@ -219,8 +247,24 @@ name = clean_name(st.text_input("이름이나 별명", key="listen_name", max_ch
 if not name:
     st.caption("이름을 적으면 시작해요. 같은 이름으로 다시 오면 이어서 할 수 있어요.")
 else:
-    queue = pair_queue(name, manifest)
-    done = pairs.done(name)
+    token = browser_token()
+    me = pairs.who(name, token)
+    voter = me["voter"]
+    if me["ask"]:
+        st.html(f'<div class="olm-task"><p class="olm-ask" style="text-align:left;margin:0">'
+                f'"{html.escape(name)}" 이름으로 이미 고른 기록이 있어요.</p>'
+                '<p class="olm-hint">이어서 할까요, 다른 사람인가요?</p></div>')
+        with st.container(key="olm_who"):
+            same, other = st.columns(2)
+            if same.button("이어서 할게요", key="who-same", use_container_width=True):
+                pairs.claim(name, token, same=True)
+                st.rerun()
+            if other.button("다른 사람이에요", key="who-other", use_container_width=True):
+                pairs.claim(name, token, same=False)
+                st.rerun()
+if name and voter:
+    queue = pair_queue(voter, manifest)
+    done = pairs.done(voter)
     left_over = [q for q in queue if (q["task"], q["left"], q["right"], q["repeat"]) not in done]
     finished = len(queue) - len(left_over)
     if not left_over:
@@ -241,7 +285,7 @@ else:
             choice = st.columns(3)
             for col, label, winner in zip(choice, ("A가 더 좋아", "비슷해", "B가 더 좋아"), ("left", "same", "right")):
                 if col.button(label, key=f"pick-{winner}-{len(done)}", use_container_width=True):
-                    pairs.save(name, item, winner)
+                    pairs.save(voter, item, winner, token=token, name=name)
                     st.rerun()
 
 st.divider()
@@ -251,8 +295,8 @@ with st.container(key="olm_results"):
     counts = {}
     for p in everyone:
         counts[p["voter"]] = counts.get(p["voter"], 0) + 1
-    if counts:
-        table([{"이름": v, "고른 쌍": n} for v, n in sorted(counts.items())])
+    if counts:  # names stay behind the password; the public sees only how many
+        st.html(f'<p class="olm-count">참여 <b>{len(counts)}</b>명, 선택 <b>{len(everyone)}</b>번</p>')
     else:
         st.caption("아직 표가 없어요.")
     secret = password()
@@ -262,6 +306,8 @@ with st.container(key="olm_results"):
         st.write(f"청취자 {result['voters']}명, 선택 {result['choices']}번. 강도는 Bradley–Terry 값(평균 1, 높을수록 많이 이김).")
         table([{"모델": r["model"], "강도": None if r["bt"] is None else round(r["bt"], 2),
                 "승률": f"{100 * r['win_rate']:.0f}%", "대결 수": r["n"]} for r in result["models"]])
+        st.caption("참여자별 고른 쌍")
+        table([{"이름": v, "고른 쌍": n} for v, n in sorted(counts.items())])
         if result["consistency"]:
             st.caption("같은 쌍을 좌우 바꿔 다시 들었을 때 같은 답을 고른 횟수")
             table([{"이름": c["voter"], "같은 답": f"{c['same']}/{c['repeats']}"} for c in result["consistency"]])

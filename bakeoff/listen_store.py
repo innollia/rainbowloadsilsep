@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import random
 import sqlite3
 import statistics
@@ -16,7 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "bakeoff" / "results" / "listen" / "manifest.json"
-DB = ROOT / ".studio-data" / "listen.sqlite"
+DB = Path(os.environ.get("OLMUSE_LISTEN_DB") or ROOT / ".studio-data" / "listen.sqlite")  # a local test points this elsewhere
 MAX_NAME = 40
 
 
@@ -181,6 +182,10 @@ def pair_queue(voter: str, manifest: dict) -> list[dict]:
 
 
 class Pairs:
+    """Choices keyed by voter. A voter key is the typed name, or "name#2", "name#3"... when a different person
+    already uses that name. listeners maps (this browser's token, typed name) to the voter key, so two people
+    typing the same name stay apart. Choices saved before tokens existed (voter = name, no listeners row) still count."""
+
     def __init__(self, path: Path = DB):
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.path = str(path)
@@ -188,17 +193,60 @@ class Pairs:
             db.execute("CREATE TABLE IF NOT EXISTS pairs (voter TEXT NOT NULL, task TEXT NOT NULL, left_clip TEXT NOT NULL,"
                        " right_clip TEXT NOT NULL, repeat INTEGER NOT NULL, winner TEXT NOT NULL, at REAL NOT NULL,"
                        " PRIMARY KEY (voter, task, left_clip, right_clip, repeat))")
+            db.execute("CREATE TABLE IF NOT EXISTS listeners (token TEXT NOT NULL, name TEXT NOT NULL, voter TEXT NOT NULL,"
+                       " at REAL NOT NULL, PRIMARY KEY (token, name))")
 
     def _db(self):
         return sqlite3.connect(self.path, timeout=10)
 
-    def save(self, voter: str, item: dict, winner: str):
+    def save(self, voter: str, item: dict, winner: str, token: str = "", name: str = ""):
         voter = clean_name(voter)
         if not voter or winner not in ("left", "right", "same"):
             raise ValueError("name and a choice are required")
         with self._db() as db:
             db.execute("INSERT OR REPLACE INTO pairs VALUES (?, ?, ?, ?, ?, ?, ?)",
                        (voter, item["task"], item["left"], item["right"], int(item["repeat"]), winner, time.time()))
+            if token and clean_name(name):
+                db.execute("INSERT OR IGNORE INTO listeners VALUES (?, ?, ?, ?)", (token, clean_name(name), voter, time.time()))
+
+    def _keys_for(self, db, name: str) -> list[str]:
+        """Voter keys already behind this typed name, the plain name first."""
+        keys = [v for (v,) in db.execute("SELECT DISTINCT voter FROM listeners WHERE name = ?", (name,))]
+        if db.execute("SELECT 1 FROM pairs WHERE voter = ? LIMIT 1", (name,)).fetchone() and name not in keys:
+            keys.append(name)
+        return sorted(keys, key=lambda k: (k != name, k))
+
+    def _free_key(self, db, name: str) -> str:
+        taken = {v for (v,) in db.execute("SELECT voter FROM pairs UNION SELECT voter FROM listeners")}
+        if name not in taken:
+            return name
+        k = 2
+        while f"{name[:MAX_NAME - 4]}#{k}" in taken:
+            k += 1
+        return f"{name[:MAX_NAME - 4]}#{k}"
+
+    def who(self, name: str, token: str = "") -> dict:
+        """{"voter": key, "ask": False} when it is clear who this is; {"voter": None, "ask": True} when someone
+        on another browser (or from before tokens) already chose under this name."""
+        name = clean_name(name)
+        if not token:
+            return {"voter": name, "ask": False}
+        with self._db() as db:
+            row = db.execute("SELECT voter FROM listeners WHERE token = ? AND name = ?", (token, name)).fetchone()
+            if row:
+                return {"voter": row[0], "ask": False}
+            if self._keys_for(db, name):
+                return {"voter": None, "ask": True}
+            return {"voter": self._free_key(db, name), "ask": False}
+
+    def claim(self, name: str, token: str, same: bool) -> str:
+        """The answer to "carry on, or a different person?". Remembered for this browser."""
+        name = clean_name(name)
+        with self._db() as db:
+            keys = self._keys_for(db, name)
+            voter = keys[0] if same and keys else self._free_key(db, name)
+            db.execute("INSERT OR REPLACE INTO listeners VALUES (?, ?, ?, ?)", (token, name, voter, time.time()))
+        return voter
 
     def all(self) -> list[dict]:
         with self._db() as db:

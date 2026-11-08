@@ -7,7 +7,7 @@ ROOT = pathlib.Path(__file__).parents[1] / "studio_frontend" / "asset_studio"
 def run(body):
     src = "globalThis.window = globalThis;\n" + "\n".join((ROOT / f).read_text(encoding="utf-8") for f in ("data.js", "synth.js", "importer.js"))
     script = src + "\n(async () => {\n" + body + "\n})().catch((e) => { console.error(e); process.exit(1); });"
-    out = subprocess.run(["node", "-e", script], capture_output=True, text=True, encoding="utf-8", check=True)
+    out = subprocess.run(["node", "-"], input=script, capture_output=True, text=True, encoding="utf-8", check=True)  # stdin: Windows caps a command line at 32K
     return json.loads(out.stdout)
 
 
@@ -77,3 +77,42 @@ def test_brought_in_sounds_render_and_carry_band_measurements():
     assert 60 < got["a"]["bright"] < 100 and got["b"]["bright"] > 5000
     assert abs(got["a"]["seconds"] - 0.5) < 0.01 and abs(got["faster"]["seconds"] - 0.25) < 0.01
     assert got["licEmpty"] is False and got["licSet"] is True and got["licMade"] is True
+
+
+def test_exported_zip_names_are_marked_utf8_and_carry_the_unicode_path_field():
+    import base64, io, zipfile
+    got = run("""
+    const blob = importer.zip([{ path: 'audio/발소리.wav', bytes: new Uint8Array([1, 2, 3]) }, { path: 'CREDITS.md', bytes: new Uint8Array([4]) }]);
+    console.log(JSON.stringify(Buffer.from(await blob.arrayBuffer()).toString('base64')));""")
+    raw = base64.b64decode(got)
+    with zipfile.ZipFile(io.BytesIO(raw)) as z:
+        infos = z.infolist()
+        assert [i.filename for i in infos] == ["audio/발소리.wav", "CREDITS.md"]
+        assert all(i.flag_bits & 0x800 for i in infos)
+        assert infos[0].extra[:2] == b"\x75\x70" and infos[0].extra[9:].decode() == "audio/발소리.wav"
+        assert infos[1].extra == b""  # plain ASCII names need no extra field
+        assert z.read("audio/발소리.wav") == b"\x01\x02\x03"
+
+
+def test_cp949_zip_names_from_windows_explorer_are_read_as_korean():
+    got = run("""
+    // A zip made with an ASCII name of the same byte length, then the name swapped for its CP949 bytes and the flag cleared.
+    const cp949 = new Uint8Array([0xb9, 0xdf, 0xbc, 0xd2, 0xb8, 0xae]); // 발소리
+    const bytes = new Uint8Array(await importer.zip([{ path: 'xxxxxx.wav', bytes: new Uint8Array([9]) }]).arrayBuffer());
+    for (let i = 0; i + 6 <= bytes.length; i++) if (String.fromCharCode(...bytes.slice(i, i + 6)) === 'xxxxxx') bytes.set(cp949, i);
+    const v = new DataView(bytes.buffer), end = bytes.length - 22, dir = v.getUint32(end + 16, true);
+    v.setUint16(6, 0, true); v.setUint16(dir + 8, 0, true);
+    const back = await importer.unzip(bytes.buffer);
+    console.log(JSON.stringify({ path: back[0].path, guess: importer.guessCategory(back[0].path, 0.2).cat }));""")
+    assert got == {"path": "발소리.wav", "guess": "char"}
+
+
+def test_unzip_skips_entries_over_the_size_limit_and_junk_is_recognised():
+    got = run("""
+    const blob = importer.zip([{ path: 'small.wav', bytes: new Uint8Array(10) }, { path: 'huge.wav', bytes: new Uint8Array(5000) }]);
+    const back = await importer.unzip(await blob.arrayBuffer(), 1000);
+    console.log(JSON.stringify({ kept: back.map((f) => [f.path, f.size]), skipped: back.skipped,
+      junk: ['__MACOSX/x/._a.wav', 'sfx/._a.wav', 'Thumbs.db', '.DS_Store', 'sfx/a.wav'].map(importer.junk), limits: importer.LIMITS }))""")
+    assert got["kept"] == [["small.wav", 10]] and got["skipped"] == [{"path": "huge.wav", "why": "big"}]
+    assert got["junk"] == [True, True, True, True, False]
+    assert got["limits"]["file"] == 50 * 1024 * 1024

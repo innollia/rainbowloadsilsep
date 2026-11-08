@@ -111,41 +111,75 @@
   const CRC = new Uint32Array(256).map((_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c; });
   const crc32 = (bytes) => { let c = -1; for (let i = 0; i < bytes.length; i++) c = CRC[(c ^ bytes[i]) & 255] ^ (c >>> 8); return (c ^ -1) >>> 0; };
   const utf8 = (s) => new TextEncoder().encode(s);
+  // Names go out as UTF-8 with the language flag (bit 11) set. Non-ASCII names also carry the Info-ZIP
+  // Unicode Path field (0x7075), which Windows Explorer and older unzip tools read when they ignore the flag.
+  function unicodePath(name) {
+    if (name.every((b) => b < 0x80)) return new Uint8Array(0);
+    const out = new DataView(new ArrayBuffer(9 + name.length));
+    out.setUint16(0, 0x7075, true); out.setUint16(2, 5 + name.length, true); out.setUint8(4, 1); out.setUint32(5, crc32(name), true);
+    new Uint8Array(out.buffer).set(name, 9);
+    return new Uint8Array(out.buffer);
+  }
   function zip(files) {
     const parts = [], dir = [];
     let at = 0;
     for (const { path, bytes } of files) {
-      const name = utf8(path), crc = crc32(bytes), head = new DataView(new ArrayBuffer(30));
+      const name = utf8(path), extra = unicodePath(name), crc = crc32(bytes), head = new DataView(new ArrayBuffer(30));
       head.setUint32(0, 0x04034b50, true); head.setUint16(4, 20, true); head.setUint16(6, 0x0800, true);
-      head.setUint32(14, crc, true); head.setUint32(18, bytes.length, true); head.setUint32(22, bytes.length, true); head.setUint16(26, name.length, true);
+      head.setUint32(14, crc, true); head.setUint32(18, bytes.length, true); head.setUint32(22, bytes.length, true); head.setUint16(26, name.length, true); head.setUint16(28, extra.length, true);
       const entry = new DataView(new ArrayBuffer(46));
       entry.setUint32(0, 0x02014b50, true); entry.setUint16(4, 20, true); entry.setUint16(6, 20, true); entry.setUint16(8, 0x0800, true);
-      entry.setUint32(16, crc, true); entry.setUint32(20, bytes.length, true); entry.setUint32(24, bytes.length, true); entry.setUint16(28, name.length, true); entry.setUint32(42, at, true);
-      parts.push(new Uint8Array(head.buffer), name, bytes); dir.push(new Uint8Array(entry.buffer), name);
-      at += 30 + name.length + bytes.length;
+      entry.setUint32(16, crc, true); entry.setUint32(20, bytes.length, true); entry.setUint32(24, bytes.length, true); entry.setUint16(28, name.length, true); entry.setUint16(30, extra.length, true); entry.setUint32(42, at, true);
+      parts.push(new Uint8Array(head.buffer), name, extra, bytes); dir.push(new Uint8Array(entry.buffer), name, extra);
+      at += 30 + name.length + extra.length + bytes.length;
     }
     const size = dir.reduce((s, p) => s + p.length, 0), end = new DataView(new ArrayBuffer(22));
     end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true); end.setUint32(12, size, true); end.setUint32(16, at, true);
     return new Blob([...parts, ...dir, new Uint8Array(end.buffer)], { type: 'application/zip' });
   }
-  async function unzip(buffer) {
+  // A zip made by Windows Explorer or an old Korean tool stores names in CP949 without the UTF-8 flag.
+  function zipName(raw, flags, extra) {
+    if (flags & 0x0800) return new TextDecoder().decode(raw);
+    const v = new DataView(extra.buffer, extra.byteOffset, extra.byteLength);
+    for (let i = 0; i + 4 <= extra.length;) {
+      const id = v.getUint16(i, true), len = v.getUint16(i + 2, true);
+      if (id === 0x7075 && len > 5 && v.getUint32(i + 5, true) === crc32(raw)) return new TextDecoder().decode(extra.subarray(i + 9, i + 4 + len));
+      i += 4 + len;
+    }
+    try { return new TextDecoder('utf-8', { fatal: true }).decode(raw); } catch { /* not UTF-8 */ }
+    try { return new TextDecoder('euc-kr').decode(raw); } catch { return new TextDecoder().decode(raw); }
+  }
+  // Entries bigger than maxFile, ZIP64 entries and broken ones are left out and listed in out.skipped.
+  async function unzip(buffer, maxFile = Infinity) {
     const bytes = new Uint8Array(buffer), view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     let end = -1;
     for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) if (view.getUint32(i, true) === 0x06054b50) { end = i; break; }
     if (end < 0) throw new Error('not a zip');
     const count = view.getUint16(end + 10, true), out = [];
+    out.skipped = [];
     let p = view.getUint32(end + 16, true);
-    for (let k = 0; k < count; k++) {
-      const method = view.getUint16(p + 10, true), packed = view.getUint32(p + 20, true), nameLen = view.getUint16(p + 28, true), extra = view.getUint16(p + 30, true), note = view.getUint16(p + 32, true), local = view.getUint32(p + 42, true);
-      const path = new TextDecoder().decode(bytes.subarray(p + 46, p + 46 + nameLen));
+    for (let k = 0; k < count && p + 46 <= bytes.length; k++) {
+      const flags = view.getUint16(p + 8, true), method = view.getUint16(p + 10, true), packed = view.getUint32(p + 20, true), size = view.getUint32(p + 24, true);
+      const nameLen = view.getUint16(p + 28, true), extra = view.getUint16(p + 30, true), note = view.getUint16(p + 32, true), local = view.getUint32(p + 42, true);
+      const path = zipName(bytes.subarray(p + 46, p + 46 + nameLen), flags, bytes.subarray(p + 46 + nameLen, p + 46 + nameLen + extra));
       p += 46 + nameLen + extra + note;
       if (path.endsWith('/')) continue;
-      const start = local + 30 + view.getUint16(local + 26, true) + view.getUint16(local + 28, true), raw = bytes.slice(start, start + packed);
-      if (method === 0) out.push({ path, bytes: raw });
-      else if (method === 8) out.push({ path, bytes: new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer()) });
+      if (packed === 0xffffffff || size === 0xffffffff || size > maxFile) { out.skipped.push({ path, why: 'big' }); continue; }
+      try {
+        const start = local + 30 + view.getUint16(local + 26, true) + view.getUint16(local + 28, true), raw = bytes.slice(start, start + packed);
+        if (method === 0) out.push({ path, size, bytes: raw });
+        else if (method === 8) out.push({ path, size, bytes: new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer()) });
+        else out.skipped.push({ path, why: 'bad' });
+      } catch { out.skipped.push({ path, why: 'bad' }); }
     }
     return out;
   }
 
-  window.importer = { AUDIO, SPEC, guessCategory, guessName, makeId, parseList, encodeWav, zip, unzip, crc32 };
+  /* ---------- what an import may hold ---------- */
+  const MB = 1024 * 1024;
+  const LIMITS = { file: 50 * MB, total: 500 * MB, count: 2000 };
+  // Files a system leaves behind (macOS resource forks, thumbnails) are not the user's and are dropped quietly.
+  const junk = (path) => /(^|\/)(__MACOSX\/|\._|\.DS_Store$|Thumbs\.db$|desktop\.ini$)/i.test(path);
+
+  window.importer = { AUDIO, SPEC, LIMITS, junk, guessCategory, guessName, makeId, parseList, encodeWav, zip, unzip, zipName, crc32 };
 })();
