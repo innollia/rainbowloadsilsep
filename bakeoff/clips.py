@@ -38,7 +38,7 @@ from referee import final_wav  # noqa: E402
 STATIC = core.ROOT / "static" / "bakeoff"
 BASELINE = "anthropic/claude-opus-5.5"  # the user's baseline: always a finalist
 SIZE = 6
-TAKES = 2  # songs per (task, model) served: variety without new generation cost
+TAKES = 3  # songs per (task, model) served: every finalist song already recorded, no new generation cost
 MIN_MODELS = 3
 TARGET_LUFS = -16.0
 CEILING = 10 ** (-1 / 20)  # -1 dBFS sample peak after levelling

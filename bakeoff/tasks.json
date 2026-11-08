@@ -171,7 +171,7 @@
       "id": "anthropic/claude-sonnet-5.5",
       "via": "openrouter",
       "tier": "고가",
-      "tasks": "star",
+      "tasks": "all",
       "reps": 2,
       "job_max_usd": 0.35
     },

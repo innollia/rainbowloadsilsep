@@ -170,8 +170,7 @@ def test_pairwise_queue_and_tally(tmp_path):
     assert queue == listen_store.pair_queue("민지", manifest)
     firsts = [q for q in queue if not q["repeat"]]
     assert len(firsts) == 3 + 6 and all("d" not in (q["left"], q["right"]) for q in queue)
-    repeats = [q for q in queue if q["repeat"]]
-    assert repeats and all({"task": r["task"], "left": r["right"], "right": r["left"], "repeat": 0} in firsts for r in repeats)
+    assert len(queue) == len(firsts)  # no repeated pairs
     store = listen_store.Pairs(tmp_path / "p.sqlite")
     for q in queue:
         models = {c["clip"]: c["model"] for t in manifest["tasks"] for c in t["clips"]}
@@ -180,4 +179,4 @@ def test_pairwise_queue_and_tally(tmp_path):
     assert store.done("민지") == {(q["task"], q["left"], q["right"], q["repeat"]) for q in queue}
     result = listen_store.tally_pairs(manifest, store.all())
     assert [r["model"] for r in result["models"]] == ["M1", "M2", "M3"]
-    assert result["consistency"][0]["same"] == result["consistency"][0]["repeats"]
+    assert result["consistency"] == []

@@ -168,7 +168,6 @@ GENRE_HINT = {
     "칩튠": "옛날 게임기 같은 삑삑거리는 8비트 소리로 만든 음악.",
     "편집(전체)": "이미 있던 곡을 느리고 슬픈 발라드로 통째로 바꾼 결과예요.",
 }
-REPEAT_EVERY = 8  # every 8th pair repeats an earlier one with sides swapped, to see how consistent a listener is
 
 
 def pair_queue(voter: str, manifest: dict) -> list[dict]:
@@ -185,13 +184,7 @@ def pair_queue(voter: str, manifest: dict) -> list[dict]:
             left, right = (x, y) if side < 128 else (y, x)
             base.append({"task": task["id"], "left": left, "right": right, "repeat": 0})
     rng.shuffle(base)
-    out = []
-    for i, item in enumerate(base, 1):
-        out.append(item)
-        if i % REPEAT_EVERY == 0 and i > 4:
-            earlier = base[i - 5]
-            out.append({"task": earlier["task"], "left": earlier["right"], "right": earlier["left"], "repeat": 1})
-    return out
+    return base  # no repeated pairs: the user dropped the consistency re-asks on 2026-11-08
 
 
 class Pairs:
