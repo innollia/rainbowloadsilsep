@@ -62,6 +62,9 @@
 - [x] 8-2 공개 주소 https://olmuse.app. `run_public.ps1`이 이름 있는 터널 `olmuse`를 띄우고, 터널이 죽으면 5초 뒤 다시 띄우며 앱이 죽었으면 앱도 다시 띄운다.
 - [x] 8-3 크레딧, 모델·추론 수준 선택, 코드 탭(트랙·악보 옆).
 - [x] 8-4 구글 로그인 `[auth]` secrets. 사람이 OAuth 클라이언트를 만들고 리디렉션 URI `https://olmuse.app/oauth2callback`을 넣는다. 절차는 `docs/CREDITS.md`. 끝난 기준: https://olmuse.app 에서 구글 로그인 후 무료 20 크레딧이 보인다.
+- [x] 8-5 이상 상황 대비(`docs/EDGE_CASES.md`): 계정 단위 작업 이어받기·환불, 계정별 하루 한도, 단어 결제 코드(`stormy-diamond-wagon` 형식), 결제 찾기 화면, 남은 호출 표시, 공용 PC 배려 제거. 커밋 540b53c, 8c8dfc1, 89f6194, 92266f2.
+- [x] 8-6 블로그 결제 넘김 안전화: 장부가 죽어도 BMC에 200, 못 넘긴 결제는 블로그 DynamoDB에 `fwd#`로 보관해 10분마다 다시 넘김(`bmc-webhook-retry`), 장부는 결제 id로 멱등. 코드는 all-tomorrow `deploy/bmc-webhook/`(커밋 3380edd, 브랜치 feat/overseer).
+- [x] 8-7 청취 클립을 듣는 심판(report2) 결선 6개로 교체: opus 5.5, sonnet 5.5, deepseek v4.1 flash, gemini 3.8 flash, gpt-5.6-terra, glm 5.3. 빠진 클립 표는 `retired`로 집계 유지. 커밋 451043a.
 
 ## 9. 할일 (지금은 안 함)
 
@@ -73,5 +76,10 @@
   - 참고 어림값(조사 전): 효과음 하나 20~200KB, 배경음 3분 OGG 160kbps 약 3.6MB, 모바일 게임 소리 전체 10~50MB, 인디 PC 게임 50~300MB. 실제 값은 이 일을 할 때 다시 잰다.
 - [ ] 9-4 하루 AI 호출 총량 `STRUDEL_DAILY_CALLS=200`(모든 계정 합계)을 손님이 늘었을 때 올린다. 친구들에게 돌리면 금방 찬다.
 - [ ] 9-5 계정당 동시 생성 1개 제한을 돈 버는 요소로 쓰기. 예: 구독이나 상위 요금에서 동시 생성 수를 늘린다. 9-2와 함께 정한다.
+
+- [ ] 9-6 결제·장부 고장 알림을 메일이나 CloudWatch 경보로. 지금은 로그의 `ALERT bmc forward stuck`과 pending 응답뿐이다.
+- [ ] 9-7 로컬 시험용 `credits.py`의 `LocalLedger`가 아직 `SD-` 코드를 만든다. 단어 코드로 맞춘다.
+- [ ] 9-8 결제 코드 단어 목록이 `innollia.github.io/tools/olmuse_code_words.txt`에 한 벌 더 있다. 하나로 합친다.
+- [ ] 9-9 환율은 근사값이다. 실제 환율 출처를 붙일지 정한다.
 
 공용 컴퓨터는 따로 배려하지 않는다. 공용 컴퓨터를 쓰는 사람들은 그곳의 규칙이 이미 있다.
