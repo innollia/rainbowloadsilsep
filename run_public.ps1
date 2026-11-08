@@ -11,6 +11,15 @@ $env:STUDIO_PASSWORD = $line.Split('=', 2)[1].Trim()
 $env:STRUDEL_CREDITS_URL = 'https://6wasuz6jowaayhoedd4h3vmthe0alpoq.lambda-url.ap-northeast-2.on.aws'  # 장부. 토큰은 ~/.all-tomorrow/strudel-credits.token
 $env:STRUDEL_DAILY_CALLS = '200'
 Remove-Item Env:STRUDEL_LOCAL_AI -ErrorAction SilentlyContinue
+if (-not $ServerOnly) {
+  # The DP7 server watch (all-tomorrow config/infrastructure.json 'olmuse') reruns this script whenever olmuse.app
+  # stops answering. Retire any earlier loop and its tunnel first so only one copy keeps running.
+  Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object {
+    $_.ProcessId -ne $PID -and $_.CommandLine -match 'run_public\.ps1' -and $_.CommandLine -notmatch '-ServerOnly'
+  } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  Get-CimInstance Win32_Process -Filter "Name='cloudflared.exe'" | Where-Object { $_.CommandLine -match 'olmuse' } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+}
 Stop-Server
 Start-Process python -WindowStyle Hidden -WorkingDirectory $PSScriptRoot -ArgumentList '-m', 'streamlit', 'run', 'app.py', '--server.address', '127.0.0.1', '--server.port', '8501', '--server.headless', 'true'
 if ($ServerOnly) { return }
