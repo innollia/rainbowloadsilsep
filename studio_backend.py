@@ -66,6 +66,7 @@ MAX_REPLY = 1000
 MAX_HISTORY = 10
 MAX_CODE = 4000
 MAX_TRACKS = 8
+MAX_PROJECT_ID = 64
 MAX_WAV_BYTES = 4_000_000
 TRACK_ID = re.compile(r"^[a-z][a-z0-9_]{0,23}$")
 ROLES = ("drums", "bass", "melody", "pad", "other")
@@ -99,6 +100,9 @@ MSG = {
         "cancelled": "Stopped. Kept the last working version.",
         "time_limit": "Hit the time limit ({minutes} min), so I stopped.",
         "daily_limit": "Hit today's AI call limit, so I stopped.",
+        "account_limit": "This account hit today's AI call limit ({n} calls), so I stopped. It resets tomorrow.",
+        "session_limit": "This password session hit its AI call limit ({n} calls), so I stopped.",
+        "no_browser_refund": "The browser stopped responding, so I stopped. The last call's {n} credits were refunded.",
         "no_credits": "Out of credits, so I stopped. You can top up with the credits button at the top.",
         "no_key": "No Gemini key is set.",
         "busy": "Your previous request is still running.",
@@ -181,6 +185,9 @@ MSG = {
         "cancelled": "중단했어. 마지막 정상 버전을 유지해.",
         "time_limit": "시간 한도({minutes}분)에 닿아 멈췄어.",
         "daily_limit": "오늘의 AI 호출 한도에 닿아 멈췄어.",
+        "account_limit": "이 계정의 오늘 AI 호출 한도({n}회)에 닿아 멈췄어. 내일 다시 쓸 수 있어.",
+        "session_limit": "이 비밀번호 세션의 AI 호출 한도({n}회)에 닿아 멈췄어.",
+        "no_browser_refund": "브라우저 응답이 없어 멈췄어. 마지막 호출의 {n}크레딧은 돌려줬어.",
         "no_credits": "크레딧이 모자라 멈췄어. 위쪽 크레딧 버튼에서 충전할 수 있어.",
         "no_key": "Gemini 키가 설정되지 않았어.",
         "busy": "이전 요청이 아직 진행 중이야.",
@@ -795,12 +802,15 @@ def validate_request(payload: dict) -> dict:
     if target is not None and target not in {t["id"] for t in tracks}:
         raise ValueError(msg(lang, "no_target"))
     model, effort = payload.get("model"), payload.get("effort")
+    project = payload.get("project_id")
     return {
         "text": text.strip(), "tracks": tracks, "bpm": valid_bpm(payload.get("bpm"), lang), "lang": lang,
         "target": target, "auto": payload.get("auto") is True, "rounds": rounds_from(payload),
         "model": model if model in {m["id"] for m in model_choices()} else "",
         "effort": effort if effort in EFFORTS else "",
         "history": clean_history(payload.get("history")),
+        # Which song asked. Echoed back in the snapshot so the result lands on that song even after a switch.
+        "project_id": project if isinstance(project, str) and len(project) <= MAX_PROJECT_ID else "",
     }
 
 
@@ -909,9 +919,10 @@ def listen_prompt(goal: str, report: dict, previous: str, lang: str) -> str:
 
 
 class Job:
-    def __init__(self, request: dict):
+    def __init__(self, request: dict, owner: str = ""):
         self.id = uuid.uuid4().hex
         self.request = request
+        self.owner = owner
         self.lang = lang_of(request.get("lang"))
         self.cancelled = threading.Event()
         self.feedback: queue.Queue = queue.Queue()
@@ -919,7 +930,10 @@ class Job:
         self.lock = threading.Lock()
         self.view = {"id": self.id, "status": "running", "stage": "editing", "iteration": 1,
                      "limit": request["rounds"] + 1, "auto": request["auto"], "candidate": None,
-                     "messages": [], "listen": None}
+                     "messages": [], "listen": None, "project_id": request.get("project_id", "")}
+        self.polled = 0.0          # last time any session read this job
+        self.offered = 0.0         # when the newest candidate was put up for a browser
+        self.last_charge = None    # (email, cost, ref) of the newest paid call
 
     @property
     def running(self) -> bool:
@@ -928,6 +942,8 @@ class Job:
     def update(self, **fields):
         with self.lock:
             self.view.update(fields)
+            if "candidate" in fields and fields["candidate"]:
+                self.offered = time.monotonic()
 
     def text(self, key: str, **fields) -> str:
         return msg(self.lang, key, **fields)
@@ -946,6 +962,7 @@ class Job:
 
     def snapshot(self) -> dict:
         with self.lock:
+            self.polled = time.monotonic()
             return json.loads(json.dumps(self.view))
 
 
@@ -969,14 +986,21 @@ class Progress:
 
 
 class Jobs:
-    def __init__(self, model=None, daily_limit: int = 200, feedback_timeout: int = FEEDBACK_TIMEOUT, ledger=None):
+    """Owners are a signed-in account ("acct:<email>") or one browser session, so a reload under the same account
+    picks up the running job. Daily call limits: signed-in accounts each have account_limit and together daily_limit
+    (a safety ceiling on the owner's key). Password (teacher) and local sessions are a separate pool, teacher_limit
+    in all and session_limit per session. None means no limit."""
+
+    def __init__(self, model=None, daily_limit: int | None = 200, feedback_timeout: int = FEEDBACK_TIMEOUT, ledger=None,
+                 account_limit: int | None = None, teacher_limit: int | None = None, session_limit: int | None = None):
         self.model = model
         self.ledger = ledger
         self.daily_limit = daily_limit
+        self.account_limit, self.teacher_limit, self.session_limit = account_limit, teacher_limit, session_limit
         self.feedback_timeout = feedback_timeout
         self.jobs: dict[str, Job] = {}
         self.lock = threading.Lock()
-        self.day, self.calls = "", 0
+        self.day, self.counts = "", {}
 
     def submit(self, owner: str, request: dict) -> str:
         lang = lang_of(request.get("lang"))
@@ -986,7 +1010,7 @@ class Jobs:
             current = self.jobs.get(owner)
             if current and current.running:
                 raise ValueError(msg(lang, "busy"))
-            job = Job(request)
+            job = Job(request, owner)
             self.jobs[owner] = job
         threading.Thread(target=self._run, args=(job,), daemon=True).start()
         return job.id
@@ -1009,6 +1033,24 @@ class Jobs:
         job = self.jobs.get(owner)
         return job.snapshot() if job else None
 
+    def _buckets(self, account: str, owner: str) -> list[tuple[str, int | None, str]]:
+        """(counter, limit, message key) that one call by this requester counts against."""
+        if account:
+            return [("acct:" + account, self.account_limit, "account_limit"), ("members", self.daily_limit, "daily_limit")]
+        return [("session:" + owner, self.session_limit, "session_limit"), ("teachers", self.teacher_limit, "daily_limit")]
+
+    def _today(self):
+        today = datetime.date.today().isoformat()
+        if today != self.day:
+            self.day, self.counts = today, {}
+
+    def calls_left(self, account: str = "", owner: str = "") -> int | None:
+        """Calls this requester may still make today, or None when nothing limits them."""
+        with self.lock:
+            self._today()
+            left = [limit - self.counts.get(name, 0) for name, limit, _ in self._buckets(account, owner) if limit is not None]
+        return max(0, min(left)) if left else None
+
     def _spend(self, job: Job):
         if job.cancelled.is_set():
             raise Stop("cancelled", job.text("cancelled"))
@@ -1016,12 +1058,13 @@ class Jobs:
         if time.monotonic() - job.started > seconds:
             raise Stop("limit", job.text("time_limit", minutes=seconds // 60))
         with self.lock:
-            today = datetime.date.today().isoformat()
-            if today != self.day:
-                self.day, self.calls = today, 0
-            if self.calls >= self.daily_limit:
-                raise Stop("limit", job.text("daily_limit"))
-            self.calls += 1
+            self._today()
+            buckets = self._buckets(job.request.get("account", ""), job.owner)
+            for name, limit, key in buckets:
+                if limit is not None and self.counts.get(name, 0) >= limit:
+                    raise Stop("limit", job.text(key, n=limit))
+            for name, _, _ in buckets:
+                self.counts[name] = self.counts.get(name, 0) + 1
 
     def _ask(self, job: Job, call, *args):
         """One model call. A signed-in user pays before it runs and gets it back if the model fails."""
@@ -1037,21 +1080,37 @@ class Jobs:
             if not ok:
                 raise Stop("limit", job.text("no_credits"))
         try:
-            return call(*args)
+            reply = call(*args)
         except ModelError:
             if ref:
-                try:
-                    job.update(credits=self.ledger.refund(email, cost, ref))
-                except LedgerError:
-                    pass
+                self._refund(job, email, cost, ref)
             raise
+        if ref:
+            job.last_charge = (email, cost, ref, time.monotonic())
+        return reply
+
+    def _refund(self, job: Job, email: str, cost: int, ref: str) -> bool:
+        try:
+            job.update(credits=self.ledger.refund(email, cost, ref))
+            return True
+        except LedgerError:
+            return False
+
+    def _unseen_refund(self, job: Job) -> int:
+        """Refund the newest paid call when no session read the job after that call returned: nobody got its result."""
+        charge, job.last_charge = job.last_charge, None
+        if not charge or job.polled >= charge[3]:
+            return 0
+        email, cost, ref, _ = charge
+        return cost if self._refund(job, email, cost, ref) else 0
 
     def _wait(self, job: Job, seq: int) -> dict:
         deadline = time.monotonic() + self.feedback_timeout
         while True:
             left = deadline - time.monotonic()
             if left <= 0:
-                raise Stop("failed", job.text("no_browser"))
+                refunded = self._unseen_refund(job)
+                raise Stop("failed", job.text("no_browser_refund", n=refunded) if refunded else job.text("no_browser"))
             try:
                 item = job.feedback.get(timeout=left)
             except queue.Empty:
@@ -1187,3 +1246,27 @@ class Jobs:
         job.update(stage="verifying", candidate={"seq": p.seq, "listen": False, "summary": summary, **p.best_state})
         if self._wait(job, p.seq).get("ok"):
             job.say("change", summary)
+
+
+# In-app browsers (web views inside chat and social apps). Google refuses sign-in there with disallowed_useragent.
+IN_APP_BROWSERS = (
+    ("KakaoTalk", re.compile(r"KAKAOTALK", re.I)),
+    ("Instagram", re.compile(r"Instagram", re.I)),
+    ("Facebook", re.compile(r"FBAN|FBAV|FB_IAB|FBIOS", re.I)),
+    ("LINE", re.compile(r"\bLine/", re.I)),
+    ("NAVER", re.compile(r"NAVER\(inapp", re.I)),
+    ("Daum", re.compile(r"DaumApps", re.I)),
+    ("Band", re.compile(r"\bBAND/", re.I)),
+    ("Everytime", re.compile(r"everytimeApp", re.I)),
+    ("TikTok", re.compile(r"musical_ly|BytedanceWebview|TikTok", re.I)),
+    ("Snapchat", re.compile(r"Snapchat", re.I)),
+    ("Threads", re.compile(r"Barcelona", re.I)),
+    ("X", re.compile(r"Twitter", re.I)),
+    ("WebView", re.compile(r"; wv\)", re.I)),  # any other Android web view
+)
+
+
+def in_app_browser(user_agent) -> str:
+    """The app whose built-in browser sent this user agent, or "" for a normal browser."""
+    ua = str(user_agent or "")
+    return next((name for name, pattern in IN_APP_BROWSERS if pattern.search(ua)), "")

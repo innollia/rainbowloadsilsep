@@ -1,0 +1,30 @@
+# olmuse payment code words. Short, easy to say and spell, no look-alike spellings, nothing rude in any order.
+# A code is one adjective and two nouns, e.g. brave-otter-lamp. Lines starting with # are ignored.
+[adjectives]
+amber azure bold brave breezy bright brisk bubbly busy calm cheery chilly clever cloudy comfy cool cosmic cozy
+crisp curly daring dewy dreamy eager early easy fancy fast festive fizzy fluffy flying frosty fresh funny fuzzy
+gentle giant glad glowing golden good grand grassy green happy hearty helpful honest humble icy jazzy jolly
+jumpy keen kind lemon little lively lucky lunar magic mellow merry mighty minty misty mossy neat nimble noble
+olive orange polar plucky plush proud purple quick quiet rainy rapid ready rosy royal ruby rusty sandy shiny
+silent silky silver simple sleepy slow smart smooth snowy soft solar sonic spicy sporty starry steady sticky
+stormy sturdy sunny super sweet swift tall tidy tiny topaz tropic trusty violet vivid warm wavy wild windy
+wise witty woolly young zany zesty breezy happy calm
+[nouns]
+acorn anchor apple apron arrow badge bagel banjo barn basket beach beacon bean bear bell berry bike bird biscuit
+blanket boat bottle bridge broom bucket bunny button cabin cactus cake camel candle canoe canyon cape carrot
+castle cat cello chair cherry cliff clock cloud clover coconut comet cookie coral cotton crayon cricket crown
+cup daisy deer desert diamond dolphin donut dragon drum duck eagle elbow engine falcon feather fern fiddle
+fig fire flag flute forest fox frog garden gecko ginger giraffe glove goat grape guitar hammer harbor harp
+hat hazel hedge helmet hill honey hippo horse igloo island jacket jaguar jam jelly jungle kayak kettle kite
+kitten koala ladder lake lamp lantern leaf lemur lily lion llama lobster lotus magnet mango maple marble
+meadow melon mitten moon moose motor muffin mushroom nest noodle oak ocean olive onion orbit otter owl
+paddle panda pancake parrot peach peanut pebble pencil penguin pepper piano pickle pillow pine planet plum
+pocket pony popcorn potato pretzel puffin pumpkin puppy puzzle quilt rabbit radio rainbow raven river robin
+robot rocket rose saddle sail salmon sandal scarf seal shell ship shovel snail sock sparrow spoon squid
+star stone storm sugar summit sun swan table taco teapot tiger toast tomato tower tractor train tulip
+turtle tuba umbrella valley violin wagon walnut whale whistle willow window wizard wolf yarn yogurt zebra
+apricot avocado bamboo blossom bubble butter candy cereal cheese chimney cinnamon compass cupcake dune
+fountain galaxy glacier hamster hedgehog kiwi lagoon lemonade marsh mint mountain orchard otter oyster
+paper parsley pasta pearl pilot poppy prairie pudding raccoon ribbon sandbox sardine scooter shark sled
+snowman spider sprout squirrel strawberry sunflower teacup thistle thunder ticket tortoise trumpet tunnel
+velvet volcano waffle walrus wheel yacht yeti zipper

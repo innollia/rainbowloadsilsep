@@ -60,6 +60,16 @@ class RemoteLedger:
     def history(self, email: str) -> list:
         return self._post("/api/history", {"email": email})[1].get("items", [])
 
+    def find_payment(self, email: str, payer_email: str, amount, day: str) -> dict:
+        """A payment that reached no account, found by the email, amount and date it was paid with.
+        {found, added, credits}; too_many is set when today's tries are used up."""
+        status, body = self._post("/api/find", {"email": email, "payer_email": payer_email, "amount": str(amount), "date": day},
+                                  ok=(200, 400, 429))
+        if status == 400:
+            raise ValueError(body.get("error", "bad request"))
+        return {"found": int(body.get("found", 0)), "added": int(body.get("added", 0)),
+                "credits": int(body.get("credits", 0)), "too_many": status == 429}
+
 
 class LocalLedger:
     """Same contract as the Lambda. Purchases cannot reach it; `grant` stands in for them in tests."""
@@ -73,7 +83,9 @@ class LocalLedger:
             create table if not exists accounts (key text primary key, code text unique, credits integer);
             create table if not exists refs (ref text primary key, key text, amount integer, refunded integer default 0);
             create table if not exists history (key text, kind text, amount integer, credits integer, at text, note text);
+            create table if not exists orphans (payer text, amount text, day text, credits integer, taken integer default 0);
         """)
+        self.find_tries: dict[tuple, int] = {}
 
     def _key(self, email: str) -> str:
         return hmac.new(self.pepper, email.strip().lower().encode(), hashlib.sha256).hexdigest()
@@ -135,6 +147,35 @@ class LocalLedger:
                 self.db.execute("update refs set refunded=1 where ref=?", (ref,))
                 self._log(key, "refund", row[0], self._add(key, row[0]), "실패한 호출")
             return self._credits(key)
+
+    def hold(self, payer_email: str, amount: str, day: str, credits: int):
+        """A payment with no code, kept until its payer finds it. Stands in for the Lambda's orphans in tests."""
+        with self.lock, self.db:
+            self.db.execute("insert into orphans (payer, amount, day, credits) values (?,?,?,?)",
+                            (self._key(payer_email), str(amount), day, credits))
+
+    def find_payment(self, email: str, payer_email: str, amount, day: str) -> dict:
+        import datetime
+        try:
+            want, asked = float(str(amount).replace(",", "")), datetime.date.fromisoformat(str(day)[:10])
+        except ValueError:
+            raise ValueError("bad amount or date") from None
+        key = self._opened(email)
+        today = (key, datetime.date.today().isoformat())
+        if self.find_tries.get(today, 0) >= 10:
+            return {"found": 0, "added": 0, "credits": self.account(email)["credits"], "too_many": True}
+        self.find_tries[today] = self.find_tries.get(today, 0) + 1
+        found = added = 0
+        with self.lock, self.db:
+            rows = self.db.execute("select rowid, amount, day, credits from orphans where payer=? and taken=0",
+                                   (self._key(payer_email),)).fetchall()
+            for rowid, paid, paid_day, credits in rows:
+                if abs(float(paid) - want) > 0.01 or abs((datetime.date.fromisoformat(paid_day) - asked).days) > 1:
+                    continue
+                self.db.execute("update orphans set taken=1 where rowid=?", (rowid,))
+                self._log(key, "buy", credits, self._add(key, credits), "결제 찾기")
+                found, added = found + 1, added + credits
+            return {"found": found, "added": added, "credits": self._credits(key), "too_many": False}
 
     def history(self, email: str) -> list:
         key = self._key(email)

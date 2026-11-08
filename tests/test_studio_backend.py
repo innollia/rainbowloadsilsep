@@ -165,9 +165,113 @@ def test_cancel_stops_and_ignores_late_result():
 
 
 def test_daily_limit_blocks_calls():
-    fake = Fake(); jobs = sb.Jobs(fake, daily_limit=0)
+    fake = Fake(); jobs = sb.Jobs(fake, teacher_limit=0)
     jobs.submit("o", request())
     assert drive(jobs)["status"] == "limit" and fake.edit_calls == 0
+
+
+def _member(email, **kw):
+    req = request(**kw)
+    req["account"] = email
+    return req
+
+
+def test_each_account_has_its_own_daily_limit_under_a_shared_ceiling():
+    fake = Fake()
+    jobs = sb.Jobs(fake, daily_limit=3, account_limit=2, teacher_limit=10, session_limit=10)
+    for i in range(3):
+        jobs.submit("acct:a", _member("a@example.com", lang="ko"))
+        snap = drive(jobs, "acct:a")
+    assert snap["status"] == "limit" and "2회" in snap["messages"][-1]["text"]
+    assert jobs.calls_left("a@example.com") == 0 and jobs.calls_left("b@example.com") == 1
+    jobs.submit("acct:b", _member("b@example.com"))
+    assert drive(jobs, "acct:b")["status"] == "done"
+    jobs.submit("acct:c", _member("c@example.com"))  # the ceiling for all accounts (3) is used up
+    assert drive(jobs, "acct:c")["status"] == "limit"
+    jobs.submit("teacher-1", request())  # password sessions are a separate pool
+    assert drive(jobs, "teacher-1")["status"] == "done"
+    assert fake.edit_calls == 4
+
+
+def test_a_password_session_has_its_own_cap():
+    jobs = sb.Jobs(Fake(), teacher_limit=10, session_limit=1)
+    jobs.submit("s1", request()); drive(jobs, "s1")
+    jobs.submit("s1", request())
+    assert drive(jobs, "s1")["status"] == "limit"
+    assert jobs.calls_left(owner="s1") == 0 and jobs.calls_left(owner="s2") == 1
+    jobs.submit("s2", request())
+    assert drive(jobs, "s2")["status"] == "done"
+    assert sb.Jobs(Fake()).calls_left(owner="x") is None
+
+
+def test_project_id_is_echoed_so_the_result_lands_on_its_song():
+    assert request(project_id="p-123")["project_id"] == "p-123"
+    assert request(project_id="x" * 65)["project_id"] == "" and request(project_id=5)["project_id"] == ""
+    assert request()["project_id"] == ""
+    jobs = sb.Jobs(Fake())
+    jobs.submit("o", request(project_id="song-7"))
+    assert jobs.snapshot("o")["project_id"] == "song-7" and drive(jobs)["project_id"] == "song-7"
+
+
+def test_a_new_session_of_the_same_account_takes_over_the_running_job():
+    ledger = LocalLedger()
+    jobs = sb.Jobs(Fake(), ledger=ledger, feedback_timeout=5)
+    jobs.submit("acct:a@example.com", _member("a@example.com"))
+    while not jobs.jobs["acct:a@example.com"].view["candidate"]:  # the first tab is gone before the result
+        time.sleep(0.005)
+    with pytest.raises(ValueError):
+        jobs.submit("acct:a@example.com", _member("a@example.com"))  # the reloaded page sees it still running
+    snap = drive(jobs, "acct:a@example.com")  # and answers its candidate
+    assert snap["status"] == "done" and ledger.account("a@example.com")["credits"] == 20 - 2  # one call, unlisted model costs 2
+
+
+def _wait_end(job):
+    while job.view["status"] == "running":
+        time.sleep(0.01)
+
+
+def test_a_result_nobody_received_is_refunded():
+    ledger = LocalLedger()
+    jobs = sb.Jobs(Fake(), ledger=ledger, feedback_timeout=0.3)
+    jobs.submit("acct:a@example.com", _member("a@example.com", lang="ko"))
+    job = jobs.jobs["acct:a@example.com"]
+    _wait_end(job)  # no page polls at all
+    assert job.view["status"] == "failed" and "2크레딧은 돌려줬어" in job.view["messages"][-1]["text"]
+    assert ledger.account("a@example.com")["credits"] == 20
+
+
+def test_a_result_a_page_saw_is_not_refunded():
+    ledger = LocalLedger()
+    jobs = sb.Jobs(Fake(), ledger=ledger, feedback_timeout=0.3)
+    jobs.submit("acct:a@example.com", _member("a@example.com"))
+    job = jobs.jobs["acct:a@example.com"]
+    while not job.view["candidate"]:
+        time.sleep(0.005)
+    jobs.snapshot("acct:a@example.com")  # a page got the candidate, then went away
+    _wait_end(job)
+    assert job.view["messages"][-1]["text"] == sb.msg("en", "no_browser")
+    assert ledger.account("a@example.com")["credits"] == 18
+
+
+def test_a_talk_reply_that_finished_unseen_waits_for_the_next_visit():
+    jobs = sb.Jobs(Fake(edits=[{"intent": "talk", "reply": "hi", "summary": "", "bpm": 120, "changes": []}]))
+    jobs.submit("acct:a@example.com", _member("a@example.com"))
+    _wait_end(jobs.jobs["acct:a@example.com"])
+    later = jobs.snapshot("acct:a@example.com")  # a later sign-in under the same account
+    assert later["status"] == "done" and later["messages"][-1]["text"] == "hi"
+
+
+@pytest.mark.parametrize("ua,app", [
+    ("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 KAKAOTALK 10.4.5", "KakaoTalk"),
+    ("Mozilla/5.0 (Linux; Android 14; SM-S918N Build/UP1A; wv) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36 Instagram 312.0", "Instagram"),
+    ("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148 [FBAN/FBIOS;FBAV/440.0]", "Facebook"),
+    ("Mozilla/5.0 (Linux; Android 13; Pixel 7; wv) AppleWebKit/537.36 Version/4.0 Chrome/120 Mobile Safari/537.36", "WebView"),
+    ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36", ""),
+    ("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1", ""),
+    (None, ""),
+])
+def test_in_app_browsers_are_recognised(ua, app):
+    assert sb.in_app_browser(ua) == app
 
 
 def test_second_request_refused_while_running():
@@ -385,6 +489,17 @@ def test_effort_reaches_claude():
 
 
 from credits import LocalLedger  # noqa: E402
+
+
+def test_local_ledger_finds_a_payment_by_payer_email_amount_and_date():
+    ledger = LocalLedger()
+    ledger.hold("bmc@example.com", "3", "2026-11-01", 60)
+    assert ledger.find_payment("me@example.com", "bmc@example.com", "4", "2026-11-01")["found"] == 0
+    assert ledger.find_payment("me@example.com", "bmc@example.com", "3", "2026-11-02") == {
+        "found": 1, "added": 60, "credits": 80, "too_many": False}
+    assert ledger.find_payment("me@example.com", "bmc@example.com", "3", "2026-11-01")["found"] == 0
+    with pytest.raises(ValueError):
+        ledger.find_payment("me@example.com", "bmc@example.com", "x", "2026-11-01")
 
 
 def _paid(fake, ledger, **kw):

@@ -33,7 +33,7 @@ if (-not $?) {
 "{`"Version`":`"2012-10-17`",`"Statement`":[{`"Effect`":`"Allow`",`"Action`":[`"dynamodb:GetItem`",`"dynamodb:PutItem`",`"dynamodb:DeleteItem`",`"dynamodb:Query`",`"dynamodb:ConditionCheckItem`"],`"Resource`":`"$tableArn`"}]}" | Set-Content -Encoding ascii "$tmp\ddb.json"
 aws iam put-role-policy --role-name "$N-role" --policy-name ddb --policy-document "file://$tmp\ddb.json"
 
-Compress-Archive -Force "$here\lambda_function.py" "$tmp\fn.zip"
+Compress-Archive -Force -Path "$here\lambda_function.py", "$here\words_en.txt" -DestinationPath "$tmp\fn.zip"
 @{ Variables = @{ TABLE = $N; APP_TOKEN = $token; PEPPER = $pepper; BMC_WEBHOOK_SECRET = $sec;
     CREDITS_PER_USD = "$CreditsPerUsd"; FREE_CREDITS = "$FreeCredits" } } | ConvertTo-Json -Compress | Set-Content -Encoding ascii "$tmp\env.json"
 try {

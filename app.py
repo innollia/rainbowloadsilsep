@@ -2,13 +2,16 @@
 from pathlib import Path
 import os
 import hmac
+import html
+import json
 import secrets
 import runpy
+import urllib.parse
 
 import streamlit as st
 import streamlit.components.v1 as components
 
-from studio_backend import AgyCli, Jobs, Router, validate_request
+from studio_backend import AgyCli, Jobs, Router, in_app_browser, validate_request
 from credits import FREE_CREDITS, LedgerError, LocalLedger, RemoteLedger, price_table
 
 st.set_page_config(page_title="olmuse", page_icon="◉", layout="wide", initial_sidebar_state="collapsed")
@@ -67,9 +70,20 @@ def choose_model():
     return AgyCli() if LOCAL_AI else None
 
 
+def limit_setting(name, default):
+    """A call limit; 0 or below means none."""
+    value = int(setting(name, default) or 0)
+    return value if value > 0 else None
+
+
 @st.cache_resource
 def jobs():
-    return Jobs(choose_model(), daily_limit=int(setting("STRUDEL_DAILY_CALLS", "200")), ledger=ledger())
+    # STRUDEL_DAILY_CALLS is the safety ceiling for all signed-in accounts together; each account also has its own.
+    # Password (teacher) sessions are a separate pool with a per-session cap, so a leaked password cannot drain it in one go.
+    return Jobs(choose_model(), daily_limit=limit_setting("STRUDEL_DAILY_CALLS", "200"), ledger=ledger(),
+                account_limit=limit_setting("STRUDEL_ACCOUNT_DAILY_CALLS", "60"),
+                teacher_limit=limit_setting("STRUDEL_TEACHER_DAILY_CALLS", "200"),
+                session_limit=limit_setting("STRUDEL_TEACHER_SESSION_CALLS", "60"))
 
 
 @st.cache_resource
@@ -93,10 +107,18 @@ st.markdown("""<style>
 TEXT = {
     "en": {"google": "Continue with Google · {n} free credits", "password": "Password", "enter": "Enter", "wrong": "Wrong password.",
            "back": "← Back to the music studio", "switch": "Switch Arcade / BLACK BOX",
-           "no_ai": "AI isn't connected. Check the connection in Settings."},
+           "no_ai": "AI isn't connected. Check the connection in Settings.",
+           "in_app": "Google sign-in is blocked inside in-app browsers ({app}). Please open this page in your default browser (Chrome, Safari).",
+           "in_app_how": "Tap ⋮ or ··· in the corner and choose \"Open in browser\", or copy the address and paste it into your browser.",
+           "open_browser": "Open in browser", "copy": "Copy address", "copied": "Copied",
+           "moved": "olmuse's address is {url}. Songs are saved per address, so export them here first if you made any."},
     "ko": {"google": "구글 계정으로 시작하기 · 무료 {n} 크레딧", "password": "비밀번호", "enter": "입장하기", "wrong": "비밀번호가 맞지 않아요.",
            "back": "← 음악 작업실로 돌아가기", "switch": "아케이드 / BLACK BOX 전환",
-           "no_ai": "AI가 연결되지 않았어. 설정에서 연결 상태를 확인해 줘."},
+           "no_ai": "AI가 연결되지 않았어. 설정에서 연결 상태를 확인해 줘.",
+           "in_app": "구글 로그인은 인앱 브라우저({app})에서 막혀요. 기본 브라우저(크롬, 사파리)로 열어 주세요.",
+           "in_app_how": "모서리의 ⋮ 또는 ··· 를 눌러 '다른 브라우저로 열기'를 고르거나, 주소를 복사해 브라우저에 붙여 넣어 주세요.",
+           "open_browser": "기본 브라우저로 열기", "copy": "주소 복사", "copied": "복사했어요",
+           "moved": "olmuse 주소는 {url} 이에요. 곡은 주소마다 따로 저장되니, 여기서 만든 곡이 있으면 먼저 내보내 주세요."},
 }
 lang = st.query_params.get("lang", st.session_state.get("lang", "en"))
 lang = lang if lang in TEXT else "en"
@@ -108,6 +130,53 @@ def switch_lang(chosen, scope="app"):
     st.session_state.lang = chosen
     st.query_params["lang"] = chosen
     st.rerun(scope=scope)
+
+
+# ---------- address and browser checks ----------
+CANONICAL = setting("STRUDEL_CANONICAL_URL", "https://olmuse.app").rstrip("/")
+
+
+def page_url():
+    try:
+        return str(st.context.url or CANONICAL)
+    except Exception:
+        return CANONICAL
+
+
+def other_address_notice():
+    """www.olmuse.app or the *.streamlit.app address keeps its own browser storage, so point to the real one."""
+    host = str(st.context.headers.get("Host") or "").split(":")[0].lower()
+    canonical = urllib.parse.urlsplit(CANONICAL).hostname or ""
+    if canonical and host and host != canonical and (host == "www." + canonical or host.endswith(".streamlit.app")):
+        st.warning(T["moved"].format(url=CANONICAL), icon=":material/open_in_new:")
+        st.link_button(CANONICAL.removeprefix("https://"), CANONICAL)
+
+
+def in_app_notice():
+    """Google answers disallowed_useragent inside chat and social apps' web views. Say so before the button."""
+    app = in_app_browser(st.context.headers.get("User-Agent"))
+    if not app:
+        return False
+    url = page_url()
+    st.warning(T["in_app"].format(app=app), icon=":material/open_in_browser:")
+    st.caption(T["in_app_how"])
+    if app == "KakaoTalk":  # KakaoTalk opens this scheme in the phone's default browser
+        st.link_button(T["open_browser"], "kakaotalk://web/openExternal?url=" + urllib.parse.quote(url, safe=""),
+                       type="primary", use_container_width=True)
+    elif "Android" in str(st.context.headers.get("User-Agent")):
+        rest = url.split("://", 1)[-1]
+        st.link_button(T["open_browser"], f"intent://{rest}#Intent;scheme=https;action=android.intent.action.VIEW;end",
+                       type="primary", use_container_width=True)
+    components.html(f"""<div style="display:flex;gap:8px;font:14px sans-serif">
+<input id="u" readonly value="{html.escape(url, quote=True)}" style="flex:1;padding:8px;border:1px solid #555;border-radius:8px;background:#1b1b1b;color:#eee">
+<button id="b" style="padding:8px 14px;border:0;border-radius:8px;background:#e8e8e8;color:#111;font-weight:600">{html.escape(T["copy"])}</button></div>
+<script>
+const u=document.getElementById("u"), b=document.getElementById("b");
+b.onclick=async()=>{{let ok=false;try{{await navigator.clipboard.writeText(u.value);ok=true}}catch(e){{}}
+if(!ok){{u.select();u.setSelectionRange(0,9999);try{{ok=document.execCommand("copy")}}catch(e){{}}}}
+if(ok)b.textContent={json.dumps(T["copied"])};}};
+</script>""", height=52)
+    return True
 
 
 # ---------- sign-in ----------
@@ -132,6 +201,9 @@ def login_screen(password, google):
                                         label_visibility="collapsed", key="lang_pick")
         if chosen and chosen != lang:
             switch_lang(chosen)
+        other_address_notice()
+        if google and in_app_notice():
+            st.divider()
         if google:
             st.button(T["google"].format(n=FREE_CREDITS), type="primary", on_click=google_login, icon=":material/login:", use_container_width=True)
         if password:
@@ -176,6 +248,8 @@ def account_view(refresh=False, history=False):
         except LedgerError as exc:
             st.session_state.studio_error = str(exc)
     view["history"] = st.session_state.get("studio_history")
+    view["daily_left"] = jobs().calls_left(email)
+    view["find"] = st.session_state.get("studio_find")
     return view
 
 
@@ -203,7 +277,9 @@ iframe {display:block}
 [data-testid="stVerticalBlock"]:has(iframe) {gap:0}
 </style>""", unsafe_allow_html=True)
 studio = components.declare_component("studio", path=str(HERE / "studio_frontend"))
-owner = st.session_state.studio_owner
+# A signed-in account owns its job, so a reload or another device under the same account picks up the running job
+# (and a result that finished while no page was open). Password and local sessions keep a per-session owner.
+owner = "acct:" + email if email else st.session_state.studio_owner
 # A public URL must never be able to spend the key, so AI needs a password, a signed-in account or the local flag.
 ai_ready = jobs().model is not None and (teacher or bool(email) or LOCAL_AI)
 
@@ -218,6 +294,17 @@ def handle(action, payload, manager, choices):
             req["account"] = email
         manager.submit(owner, req)
     elif action == "account":
+        account_view(refresh=True, history=True)
+    elif action == "find_payment":
+        # {payer_email, amount, date: YYYY-MM-DD} → account.find = {found, added, credits, too_many}
+        if not email:
+            return
+        p = payload if isinstance(payload, dict) else {}
+        try:
+            st.session_state.studio_find = ledger().find_payment(email, str(p.get("payer_email") or "")[:254],
+                                                                 str(p.get("amount") or "")[:20], str(p.get("date") or "")[:10])
+        except LedgerError as exc:
+            raise ValueError(str(exc)) from None
         account_view(refresh=True, history=True)
     elif action == "logout":
         manager.cancel(owner)
