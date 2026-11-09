@@ -10,6 +10,7 @@ if (-not $line) { throw 'STUDIO_PASSWORD is missing from key-pool.env' }
 $env:STUDIO_PASSWORD = $line.Split('=', 2)[1].Trim()
 $env:STRUDEL_CREDITS_URL = 'https://6wasuz6jowaayhoedd4h3vmthe0alpoq.lambda-url.ap-northeast-2.on.aws'  # 장부. 토큰은 ~/.all-tomorrow/strudel-credits.token
 $env:STRUDEL_DAILY_CALLS = '200'
+$env:OLMUSE_SKILL_ROUTER = '1'  # 상황에 맞는 음악 조각만 넣는다 (skill_router.py)
 Remove-Item Env:STRUDEL_LOCAL_AI -ErrorAction SilentlyContinue
 if (-not $ServerOnly) {
   # The DP7 server watch (all-tomorrow config/infrastructure.json 'olmuse') reruns this script whenever olmuse.app

@@ -640,7 +640,9 @@ def test_bakeoff_models_hidden_on_the_public_server(monkeypatch):
     monkeypatch.delenv("STRUDEL_LOCAL_AI", raising=False)
     router = sb.Router(gemini_key="g", openrouter_key="or")
     ids = [m["id"] for m in router.choices()["models"]]
-    assert ids == ["gemini-3.8-flash"]
+    assert ids == ["deepseek/deepseek-v4.1-flash", "gemini-3.8-flash"]
+    assert router.choices()["model"] == "deepseek/deepseek-v4.1-flash"
+    assert sb.Router(gemini_key="g").choices()["model"] == "gemini-3.8-flash"
     assert isinstance(router.engine("qwen/qwen3.8-flash"), sb.Gemini)
     assert sb.validate_request(request(model="qwen/qwen3.8-flash"))["model"] == ""
 

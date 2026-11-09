@@ -13,8 +13,10 @@ import urllib.error
 import urllib.request
 
 FREE_CREDITS = 20
-# Credits per AI call, set from measured cost (docs/PRICING.md). One credit is one Sonnet call.
-MODEL_COST = {"claude-haiku-5-5": 1, "gemini-3.8-flash": 1, "claude-sonnet-5-5": 1, "claude-opus-5-5": 3}
+# Credits per AI call, set from measured cost (docs/CREDITS.md). One credit (4.25 cents after fees) covers the worst
+# measured per-call cost of DeepSeek, Haiku and Sonnet; Gemini's worst is ~6.8 cents and Opus's ~3.8 cents (bakeoff).
+MODEL_COST = {"deepseek/deepseek-v4.1-flash": 1, "claude-haiku-5-5": 1, "claude-sonnet-5-5": 1,
+              "gemini-3.8-flash": 2, "claude-opus-5-5": 3}
 EFFORT_EXTRA = {"low": 0, "medium": 0, "high": 1}
 
 

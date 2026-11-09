@@ -152,7 +152,7 @@ class AgyAudioJudge(sb.AgyCli):
             base = [self.executable, "--output-format", "json", "--json-schema", schema, "--disable-slash-commands",
                     "--sandbox", "--print-timeout", f"{self.TIMEOUT}s", "--add-dir", folder, "--settings", self.SETTINGS,
                     "--model", self.model]
-            out, err = self._exec(base + ["-p", text], folder)
+            out, err = self._exec(base, folder, text)
             self.last_usage = self.usage_of(out)
             try:
                 return self.parse(out, err)

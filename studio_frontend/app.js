@@ -7,9 +7,9 @@
   const ROLE = { drums: '●', bass: '▂', melody: '♪', pad: '≈', other: '◆' };
   const CSP = "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' blob: data:; connect-src https://raw.githubusercontent.com blob: data:; media-src blob: data: https:; worker-src blob: data:;";
   const DEFAULT_TRACKS = [
-    { id: 'drums', role: 'drums', code: 'stack(s("bd*4").gain(.6), s("~ cp ~ cp").gain(.45), s("hh*8").gain(.25))' },
+    { id: 'drums', role: 'drums', code: 'stack(s("bd*4").gain(.6), s("~ cp ~ cp").gain(.45).room(.08).size(1.2), s("hh*8").gain(.25))' },
     { id: 'bass', role: 'bass', code: 'note("<c2 c2 eb2 g1>*2").s("sawtooth").lpf(600).decay(.2).sustain(.3).gain(.4)' },
-    { id: 'melody', role: 'melody', code: 'note("c4 eb4 g4 bb4 g4 eb4 c4 ~").s("triangle").gain(.3).delay(.3)' },
+    { id: 'melody', role: 'melody', code: 'note("c4 eb4 g4 bb4 g4 eb4 c4 ~").s("sawtooth").lpf(1800).decay(.15).sustain(.2).room(.2).size(1.2).gain(.25)' },
   ];
   const dlg = $('dialog');
   const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };

@@ -26,18 +26,20 @@ from credits import LedgerError, call_cost
 
 DEFAULT_MODEL = "gemini-3.8-flash"
 DEFAULT_CLAUDE_MODEL = "claude-sonnet-5-5"
+# What a new request starts on when the server has its key: the value pick (docs/MODEL_VALUE.md). Opus 5.5 is the top pick.
+DEFAULT_CHOICE = "deepseek/deepseek-v4.1-flash"
 # What a browser may ask for. Anything else is ignored, so a request can never name a model the owner did not offer.
 MODEL_CHOICES = (
+    {"id": "deepseek/deepseek-v4.1-flash", "label": "DeepSeek V4.1 Flash", "provider": "openrouter"},
     {"id": "claude-haiku-5-5", "label": "Haiku 5.5", "provider": "claude"},
     {"id": "claude-sonnet-5-5", "label": "Sonnet 5.5", "provider": "claude"},
     {"id": "claude-opus-5-5", "label": "Opus 5.5", "provider": "claude"},
     {"id": "gemini-3.8-flash", "label": "Gemini 3.8 Flash", "provider": "gemini"},
 )
 # Model bakeoff candidates through OpenRouter (docs/MODEL_BAKEOFF_PLAN.md). Offered only when STRUDEL_LOCAL_AI=1,
-# which the public server never sets, so a public URL can never spend the OpenRouter key.
+# which the public server never sets; the public server spends the OpenRouter key only on MODEL_CHOICES.
 BAKEOFF_CHOICES = (
     {"id": "nvidia/nemotron-3.5-super-vl:free", "label": "Nemotron 3.5 Super (free)", "provider": "openrouter"},
-    {"id": "deepseek/deepseek-v4.1-flash", "label": "DeepSeek V4.1 Flash", "provider": "openrouter"},
     {"id": "qwen/qwen3.8-flash", "label": "Qwen 3.8 Flash", "provider": "openrouter"},
     {"id": "z-ai/glm-5.3", "label": "GLM 5.3", "provider": "openrouter"},
     {"id": "minimax/minimax-m3", "label": "MiniMax M3", "provider": "openrouter"},
@@ -645,7 +647,7 @@ class Router:
         efforts = [{"id": e, "label": msg(lang, "effort_" + e)} for e in EFFORTS]
         models = [{"id": m["id"], "label": m["label"]} for m in model_choices() if self.keys[m["provider"]]]
         known = {m["id"] for m in models}
-        named = self.named[self.first]
+        named = DEFAULT_CHOICE if DEFAULT_CHOICE in known else self.named[self.first]
         return {"models": models, "efforts": efforts,
                 "model": named if named in known else (models[0]["id"] if models else ""), "effort": DEFAULT_EFFORT}
 
@@ -678,12 +680,8 @@ class AgyCli:
         self.last_usage: dict = {}
 
     def _run(self, prompt: str, schema_def: dict) -> dict:
-        if os.name == "nt" and len(prompt) > 24000:
-            raise ModelError("agy_too_long")
-        # Windows caps a command line near 32000 characters; the skill is what can be dropped.
-        system = BASE_SYSTEM if os.name == "nt" and len(SYSTEM) + len(prompt) > 30000 else SYSTEM
-        if self.system is not None:
-            system = self.system
+        # The prompt goes in on stdin: a command line is capped near 32000 characters on Windows.
+        system = SYSTEM if self.system is None else self.system
         text = system + "\nDo not use any tools. Reply only with the JSON object.\n\n" + prompt
         with tempfile.TemporaryDirectory(prefix="ddalkkak-agy-") as folder:
             schema = os.path.join(folder, "schema.json")
@@ -691,7 +689,7 @@ class AgyCli:
                 json.dump(plain_schema(schema_def), stream)
             base = [self.executable, "--output-format", "json", "--json-schema", schema, "--disable-slash-commands",
                     "--sandbox", "--print-timeout", f"{self.TIMEOUT}s"] + (["--model", self.model] if self.model else [])
-            out, err = self._exec(base + ["-p", text], folder)
+            out, err = self._exec(base, folder, text)
             self.last_usage = self.usage_of(out)
             try:
                 return self.parse(out, err)
@@ -707,12 +705,13 @@ class AgyCli:
 
     AFTER_DENIAL = "Tools are not available here and the call was denied. Reply now with only the JSON object for the request above."
 
-    def _exec(self, args: list, folder: str) -> tuple[bytes, bytes]:
+    def _exec(self, args: list, folder: str, stdin_text: str | None = None) -> tuple[bytes, bytes]:
         flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
-            self.process = subprocess.Popen(args, cwd=folder, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                            stderr=subprocess.PIPE, creationflags=flags)
-            return self.process.communicate(timeout=self.TIMEOUT + 20)
+            self.process = subprocess.Popen(args, cwd=folder, stdin=subprocess.PIPE if stdin_text is not None else subprocess.DEVNULL,
+                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=flags)
+            data = stdin_text.encode("utf-8") if stdin_text is not None else None
+            return self.process.communicate(input=data, timeout=self.TIMEOUT + 20)
         except OSError:
             raise ModelError("agy_missing") from None
         except subprocess.TimeoutExpired:

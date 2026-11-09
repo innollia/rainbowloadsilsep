@@ -62,8 +62,8 @@ def choose_model():
     provider = setting("AI_PROVIDER").strip().lower()
     gemini_key = "" if provider == "claude" else secret("SCHOOL_GEMINI_API_KEY", "GEMINI_API_KEY")
     claude_key = "" if provider == "gemini" else secret("ANTHROPIC_API_KEY")
-    # Bakeoff models only (docs/MODEL_BAKEOFF_PLAN.md): a public server never gets to spend this key.
-    openrouter_key = secret("OPENROUTER_API_KEY") if LOCAL_AI else ""
+    # The public server spends it only on MODEL_CHOICES (DeepSeek); bakeoff models join only when LOCAL_AI.
+    openrouter_key = "" if provider in ("claude", "gemini") else secret("OPENROUTER_API_KEY")
     if gemini_key or claude_key or openrouter_key:
         return Router(gemini_key, claude_key, setting("GEMINI_MODEL"), setting("GEMINI_BASE_URL"), setting("CLAUDE_MODEL"), provider,
                       openrouter_key=openrouter_key)
