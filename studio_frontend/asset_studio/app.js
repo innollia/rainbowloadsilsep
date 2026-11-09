@@ -79,7 +79,9 @@
     ref: '<path d="M7 3h10v18l-5-4-5 4z"/>',
     agent: '<path d="M12 3a7 7 0 0 1 7 7v3a7 7 0 0 1-14 0v-3a7 7 0 0 1 7-7z"/><path d="M9 11h.01M15 11h.01M9.5 15c1.5 1 3.5 1 5 0"/>',
     undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
-    gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/>',
+    gear: '<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
   };
   const setIcon = (el, name) => { el.innerHTML = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`; };
   const iconButton = (name, label, fn, cls = 'iconBtn') => { const b = el('button', cls); setIcon(b, name); b.setAttribute('aria-label', label); b.title = label; b.onclick = fn; return b; };
@@ -191,7 +193,7 @@ Do not reference tracks or samples with unclear licenses. Available materials: $
 
 When that is done, reply only with JSON in the format below, no explanation.
 ${p.form}`,
-      sendPrompt: 'Send prompt', receiveSpec: 'Receive spec', pasteToAgent: 'Paste this into the AI agent working on your game.', prompt: 'Prompt',
+      sendPrompt: 'Copy prompt', receiveSpec: 'Receive spec', pasteToAgent: 'Paste this into the AI agent working on your game.', prompt: 'Prompt',
       copyPrompt: 'Copy prompt', copiedPrompt: 'Copied the prompt', pasteSpec: 'Paste the spec the agent gave you.', insertExample: 'Insert example',
       notJson: (m) => `Not JSON: ${m}`, noAssets: 'There is no assets list.', badItems: (n, list) => `${n} items break the rules: ${list}`, noName: 'no name',
       planSummary: (a, c, k, g) => `Add ${a} · Change ${c} · Keep ${k} · To trash ${g}`, tagAdd: 'Add', tagChange: 'Change', tagRemove: 'Remove',
@@ -231,7 +233,7 @@ ${p.form}`,
     },
     ko: {
       docTitle: '게임 소리 에셋',
-      deleteItem: '지우기', trashed: (n) => `${n}개를 휴지통으로 옮겼어요`, trashHead: '휴지통', trashEmpty: '휴지통이 비었어요.', restore: '복원', restoreAll: '모두 복원', deleteForever: '영구 삭제', emptyTrash: '휴지통 비우기',
+      deleteItem: '지우기', trashed: (n) => `${n}개를 휴지통으로 옮겼어요`, trashHead: '휴지통', trashEmpty: '휴지통이 비었어요.', restore: '복원', restoreAll: '전체 복원', deleteForever: '영구 삭제', emptyTrash: '휴지통 비우기',
       tagTrash: '휴지통으로', specAppliedTrash: (n, g) => `명세를 반영했어요. ${n}개 추가, 명세에 없는 ${g}개는 휴지통으로 옮겼어요`,
       addSound: '추가', newSound: '새 소리', addCat: '분류 추가', newCat: '새 분류', catSettings: '분류 설정', kindLabel: '종류',
       kinds: { sfx: '효과음', amb: '환경음', music: '음악' }, catIdHelp: '소문자 영문. 분류 안 소리도 따라 바뀝니다.', deleteCat: '분류 지우기',
@@ -246,7 +248,7 @@ ${p.form}`,
       agentDid: (n) => `${n}가지를 바꿨어요`, agentFailed: (x) => `답하지 못했어요: ${x}`,
       agentLocal: '여기서는 AI가 연결되지 않아 링크, 메모("메모: …"), 고른 소리 다시 만들기만 알아들어요.', agentNoted: '레퍼런스로 저장했어요.', agentRemake: (n) => `소리 ${n}개를 다시 만들어요.`,
       parentCat: '상위 분류', noParent: '없음(최상위)', addSubCat: '하위 분류 추가', foldersKind: '종류별 폴더(sfx, amb, music)', rootFolder: '소리 폴더',
-      rulesHead: '에이전트가 아는 파일 규칙 쓰기', rulesHelp: '이 게임을 작업한 AI 에이전트가 있으면 이 프롬프트를 보내고 답을 아래에 붙여 넣으세요. 게임이 이미 쓰는 이름에 맞춰 id 규칙, 폴더, 분류를 바꿉니다.',
+      rulesHead: '에이전트가 아는 파일 규칙 쓰기', rulesHelp: '이 게임을 작업한 AI 에이전트가 있으면 이 프롬프트를 보내고 답을 아래에 붙여 넣으세요. 게임이 이미 쓰는 이름에 맞춰 ID 규칙, 폴더, 분류를 바꿉니다.',
       copyRules: '프롬프트 복사', pasteRules: '에이전트의 답(JSON)을 붙여 넣으세요', rulesId: 'ID 규칙', rulesFilesTag: '파일', rulesFiles: (n) => `파일 ${n}개의 분류와 이름을 맞춥니다`, applyRules: '규칙 적용',
       rulesEmpty: '답에 이 화면이 쓸 규칙, 분류, 파일이 없어요.', rulesApplied: '파일 규칙을 적용했어요',
       jevSorting: (n) => `소리 ${n}개를 분류하는 중…`, jevSorted: (n, m) => `소리 ${n}개를 분류했어요(${m}개 옮김)`, jevOff: '여기서는 자동 분류를 쓸 수 없어 이름으로 분류를 짐작했어요.',
@@ -264,8 +266,8 @@ ${p.form}
 ${p.files}`,
       catNotEmpty: '먼저 안의 소리를 옮기거나 지우세요.', moveTo: '분류 옮기기', deleteSound: '휴지통으로', deleteMany: (n) => `${n}개 휴지통으로`, confirmDelete: (n) => `${n}개를 지울까요? 되돌릴 수 없어요.`,
       idRule: 'ID 규칙', idHelp: '형식에는 {kind}(종류 접두사), {cat}(분류 ID), {name}(영문 이름)을 쓸 수 있어요.', idPattern: '형식', idSep: '구분 기호', idPrefix: '접두사',
-      idCheck: '규칙에 안 맞는 id 표시', idExample: (s, n) => `예: ${s} · 지금 규칙에 안 맞는 id ${n}개`, idRenameAll: '모든 ID를 규칙에 맞게 변경', idRenamed: (n) => `id ${n}개를 바꿨어요`,
-      specKeepsAudio: (n) => `이미 만든 소리 ${n}개는 그대로 둡니다. 명세에 없는 항목은 휴지통으로 가고 되살릴 수 있어요.`, specNewCats: (list) => `새 분류: ${list}`, specIdWarn: (n, list) => `id ${n}개가 id 규칙과 달라요. 받은 그대로 씁니다: ${list}`,
+      idCheck: '규칙에 안 맞는 ID 표시', idExample: (s, n) => `예: ${s} · 지금 규칙에 안 맞는 ID ${n}개`, idRenameAll: '모든 ID를 규칙에 맞게 변경', idRenamed: (n) => `ID ${n}개를 바꿨어요`,
+      specKeepsAudio: (n) => `이미 만든 소리 ${n}개는 그대로 둡니다. 명세에 없는 항목은 휴지통으로 가고 복원할 수 있어요.`, specNewCats: (list) => `새 분류: ${list}`, specIdWarn: (n, list) => `ID ${n}개가 ID 규칙과 달라요. 받은 그대로 씁니다: ${list}`,
       exportFormat: '파일', fmt: '형식', rate: '샘플레이트', bits: '비트', quality: '품질', qualities: { high: '높음', mid: '보통', low: '낮음' },
       folders: '폴더', foldersFlat: '한 폴더', foldersCat: '분류별 폴더', engine: '게임 엔진', engineNone: '없음(파일만)',
       bundleAudio: (p) => `승인한 소리, ${p}`, bundleGodot: 'Godot 4: 플러그인과 동적 소리마다 장면 하나(godot/)', encoding: (i, n) => `변환 중 ${i}/${n}…`, exportFailed: (m) => `내보내기 실패: ${m}`,
@@ -275,12 +277,12 @@ ${p.files}`,
       dynNoSounds: '먼저 소리를 만들거나 가져오세요. 레이어는 그 소리로 만듭니다.', dynHelp: '파라미터를 움직이면 레이어가 바뀌는 걸 들을 수 있어요. 게임에서도 같은 파라미터를 넣습니다. 예: Godot에서 set_param("intensity", 0.8).',
       specField: { name: '이름', category: '분류', length: '길이', loop: '반복', when: '재생 시점', description: '설명' }, openAsset: '열기', rename: '이름 바꾸기', unapprove: '승인 취소', menu: '메뉴', settings: '설정', language: '언어', gameInfo: '게임 정보', stagesLabel: '진행 상황', help: '사용법', spec: '명세', export: '내보내기',
       backToMusic: '음악 작업실로', category: '분류', board: '에셋 보드', playAll: '전체 재생', stopAll: '전체 재생 정지', hoverPlay: '마우스 오버 시 재생',
-      acceptAll: '모두 채택', rejectAll: '모두 버림', selectAll: '전체 선택', deselect: '선택 해제', approve: '승인', approved: '승인됨', clear: '해제',
+      acceptAll: '전체 채택', rejectAll: '전체 버림', selectAll: '전체 선택', deselect: '선택 해제', approve: '승인', approved: '승인됨', clear: '해제',
       ask: '수정 요청', send: '보내기',
       status: { pending: '대기', draft: '확인 필요', approved: '승인', flagged: '수정 표시', working: '수정 중', review: '검토 대기' },
       sec: (s) => `${s}초`,
       previous: '이전', newVersion: '새 버전', keep: '채택', drop: '버림',
-      approveAll: '전부 승인', leftToCheck: (n) => `확인할 에셋 ${n}개가 남았어요.`,
+      approveAll: '전체 승인', leftToCheck: (n) => `확인할 에셋 ${n}개가 남았어요.`,
       samplesDone: (n, rest) => `샘플 ${n}개를 모두 승인했어요. 이 스타일로 나머지 ${rest}개를 만듭니다.`,
       samplesProgress: (n, done, rest) => `샘플 ${n}개 중 ${done}개 승인. 들어 보고 승인하면 나머지 ${rest}개를 같은 스타일로 만듭니다.`,
       makeRest: '나머지 만들기', all: '전체', statusHead: '상태',
@@ -330,7 +332,7 @@ ${p.files}`,
 
 정리가 끝나면 설명 없이 아래 형식의 JSON만 답해 주세요.
 ${p.form}`,
-      sendPrompt: '프롬프트 보내기', receiveSpec: '명세 받기', pasteToAgent: '게임을 작업하는 AI 에이전트에게 붙여 넣으세요.', prompt: '프롬프트',
+      sendPrompt: '프롬프트 복사', receiveSpec: '명세 받기', pasteToAgent: '게임을 작업하는 AI 에이전트에게 붙여 넣으세요.', prompt: '프롬프트',
       copyPrompt: '프롬프트 복사', copiedPrompt: '프롬프트를 복사했어요', pasteSpec: '에이전트가 준 명세를 붙여 넣으세요.', insertExample: '예시 넣기',
       notJson: (m) => `JSON이 아니에요: ${m}`, noAssets: 'assets 목록이 없어요.', badItems: (n, list) => `규칙에 맞지 않는 항목 ${n}개: ${list}`, noName: '이름 없음',
       planSummary: (a, c, k, g) => `추가 ${a} · 변경 ${c} · 유지 ${k} · 휴지통 ${g}`, tagAdd: '추가', tagChange: '변경', tagRemove: '삭제',
@@ -400,7 +402,7 @@ ${p.form}`,
   const MAX_CHECKS = 6;
   const rules = RULES.map((r) => ({ ...r }));
   const rule = (id) => rules.find((r) => r.id === id);
-  Object.assign(rule('name'), { read: (m, a) => idOk(a.id), hint: { en: 'Follows the id rule (Settings)', ko: 'id 규칙을 따름(설정)' } });
+  Object.assign(rule('name'), { read: (m, a) => idOk(a.id), hint: { en: 'Follows the id rule (Settings)', ko: 'ID 규칙을 따름(설정)' } });
   const broken = (a, m) => rules.filter((r) => (!r.applies || r.applies(a)) && (r.text ? !r.read(m, a) : r.bad(r.read(m, a), r)));
   const build = (a, change, note) => { const sound = synth.render(a, change); return { sound, note, change, at: new Date(), peaks: synth.peaks(sound.mix, 200), measure: synth.measure(sound) }; };
   // Stands in for the AI reworking its own result; the backend replaces this with a model call.
@@ -531,7 +533,9 @@ ${p.form}`,
     const meta = el('div', 'meta'), name = el('span', 'name', nm(a)), sub = el('div', 'sub');
     const v = a.versions.length ? heard(a) : null;
     sub.append(el('span', '', v ? seconds(v.measure.seconds) : statusText(a.status)), el('span', '', a.status === 'working' ? statusText('working') : v && a.versions.length > 1 ? `v${a.current + 1}` : ''));
-    meta.append(name, sub); t.append(meta, el('i', 'state'));
+    const state = el('i', 'state'); state.title = statusText(a.status);
+    if (a.status === 'approved') setIcon(state, 'check');
+    meta.append(name, sub); t.append(meta, state);
     t.addEventListener('pointerenter', () => hoverStart(a));
     t.addEventListener('pointerleave', hoverEnd);
     t.addEventListener('click', (e) => clickTile(a, e));
@@ -570,20 +574,17 @@ ${p.form}`,
       group.style.setProperty('--c', c.hue); group.style.setProperty('--depth', depthOf(c)); group.dataset.cat = c.id;
       h.append(dot);
       if (parentOf(c)) h.append(el('small', 'catPath', chainOf(c).slice(0, -1).map((x) => tx(x.name)).join(' › ') + ' ›'));
-      h.append(tx(c.name), el('span', '', String(list.length)));
-      const add = el('button', 'ghost', '+ ' + t('addSound')); add.className = 'ghost addSound'; add.onclick = () => addSound(c.id);
+      const pickable = ready(list), title = el('b', 'catName', tx(c.name));
+      // Clicking the group name selects every sound in it (again: deselects); Ctrl+A selects the whole board.
+      if (pickable.length) { title.title = pickable.every((x) => selected.has(x.id)) ? t('deselect') : t('selectAll'); title.onclick = () => { const off = pickable.every((x) => selected.has(x.id)); pickable.forEach((x) => (off ? selected.delete(x.id) : selected.add(x.id))); renderBoard(); }; }
+      h.append(title, el('span', '', String(list.length)));
+      const add = iconButton('plus', t('addSound'), () => addSound(c.id), 'ghost iconBtn addSound');
       const more = iconButton('gear', t('catSettings'), () => catDialog(c), 'ghost iconBtn catGear');
       const refB = iconButton('ref', t('refsOf', tx(c.name)), () => refDialog({ type: 'cat', c }), 'ghost iconBtn catRef');
       if (refCount({ type: 'cat', c })) { refB.append(el('span', 'refN', String(refCount({ type: 'cat', c })))); refB.classList.add('has'); }
       h.append(refB);
       h.append(add, more);
       h.addEventListener('contextmenu', (e) => { e.preventDefault(); catDialog(c); });
-      const pickable = ready(list);
-      if (pickable.length) {
-        const all = el('button', 'ghost', pickable.every((x) => selected.has(x.id)) ? t('deselect') : t('selectAll'));
-        all.onclick = () => { const off = pickable.every((x) => selected.has(x.id)); pickable.forEach((x) => (off ? selected.delete(x.id) : selected.add(x.id))); renderBoard(); };
-        h.append(all);
-      }
       const grid = el('div', 'grid');
       grid.append(...list.map(makeTile));
       group.append(h, grid); box.append(group);
@@ -594,13 +595,13 @@ ${p.form}`,
     renderSide(); renderHeader(); syncDock();
   }
   function importHint() {
-    const box = el('div', 'note importHint'), text = el('span', '', t('importHint'));
+    const box = el('div', 'banner importHint'), text = el('span', '', t('importHint'));
     text.style.flex = '1'; box.append(text);
     return box;
   }
   function banner() {
     const unchecked = assets.filter((a) => a.status === 'draft');
-    const box = el('div', 'note'); box.style.cssText = 'display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px';
+    const box = el('div', 'banner'); box.style.cssText = 'display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px';
     const all = el('button', 'ghost', t('approveAll')); all.id = 'approveAll'; all.onclick = () => { unchecked.forEach(approve); renderBoard(); };
     if (stage !== 'sample') {
       const out = [], empty = assets.filter((a) => a.status === 'pending');
@@ -625,25 +626,28 @@ ${p.form}`,
     box.append(text, all, go);
     return box;
   }
+  const STATUS_HUE = { approved: 'var(--ok)', draft: 'var(--warn)', review: 'var(--work)', working: 'var(--work)', flagged: 'var(--err)', pending: 'var(--disabled)' };
   function renderSide() {
     const side = $('side'); side.textContent = '';
-    const item = (label, count, active, fn, hue) => {
-      const b = el('button'); b.setAttribute('aria-pressed', String(active)); b.onclick = fn;
-      if (hue) { const d = el('i', 'dot'); d.style.setProperty('--c', hue); b.append(d); }
+    // Below 900px the list narrows to a rail of dots and counts; the name stays in the tooltip and label.
+    const item = (label, count, active, fn, hue, mark) => {
+      const b = el('button'); b.setAttribute('aria-pressed', String(active)); b.onclick = fn; b.title = label; b.setAttribute('aria-label', `${label} ${count}`);
+      if (hue) { const d = el('i', mark ? 'dot railOnly' : 'dot'); d.style.setProperty('--c', hue); b.append(d); }
+      else if (mark) { const d = el('i', 'railOnly railIco'); setIcon(d, mark); b.append(d); }
       b.append(el('span', 'name', label), el('span', 'n', String(count)));
       return b;
     };
-    side.append(el('h2', '', t('category')), item(t('all'), assets.length, !filter.cat, () => { filter.cat = null; renderBoard(); }));
+    side.append(el('h2', '', t('category')), item(t('all'), assets.length, !filter.cat, () => { filter.cat = null; renderBoard(); }, 'var(--text)', true));
     for (const c of catTree()) { const b = item(tx(c.name), assets.filter((a) => under(a.cat, c.id)).length, filter.cat === c.id, () => { filter.cat = filter.cat === c.id ? null : c.id; renderBoard(); }, c.hue); b.style.paddingLeft = `${12 + depthOf(c) * 14}px`; side.append(b); }
     side.append(iconButton('folderPlus', t('addCat'), newCat, 'iconBtn addCat'));
     side.append(el('h2', '', t('statusHead')));
     for (const [id, label] of Object.entries(t('status'))) {
       const n = assets.filter((a) => a.status === id).length;
-      if (n) side.append(item(label, n, filter.status === id, () => { filter.status = filter.status === id ? null : id; renderBoard(); }));
+      if (n) side.append(item(label, n, filter.status === id, () => { filter.status = filter.status === id ? null : id; renderBoard(); }, STATUS_HUE[id], true));
     }
-    if (trash.length) { side.append(el('h2', '', t('trashHead'))); side.append(item(t('trashHead'), trash.length, false, trashDialog)); }
+    if (trash.length) { side.append(el('h2', '', t('trashHead'))); side.append(item(t('trashHead'), trash.length, false, trashDialog, null, 'trash')); }
     const mine = assets.filter((a) => a.imported).length;
-    if (mine) side.append(el('h2', '', t('originHead')), item(t('imported'), mine, filter.imported, () => { filter.imported = !filter.imported; renderBoard(); }));
+    if (mine) side.append(el('h2', '', t('originHead')), item(t('imported'), mine, filter.imported, () => { filter.imported = !filter.imported; renderBoard(); }, null, 'upload'));
   }
   function renderHeader() {
     $('gameTitle').textContent = tx(game);
@@ -673,7 +677,7 @@ ${p.form}`,
   /* ---------- pointer ---------- */
   let hoverTimer = 0, lassoing = false;
   function hoverStart(a) {
-    if (lassoing || !$('hoverPlay').checked || !a.versions.length || queue) return;
+    if (lassoing || !hoverOn || !a.versions.length || queue) return;
     clearTimeout(hoverTimer);
     hoverTimer = setTimeout(() => { if (player?.asset !== a) play(a, { hover: true }); }, 140);
   }
@@ -732,7 +736,7 @@ ${p.form}`,
       cats.splice(cats.indexOf(c), 1); if (filter.cat === c.id) filter.cat = null; dlg.close(); renderBoard();
     };
     const foot = el('div', 'dlgRow'); foot.append(del, child);
-    dlg.append(row(t('nameLabel'), name), row(t('kindLabel'), kind), row(t('parentCat'), up), row('id', id), foot);
+    dlg.append(row(t('nameLabel'), name), row(t('kindLabel'), kind), row(t('parentCat'), up), row('ID', id), foot);
     if (!dlg.open) dlg.showModal();
     if (fresh) { name.focus(); name.select(); }
   }
@@ -852,7 +856,7 @@ ${p.form}`,
       if (keep && value && value !== nm(a)) { a.name = value; if (renamingNew) a.id = makeId(value, a.cat, new Set(assets.filter((x) => x !== a).map((x) => x.id))); }
       renderBoard(); tileOf(byId(a.id))?.focus();
     };
-    input.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') finish(true); if (e.key === 'Escape') finish(false); };
+    input.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) finish(true); if (e.key === 'Escape') finish(false); };
     input.onblur = () => finish(true);
     ['pointerdown', 'click'].forEach((type) => input.addEventListener(type, (e) => e.stopPropagation()));
     label.replaceWith(input); input.focus(); input.select();
@@ -1099,6 +1103,8 @@ ${p.form}`,
     } catch (e) { say(t('agentFailed', e.message || e)); }
     agentBusy = false; syncDock(); autosave();
   }
+  // Enter that only ends a Korean syllable must not send the form (same as the music screen).
+  document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.isComposing || e.keyCode === 229) && e.target.matches?.('input')) e.preventDefault(); }, true);
   $('askForm').onsubmit = (e) => {
     e.preventDefault();
     const text = $('ask').value.trim(); if (!text || agentBusy) return;
@@ -1434,6 +1440,7 @@ ${p.form}`,
     dlg.showModal();
   }
 
+  let hoverOn = true;
   function settingsDialog() {
     openDialog(t('settings')); reopen = settingsDialog;
     const pick = el('select'); pick.id = 'langPick'; pick.setAttribute('aria-label', t('language'));
@@ -1441,8 +1448,8 @@ ${p.form}`,
     // In the music studio the host owns the language, so the choice also goes up to it.
     pick.onchange = () => { if (inHost) parent.postMessage({ type: 'asset:setlang', lang: pick.value }, '*'); setLang(pick.value); };
     const row = el('div', 'lineItem'); row.append(el('span', 'grow', t('language')), pick);
-    const hover = el('input'); hover.type = 'checkbox'; hover.checked = $('hoverPlay').checked;
-    hover.onchange = () => { $('hoverPlay').checked = hover.checked; };
+    const hover = el('input'); hover.type = 'checkbox'; hover.checked = hoverOn;
+    hover.onchange = () => { hoverOn = hover.checked; };
     const row2 = el('label', 'lineItem'); row2.append(el('span', 'grow', t('hoverPlay')), hover);
     dlg.append(row, row2, el('h3', '', t('idRule')), el('p', 'note', t('idHelp')));
     const field = (label, value, set, width) => { const i = el('input'); i.value = value; i.setAttribute('aria-label', label); if (width) i.style.width = width; i.oninput = () => { set(i.value); example(); }; const r = el('label', 'lineItem'); r.append(el('span', 'grow', label), i); dlg.append(r); return i; };
@@ -2031,7 +2038,7 @@ ${p.form}`,
   function dynSection() {
     const box = el('div', 'group dynGroup'), h = el('h2');
     h.append(el('i'), t('dynHead'), el('span', '', String(dynamics.length)));
-    const add = el('button', 'ghost addSound', '+ ' + t('addDyn')); add.onclick = newDynamic; h.append(add);
+    h.append(iconButton('plus', t('addDyn'), newDynamic, 'ghost iconBtn addSound'));
     const grid = el('div', 'grid');
     for (const d of dynamics) {
       const card = el('button', 'dynCard'); card.onclick = () => dynDialog(d);
