@@ -66,7 +66,7 @@ def main():
 
         # First visit: the tutorial opens and offers Import; the header and board offer it too.
         page.wait_for_selector("#dialog[open] #tutorialImport")
-        check("first screen offers import", page.is_visible("#importBtn") and page.is_visible("#importHintBtn"))
+        check("first screen offers import", page.is_visible("#importBtn") and page.is_visible(".importHint"))
         page.click("#tutorialImport")
         page.wait_for_selector("#dialog[open] #pickFolder")
 

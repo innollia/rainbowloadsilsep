@@ -35,7 +35,7 @@
   if (!LANGS.includes(lang)) lang = 'en';
   const TEXT = {
     en: {
-      docTitle: 'Game sound assets', menu: 'Menu', settings: 'Settings', language: 'Language', gameInfo: 'Game info', stagesLabel: 'Progress', help: 'How to use', spec: 'Spec', export: 'Export',
+      docTitle: 'Game sound assets', specField: { name: 'name', category: 'category', length: 'length', loop: 'loop', when: 'when', description: 'description' }, openAsset: 'Open', rename: 'Rename', unapprove: 'Cancel approval', menu: 'Menu', settings: 'Settings', language: 'Language', gameInfo: 'Game info', stagesLabel: 'Progress', help: 'How to use', spec: 'Spec', export: 'Export',
       backToMusic: 'To music studio', category: 'Category', board: 'Asset board', playAll: 'Play all', stopAll: 'Stop playing all', hoverPlay: 'Play on hover',
       acceptAll: 'Keep all', rejectAll: 'Discard all', selectAll: 'Select all', deselect: 'Deselect', approve: 'Approve', approved: 'Approved', clear: 'Clear',
       ask: 'Edit request', send: 'Send',
@@ -111,7 +111,7 @@ ${p.form}`,
       importedLicense: 'You brought this sound in, so its license is yours to record. It goes into CREDITS.md.', noLicenseYet: 'license not recorded',
       originHead: 'Source', fillLeft: (n) => `${n} empty slot${n === 1 ? '' : 's'} to make.`, fillAll: 'Fill with AI', filling: (n) => `Making ${n}`,
       likeThis: 'Drafts in this feel', likeName: (n) => `${n} (like)`, likeMade: (n) => `Making ${n} in this feel`, promptHead: 'AI prompt',
-      fromPrompt: 'Made from the prompt', importedNote: 'Brought in', fromBundle: 'From the bundle', importHint: 'Already have sounds or a sound list? Drop them here or import them.',
+      fromPrompt: 'Made from the prompt', importedNote: 'Brought in', fromBundle: 'From the bundle', importHint: 'Already have sounds or a sound list? Drop them here or use Import at the top.',
       fillPrompt: (p) => `Make the game sound "${p.name}" (${p.id}, ${p.cat}) for ${p.game}.\n${p.when ? `When it plays: ${p.when}\n` : ''}${p.description ? `What it sounds like: ${p.description}\n` : ''}Form: ${p.loop ? 'seamless loop' : 'one shot'}${p.length ? `, about ${p.length}s` : ''}.${p.style ? `\nGame sound direction: ${p.style}` : ''}${p.ref}`,
       refPrompt: (r) => `\n\nReference: make it in the feel of "${r.name}", the user's own sound (${r.file}). Measured from that file:\n- length ${r.seconds}s, ${r.loop ? 'loop' : 'one shot'}\n- peak ${r.peak} dB, loudness ${r.loud} LUFS\n- energy: low (<250 Hz) ${r.low}% · mid ${r.mid}% · high (>4 kHz) ${r.high}%, brightness about ${r.bright} Hz\n- leading silence ${r.lead} ms, trailing silence ${r.tail} ms\nStay close to its length, loudness and band balance. Do not copy it.`,
       importing: (i, n) => `Bringing in ${i} of ${n}`, skipped: (n, why) => `Skipped ${n}: ${why}`,
@@ -128,7 +128,7 @@ ${p.form}`,
       ],
     },
     ko: {
-      docTitle: '게임 소리 에셋', menu: '메뉴', settings: '설정', language: '언어', gameInfo: '게임 정보', stagesLabel: '진행 단계', help: '사용법', spec: '명세', export: '내보내기',
+      docTitle: '게임 소리 에셋', specField: { name: '이름', category: '분류', length: '길이', loop: '반복', when: '쓰이는 때', description: '설명' }, openAsset: '들어가기', rename: '이름 바꾸기', unapprove: '승인 취소', menu: '메뉴', settings: '설정', language: '언어', gameInfo: '게임 정보', stagesLabel: '진행 단계', help: '사용법', spec: '명세', export: '내보내기',
       backToMusic: '음악 작업실로', category: '분류', board: '에셋 보드', playAll: '전체 듣기', stopAll: '전체 듣기 멈춤', hoverPlay: '올리면 듣기',
       acceptAll: '모두 채택', rejectAll: '모두 버림', selectAll: '전체 선택', deselect: '선택 해제', approve: '승인', approved: '승인됨', clear: '해제',
       ask: '수정 요청', send: '보내기',
@@ -204,7 +204,7 @@ ${p.form}`,
       importedLicense: '직접 가져온 소리라 라이선스는 직접 적어 주세요. CREDITS.md에 들어갑니다.', noLicenseYet: '라이선스 기록 없음',
       originHead: '출처', fillLeft: (n) => `만들 빈 칸 ${n}개.`, fillAll: 'AI로 채우기', filling: (n) => `${n}개를 만드는 중`,
       likeThis: '이 느낌으로 시안', likeName: (n) => `${n} 느낌`, likeMade: (n) => `이 느낌으로 ${n}개를 만들어요`, promptHead: 'AI 프롬프트',
-      fromPrompt: '프롬프트로 생성', importedNote: '직접 가져옴', fromBundle: '묶음에서 가져옴', importHint: '이미 만든 소리나 소리 목록이 있나요? 여기에 끌어다 놓거나 가져오세요.',
+      fromPrompt: '프롬프트로 생성', importedNote: '직접 가져옴', fromBundle: '묶음에서 가져옴', importHint: '이미 만든 소리나 소리 목록이 있나요? 여기에 끌어다 놓거나 위쪽 가져오기를 누르세요.',
       fillPrompt: (p) => `${p.game}에 쓸 게임 소리 "${p.name}"(${p.id}, ${p.cat})를 만들어 주세요.\n${p.when ? `나는 때: ${p.when}\n` : ''}${p.description ? `어떤 소리: ${p.description}\n` : ''}형태: ${p.loop ? '끊김 없는 반복' : '한 번 재생'}${p.length ? `, 약 ${p.length}초` : ''}.${p.style ? `\n게임 소리 방향: ${p.style}` : ''}${p.ref}`,
       refPrompt: (r) => `\n\n기준 소리: 사용자가 가져온 "${r.name}"(${r.file})의 느낌으로 만들어 주세요. 그 파일을 잰 값:\n- 길이 ${r.seconds}초, ${r.loop ? '반복' : '한 번 재생'}\n- 최대 ${r.peak} dB, 음량 ${r.loud} LUFS\n- 에너지: 저역(250 Hz 아래) ${r.low}% · 중역 ${r.mid}% · 고역(4 kHz 위) ${r.high}%, 밝기 약 ${r.bright} Hz\n- 앞 무음 ${r.lead} ms, 뒤 무음 ${r.tail} ms\n길이, 음량, 대역 균형을 비슷하게 맞추되 그대로 베끼지는 마세요.`,
       importing: (i, n) => `가져오는 중 ${i}/${n}`, skipped: (n, why) => `${n}개 건너뜀: ${why}`,
@@ -387,7 +387,7 @@ ${p.form}`,
     t.addEventListener('pointerleave', hoverEnd);
     t.addEventListener('click', (e) => clickTile(a, e));
     t.addEventListener('pointerdown', (e) => hold(a, t, e));
-    t.addEventListener('contextmenu', (e) => e.preventDefault());
+    t.addEventListener('contextmenu', (e) => { e.preventDefault(); tileMenu(a, e.clientX, e.clientY); });
     t.addEventListener('focus', () => { focused = a.id; syncDock(); });
     return t;
   }
@@ -433,9 +433,8 @@ ${p.form}`,
     renderSide(); renderHeader(); syncDock();
   }
   function importHint() {
-    const box = el('div', 'note importHint'), text = el('span', '', t('importHint')), b = el('button', 'primary', t('importShort'));
-    text.style.flex = '1'; b.id = 'importHintBtn'; b.prepend(Object.assign(el('span', 'importIco'), { innerHTML: `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS.upload}</svg>` }));
-    b.onclick = () => importDialog(); box.append(text, b);
+    const box = el('div', 'note importHint'), text = el('span', '', t('importHint'));
+    text.style.flex = '1'; box.append(text);
     return box;
   }
   function banner() {
@@ -488,8 +487,6 @@ ${p.form}`,
     const order = Object.entries(t('stages')), at = order.findIndex(([id]) => id === stage);
     $('stages').textContent = '';
     order.forEach(([, label], i) => { const li = el('li', i < at ? 'done' : '', label); if (i === at) li.setAttribute('aria-current', 'step'); $('stages').append(li); });
-    const approved = assets.filter((a) => a.status === 'approved').length;
-    $('counts').textContent = t('counts', assets.length, approved);
     const waiting = assets.filter((a) => a.status === 'review').length;
     $('review').hidden = !waiting || !!openAsset; $('reviewText').textContent = t('reviewCount', waiting);
     autosave();
@@ -521,9 +518,54 @@ ${p.form}`,
     const end = () => { clearTimeout(timer); t.classList.remove('pressing'); removeEventListener('pointerup', end); removeEventListener('pointercancel', end); removeEventListener('pointermove', move); };
     const move = (ev) => { if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > 8) end(); };
     const timer = setTimeout(() => { end(); held = true; openDetail(a); }, HOLD_MS);
-    t.classList.add('pressing');
+    t.style.setProperty('--hold', HOLD_MS + 'ms'); t.classList.add('pressing');
     addEventListener('pointerup', end); addEventListener('pointercancel', end); addEventListener('pointermove', move);
   }
+  // Right-click on a tile: the common actions in one place.
+  const tileCtx = el('div'); tileCtx.id = 'tileMenu'; tileCtx.setAttribute('role', 'menu'); tileCtx.hidden = true; document.body.append(tileCtx);
+  const closeTileMenu = () => { tileCtx.hidden = true; };
+  function tileMenu(a, x, y) {
+    tileCtx.textContent = '';
+    const item = (label, key, fn, off = false) => {
+      const b = el('button'); b.setAttribute('role', 'menuitem'); b.disabled = off;
+      b.append(el('span', 'grow', label)); if (key) b.append(el('kbd', '', key));
+      b.onclick = () => { closeTileMenu(); fn(); }; tileCtx.append(b);
+    };
+    const canApprove = a.status === 'draft' || a.status === 'flagged';
+    item(t('openAsset'), 'Enter', () => openDetail(a), !a.versions.length);
+    item(t('rename'), 'F2', () => renameTile(a));
+    if (a.status === 'approved') item(t('unapprove'), 'A', () => { a.status = 'draft'; renderBoard(); });
+    else item(t('approve'), 'A', () => { approve(a); renderBoard(); }, !canApprove);
+    tileCtx.hidden = false;
+    const q = tileCtx.getBoundingClientRect();
+    tileCtx.style.left = Math.min(x, innerWidth - q.width - 8) + 'px'; tileCtx.style.top = Math.min(y, innerHeight - q.height - 8) + 'px';
+    focused = a.id; tileCtx.querySelector('button:not(:disabled)')?.focus();
+  }
+  addEventListener('pointerdown', (e) => { if (!tileCtx.hidden && !e.target.closest('#tileMenu')) closeTileMenu(); }, true);
+  addEventListener('scroll', closeTileMenu, true);
+  tileCtx.addEventListener('keydown', (e) => {
+    const items = [...tileCtx.querySelectorAll('button:not(:disabled)')], i = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') { e.stopPropagation(); closeTileMenu(); tileOf(byId(focused))?.focus(); }
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus(); }
+  });
+  // Edits the name in place on the tile: Enter or leaving keeps it, Escape puts the old one back.
+  function renameTile(a) {
+    const tile = tileOf(a), label = tile?.querySelector('.name');
+    if (!label) return;
+    const input = el('input', 'renameIn'); input.value = nm(a); input.setAttribute('aria-label', t('rename'));
+    let done = false;
+    const finish = (keep) => {
+      if (done) return; done = true;
+      const value = input.value.trim();
+      if (keep && value && value !== nm(a)) a.name = value;
+      renderBoard(); tileOf(byId(a.id))?.focus();
+    };
+    input.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') finish(true); if (e.key === 'Escape') finish(false); };
+    input.onblur = () => finish(true);
+    ['pointerdown', 'click'].forEach((type) => input.addEventListener(type, (e) => e.stopPropagation()));
+    label.replaceWith(input); input.focus(); input.select();
+  }
+
   function clickTile(a, e) {
     if (held) { held = false; return; }
     if (!a.versions.length) return;
@@ -590,6 +632,7 @@ ${p.form}`,
     else if (e.key.toLowerCase() === 'a' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); ready(visible()).forEach((x) => selected.add(x.id)); refreshSelection(); }
     else if (e.key.toLowerCase() === 'x' && a?.versions.length) toggle(a);
     else if (e.key.toLowerCase() === 'a' && a) setStatus(a, 'approved');
+    else if (e.key === 'F2' && a) { e.preventDefault(); renameTile(a); }
     else if (e.key.toLowerCase() === 'r' && a) setStatus(a, 'flagged');
     else if (e.key === 'Escape') { selected.clear(); refreshSelection(); }
   });
@@ -914,17 +957,26 @@ ${p.form}`,
     area.oninput = check; sample.onclick = () => { area.value = specExample(); check(); };
     row.append(sample); body.append(area, row, out); check();
   }
+  // Spec field -> asset field. Sound already made stays; a changed field shapes the next edit.
+  const SPEC_KEYS = { name: 'name', category: 'cat', length: 'length', loop: 'loop', when: 'when', description: 'description' };
+  const specDiff = (a, x) => Object.keys(SPEC_KEYS).filter((k) => {
+    if (!(k in x)) return false;
+    // Length matches what export writes: the asked length if one was given, else the measured one.
+    const made = a.versions.length ? Math.round(heard(a).measure.seconds * 100) / 100 : null;
+    const now = k === 'name' ? nm(a) : k === 'length' ? a.length ?? made : a[SPEC_KEYS[k]];
+    return k === 'loop' ? !!now !== !!x.loop : (now ?? '') !== (x[k] ?? '');
+  });
   function planSpec(text) {
     let spec;
     try { spec = JSON.parse(text); } catch (e) { return [el('p', 'note err', t('notJson', e.message))]; }
     if (!Array.isArray(spec.assets)) return [el('p', 'note err', t('noAssets'))];
     const cats = CATEGORIES.map((c) => c.id), bad = spec.assets.filter((x) => !/^(sfx|amb|bgm)_[a-z0-9_]+$/.test(x.id || '') || !cats.includes(x.category));
     if (bad.length) return [el('p', 'note err', t('badItems', bad.length, bad.map((x) => x.id || t('noName')).join(', ')))];
-    const ids = new Set(spec.assets.map((x) => x.id)), added = spec.assets.filter((x) => !byId(x.id)), changed = spec.assets.filter((x) => byId(x.id) && nm(byId(x.id)) !== x.name), kept = spec.assets.filter((x) => byId(x.id) && nm(byId(x.id)) === x.name), gone = assets.filter((a) => !ids.has(a.id));
+    const ids = new Set(spec.assets.map((x) => x.id)), added = spec.assets.filter((x) => !byId(x.id)), changed = spec.assets.filter((x) => byId(x.id) && specDiff(byId(x.id), x).length), kept = spec.assets.filter((x) => byId(x.id) && !specDiff(byId(x.id), x).length), gone = assets.filter((a) => !ids.has(a.id));
     const out = [el('h3', '', t('planSummary', added.length, changed.length, kept.length, gone.length))];
     const line = (tag, cls, text) => { const r = el('div', 'lineItem'); r.append(el('span', 'tag ' + cls, tag), el('span', 'grow', text)); return r; };
     added.forEach((x) => out.push(line(t('tagAdd'), 'add', `${x.name} · ${x.id}`)));
-    changed.forEach((x) => out.push(line(t('tagChange'), 'chg', `${nm(byId(x.id))} → ${x.name}`)));
+    changed.forEach((x) => out.push(line(t('tagChange'), 'chg', `${nm(byId(x.id))}: ${specDiff(byId(x.id), x).map((k) => t('specField')[k]).join(', ')}`)));
     gone.slice(0, 6).forEach((a) => out.push(line(t('tagRemove'), 'del', nm(a))));
     if (gone.length > 6) out.push(el('p', '', t('moreRemoved', gone.length - 6)));
     const row = el('div', 'dlgRow'), run = el('button', 'primary', t('startWithSpec')), keep = el('button', '', t('addOnly'));
@@ -934,8 +986,8 @@ ${p.form}`,
       if (spec.game) game = spec.game;
       if (spec.style) brief = spec.style;
       demo = false;
-      added.forEach((x) => { const a = { id: x.id, name: x.name, cat: x.category, music: false, loop: !!x.loop || x.id.startsWith('amb_'), layers: x.id.startsWith('amb_') ? [STUDIO_DATA.bed(x.name, x.length >= 16 ? 16 : 8, 0.1, 0.4, [[1, 0.25, 0], [3, 0.15, 1]])] : [{ kind: 'tone', from: 500, to: 700, len: Math.min(0.6, x.length || 0.3), wave: 'triangle', gain: 0.4, at: 0 }], status: 'draft', versions: [], current: 0, drafts: [], pick: -1, chat: [], progress: 0 }; assets.push(a); make(a, {}, { key: 'fromSpec' }); });
-      changed.forEach((x) => { byId(x.id).name = x.name; });
+      added.forEach((x) => { const a = { id: x.id, name: x.name, cat: x.category, music: false, loop: !!x.loop || x.id.startsWith('amb_'), layers: x.id.startsWith('amb_') ? [STUDIO_DATA.bed(x.name, x.length >= 16 ? 16 : 8, 0.1, 0.4, [[1, 0.25, 0], [3, 0.15, 1]])] : [{ kind: 'tone', from: 500, to: 700, len: Math.min(0.6, x.length || 0.3), wave: 'triangle', gain: 0.4, at: 0 }], status: 'draft', versions: [], current: 0, drafts: [], pick: -1, chat: [], progress: 0, length: x.length, when: x.when || '', description: x.description || '' }; assets.push(a); make(a, {}, { key: 'fromSpec' }); });
+      changed.forEach((x) => { const a = byId(x.id); for (const k of specDiff(a, x)) a[SPEC_KEYS[k]] = k === 'loop' ? !!x.loop : x[k] ?? ''; });
       if (remove) gone.forEach((a) => assets.splice(assets.indexOf(a), 1));
       dlg.close(); renderBoard(); toast(t('specApplied', added.length));
     };
