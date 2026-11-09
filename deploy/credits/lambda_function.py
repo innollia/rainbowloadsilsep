@@ -8,6 +8,9 @@
   POST /api/find       {email, payer_email, amount, date(YYYY-MM-DD)} → {found, added, credits} | 429
                        주인 없는 결제를 결제 이메일·금액·날짜(±1일)로 찾아 이 계정에 넣는다. 하루 FIND_TRIES 번
   POST /api/reviews    {email(아무 값)}      → {items:[...]} 운영자가 볼 보류 결제(환율을 모르는 통화)
+  POST /api/coupon_make {email(아무 값), code, credits, uses} → 200 {code} | 409 이미 있음. 운영자 도구(tools/coupon.py)만 쓴다
+  POST /api/redeem     {email, code}         → 200 {added, credits} | 404 없는 쿠폰 | 409 이미 씀 | 410 다 씀 | 429
+                       쿠폰 하나는 계정당 한 번. 시도는 하루 FIND_TRIES 번(결제 찾기와 따로 셈)
 /api/* 는 Authorization: Bearer APP_TOKEN.
 
 테이블 항목 (pk, sk):
@@ -21,6 +24,9 @@
   REVIEW#open, PAY#..     환율을 모르는 통화. 운영자 확인 대기(CloudWatch 로그에 ALERT 한 줄)
   FIND#<key>, <날짜>       결제 찾기 시도 횟수
   CHG#<key>#<ref>, META   차감: amount, st(charged|refunded)
+  COUPON#<CODE>, META     쿠폰: credits, remain(남은 사용 횟수), uses, at. CODE는 영문 대문자·숫자만
+  COUPON#<CODE>, USE#<key> 그 계정이 쓴 기록
+  REDEEM#<key>, <날짜>     쿠폰 시도 횟수
 이메일은 HMAC(PEPPER, email.lower().strip()) 로만 남긴다. BMC 구매자 이름·이메일·메모 원문은 저장하지 않는다.
 잔액 변경은 모두 계정 ver 조건 + 트랜잭션이라 동시 차감에도 음수가 되지 않는다(환불 이벤트의 회수만 음수 허용).
 """
@@ -600,15 +606,15 @@ def pay_day(at):
         return None
 
 
-def count_find_try(key):
-    """오늘 결제 찾기 시도를 하나 센다. 한도를 넘었으면 False."""
+def count_find_try(key, kind="FIND"):
+    """오늘 결제 찾기(또는 쿠폰) 시도를 하나 센다. 한도를 넘었으면 False."""
     day = date.today().isoformat()
     for _ in range(10):
-        cur = get(f"FIND#{key}", day)
+        cur = get(f"{kind}#{key}", day)
         n = cur["n"] if cur else 0
         if n >= FIND_TRIES:
             return False
-        item = {"pk": f"FIND#{key}", "sk": day, "n": n + 1}
+        item = {"pk": f"{kind}#{key}", "sk": day, "n": n + 1}
         if transact([op_put(item, "n = :n", {":n": n}) if cur else op_put(item, "attribute_not_exists(pk)")]) is None:
             return True
     raise RuntimeError("busy")
@@ -667,6 +673,48 @@ def api_reviews(_b):
     return resp(200, {"items": out})
 
 
+# ---------- 쿠폰 ----------
+def coupon_code(raw):
+    return re.sub(r"[^A-Z0-9]", "", str(raw or "").upper())[:40]
+
+
+def api_coupon_make(b):
+    code = coupon_code(b.get("code"))
+    try:
+        amount, uses = int(b.get("credits")), int(b.get("uses", 1))
+    except (TypeError, ValueError):
+        return resp(400, {"error": "bad credits or uses"})
+    if len(code) < 6 or not 0 < amount <= 1_000_000 or not 0 < uses <= 100_000:
+        return resp(400, {"error": "code needs 6+ letters/digits; credits 1..1000000; uses 1..100000"})
+    item = {"pk": f"COUPON#{code}", "sk": "META", "credits": amount, "remain": uses, "uses": uses, "at": now_iso()}
+    if transact([op_put(item, "attribute_not_exists(pk)")]) is not None:
+        return resp(409, {"error": "exists"})
+    return resp(200, {"code": code})
+
+
+def api_redeem(b):
+    code = coupon_code(b.get("code"))
+    key = acct_key(b["email"])
+    open_account(b["email"])
+    if not count_find_try(key, "REDEEM"):
+        return resp(429, {"error": "too many tries", "credits": balance(key)})
+    for _ in range(10):
+        cpn = get(f"COUPON#{code}") if code else None
+        if not cpn:
+            return resp(404, {"error": "no coupon", "credits": balance(key)})
+        if get(f"COUPON#{code}", f"USE#{key}"):
+            return resp(409, {"error": "used", "credits": balance(key)})
+        if cpn["remain"] <= 0:
+            return resp(410, {"error": "empty", "credits": balance(key)})
+        st, bal = apply(key, cpn["credits"], "coupon", code, extra=[
+            op_put({**cpn, "remain": cpn["remain"] - 1}, "remain = :l", {":l": cpn["remain"]}),  # left는 예약어
+            op_put({"pk": f"COUPON#{code}", "sk": f"USE#{key}", "at": now_iso()}, "attribute_not_exists(pk)")])
+        if st == "ok":
+            return resp(200, {"added": cpn["credits"], "credits": bal})
+        time.sleep(0.02)  # 다른 사람이 같은 순간에 썼다 → 다시 읽는다
+    raise RuntimeError("busy")
+
+
 def lambda_handler(event, context):
     method = event.get("requestContext", {}).get("http", {}).get("method", "")
     path = event.get("rawPath", "")
@@ -679,7 +727,8 @@ def lambda_handler(event, context):
             return resp(405, {"error": "method"})
         routes = {"/api/account": lambda b: resp(200, open_account(b["email"])),
                   "/api/charge": api_charge, "/api/refund": api_refund, "/api/history": api_history,
-                  "/api/find": api_find, "/api/reviews": api_reviews}
+                  "/api/find": api_find, "/api/reviews": api_reviews,
+                  "/api/coupon_make": api_coupon_make, "/api/redeem": api_redeem}
         fn = routes.get(path)
         if not fn:
             return resp(404, {"error": "not found"})

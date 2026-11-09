@@ -417,7 +417,7 @@
     if (first) guardStorage();
   }
 
-  let classifySeen;
+  let classifySeen, agentSeen, aiSent;
   function onRender(args) {
     fit();
     if (args.lang === pendingLang) pendingLang = '';
@@ -426,8 +426,11 @@
     aiEnabled = !!args.ai_enabled; engineName = args.engine || '';
     fillChoices(args.choices);
     account = args.account || null; showCredits();
-    if (args.server_error && args.server_error !== lastServerError) { say('error', args.server_error); if (findWaiting != null) findAnswer(args.server_error); }
+    if (args.server_error && args.server_error !== lastServerError) { say('error', args.server_error); if (findWaiting != null) findAnswer(args.server_error); if (couponWaiting != null) couponAnswer(args.server_error); }
     lastServerError = args.server_error || '';
+    if (aiEnabled !== aiSent && frame.getAttribute('src')) { aiSent = aiEnabled; frame.contentWindow?.postMessage({ type: 'asset:ai', on: aiEnabled }, '*'); }
+    const ag = args.asset_agent, agKey = ag && `${ag.n}:${ag.status}`;
+    if (ag && agKey !== agentSeen) { agentSeen = agKey; frame.contentWindow?.postMessage({ type: 'asset:agent_reply', ...ag }, '*'); }
     if (args.classify && args.classify.n !== classifySeen) { classifySeen = args.classify.n; frame.contentWindow?.postMessage({ type: 'asset:classified', ...args.classify }, '*'); }
     const j = args.job;
     job = j;
@@ -456,7 +459,7 @@
     $('creditBtn').classList.toggle('low', account.credits < worstCost());
     $('costHint').textContent = t('cost_hint', { n: worstCost() }) + (account.daily_left != null ? ' · ' + t('daily_left_short', { n: account.daily_left }) : '');
     if (account.free && !welcomed) { welcomed = true; say('status', t('welcome', { n: account.credits })); }
-    if (dlg.open && dlg.dataset.kind === 'credits') { creditBody(); findAnswer(); }
+    if (dlg.open && dlg.dataset.kind === 'credits') { creditBody(); findAnswer(); couponAnswer(); }
   }
   // Rebuilt only when the account changes, so the find form keeps what is typed and where the cursor is.
   function creditBody() {
@@ -468,13 +471,44 @@
     for (const o of $('modelPick').options) table.append(el('span', { textContent: o.textContent }), el('b', { textContent: `${modelCost(o.value)}` }));
     table.append(el('span', { textContent: t('deep') }), el('b', { textContent: `+${account.prices.efforts.high}` }));
     const out = el('button', { className: 'ghost', textContent: t('logout'), onclick: () => { dlg.close(); send('logout', {}); } });
-    const find = box.querySelector('.findPayBox') || findForm();
+    const find = box.querySelector('.findPayBox') || findForm(), coupon = box.querySelector('.couponBox') || couponForm();
     box.replaceChildren(
       el('p', { className: 'creditBig', textContent: t('credit_big', { n: account.credits }) }),
       el('p', { className: 'note', textContent: t('credit_how') + (account.daily_left != null ? ' ' + t('daily_left', { n: account.daily_left }) : '') }),
-      table, creditBuy(), find, creditHistory(),
+      table, creditBuy(), coupon, find, creditHistory(),
       el('div', { className: 'row logoutRow' }, out));
-    findAnswer();
+    findAnswer(); couponAnswer();
+  }
+  // A coupon code turns into credits once per account; the answer comes back as account.coupon with a new n.
+  let couponWaiting = null, couponText = '';
+  function couponForm() {
+    const code = el('input', { type: 'text', name: 'coupon', placeholder: t('coupon_code'), autocomplete: 'off' });
+    code.setAttribute('aria-label', t('coupon_code'));
+    const go = el('button', { type: 'submit', className: 'ghost', textContent: t('coupon_go') });
+    const ready = () => { go.disabled = couponWaiting != null || code.value.replace(/[^a-z0-9]/gi, '').length < 6; };
+    code.oninput = ready; ready();
+    const form = el('form', { className: 'findPay couponForm' }, el('div', { className: 'findRow' }, code, go), el('p', { className: 'findAnswer', role: 'status' }));
+    form.onsubmit = (e) => {
+      e.preventDefault(); if (go.disabled) return;
+      couponWaiting = account.coupon?.n ?? 0; couponText = t('find_looking'); ready(); couponAnswer();
+      send('coupon', { code: code.value.trim() });
+    };
+    form.ready = ready;
+    return el('details', { className: 'findPayBox couponBox' }, el('summary', { textContent: t('coupon_title') }), form);
+  }
+  function couponAnswer(error) {
+    if (couponWaiting != null) {
+      const c = account?.coupon;
+      if (error) { couponText = error; couponWaiting = null; }
+      else if (c && c.n !== couponWaiting) {
+        couponText = c.status === 'ok' ? t('coupon_ok', { added: c.added }) : c.status === 'too_many' ? t('find_too_many') : t('coupon_' + c.status);
+        couponWaiting = null;
+      }
+    }
+    const form = dlg.querySelector('.couponForm');
+    if (!form) return;
+    form.querySelector('.findAnswer').textContent = couponText;
+    form.ready();
   }
   // A payment made without the code waits on the server until its payer claims it by email, amount and date.
   let findWaiting = null, findText = '';
@@ -532,7 +566,7 @@
     return list;
   }
   function creditDialog() {
-    openDialog(t('credits_title')); dlg.dataset.kind = 'credits'; findText = '';
+    openDialog(t('credits_title')); dlg.dataset.kind = 'credits'; findText = ''; couponText = '';
     dlg.append(el('div', { className: 'creditBody' }));
     creditBody(); dlg.showModal();
     send('account', {});
@@ -1159,6 +1193,9 @@
     if (e.data?.type === 'asset:back') showAssets(false);
     // Imported files sorted by Jev on the server; the answer comes back through the render args (args.classify).
     if (e.data?.type === 'asset:classify' && e.source === frame.contentWindow) send('classify', e.data.payload);
+    // The asset board's assistant runs on the music screen's model choice; its answer comes back as args.asset_agent.
+    if (e.data?.type === 'asset:ready' && e.source === frame.contentWindow) frame.contentWindow.postMessage({ type: 'asset:ai', on: aiEnabled }, '*');
+    if (e.data?.type === 'asset:agent' && e.source === frame.contentWindow) send('asset_agent', { ...e.data.payload, model: $('modelPick').value, effort: $('effortPick').value });
     // The asset studio's own language picker: switch here too and tell Streamlit, as the header picker does.
     if (e.data?.type === 'asset:setlang' && i18n.pick(e.data.lang) && e.data.lang !== i18n.lang) { pendingLang = e.data.lang; setLang(e.data.lang); send('lang', { lang: e.data.lang }); }
   });

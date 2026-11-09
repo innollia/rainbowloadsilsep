@@ -11,7 +11,8 @@ import urllib.parse
 import streamlit as st
 import streamlit.components.v1 as components
 
-from studio_backend import AgyCli, Jobs, Router, in_app_browser, validate_request
+from studio_backend import AgyCli, Jobs, Router, in_app_browser, job_store, validate_request
+from asset_agent import Agents
 from asset_classify import classify as classify_files
 from skill_router import ask_jev, read_key
 from credits import FREE_CREDITS, LedgerError, LocalLedger, RemoteLedger, price_table
@@ -85,7 +86,13 @@ def jobs():
     return Jobs(choose_model(), daily_limit=limit_setting("STRUDEL_DAILY_CALLS", "200"), ledger=ledger(),
                 account_limit=limit_setting("STRUDEL_ACCOUNT_DAILY_CALLS", "60"),
                 teacher_limit=limit_setting("STRUDEL_TEACHER_DAILY_CALLS", "200"),
-                session_limit=limit_setting("STRUDEL_TEACHER_SESSION_CALLS", "60"))
+                session_limit=limit_setting("STRUDEL_TEACHER_SESSION_CALLS", "60"),
+                store=job_store(setting("OLMUSE_JOBS_DB")))
+
+
+@st.cache_resource
+def agents():
+    return Agents(jobs().store, ledger())
 
 
 @st.cache_resource
@@ -255,6 +262,7 @@ def account_view(refresh=False, history=False):
     view["history"] = st.session_state.get("studio_history")
     view["daily_left"] = jobs().calls_left(email)
     view["find"] = st.session_state.get("studio_find")
+    view["coupon"] = st.session_state.get("studio_coupon")
     return view
 
 
@@ -313,6 +321,16 @@ def handle(action, payload, manager, choices):
         # n tells the page this is a new answer, even when it reads the same as the last one
         st.session_state.studio_find = {**found, "n": (st.session_state.get("studio_find") or {}).get("n", 0) + 1}
         account_view(refresh=True, history=True)
+    elif action == "coupon":
+        # {code} → account.coupon = {status: ok|none|used|empty|too_many, added, credits, n}
+        if not email:
+            return
+        try:
+            got = ledger().redeem(email, str((payload or {}).get("code") or "")[:60])
+        except LedgerError as exc:
+            raise ValueError(str(exc)) from None
+        st.session_state.studio_coupon = {**got, "n": (st.session_state.get("studio_coupon") or {}).get("n", 0) + 1}
+        account_view(refresh=True, history=True)
     elif action == "logout":
         manager.cancel(owner)
         st.session_state.pop("studio_account", None)
@@ -334,6 +352,20 @@ def handle(action, payload, manager, choices):
             except (RuntimeError, OSError, ValueError):
                 pass
         st.session_state.studio_classify = answer
+    elif action == "asset_agent":
+        # The asset board's resident agent: one model call in the background, the answer comes back as args.asset_agent.
+        p = payload if isinstance(payload, dict) else {}
+        if not ai_ready:
+            agents().fail(owner, p.get("n"), T["no_ai"])
+            return
+        if len(json.dumps(p.get("state") or {}, ensure_ascii=False)) > 400000:
+            raise ValueError("board too large")
+        known = {m["id"] for m in (choices or {}).get("models", [])}
+        req = {"n": p.get("n"), "text": str(p.get("text") or "")[:4000],
+               "state": p.get("state") if isinstance(p.get("state"), dict) else {}, "lang": lang,
+               "model": p.get("model") if p.get("model") in known else (choices or {}).get("model", ""),
+               "effort": str(p.get("effort") or (choices or {}).get("effort", ""))[:20], "account": email or ""}
+        agents().start(owner, req, manager.model, manager, ledger() if email else None)
     elif action == "lang":
         chosen = (payload or {}).get("lang")
         if chosen in TEXT and chosen != lang:
@@ -351,8 +383,11 @@ def render():
     snap = manager.snapshot(owner)
     if snap and "credits" in snap and "studio_account" in st.session_state:
         st.session_state.studio_account["credits"] = snap["credits"]
+    agent_view = agents().view(owner)
+    if agent_view and "credits" in agent_view and "studio_account" in st.session_state:
+        st.session_state.studio_account["credits"] = agent_view["credits"]
     result = studio(lang=lang, ai_enabled=ai_ready, engine=manager.model.name if manager.model else "", choices=choices, job=snap,
-                    account=account_view(), signed_in=bool(email), classify=st.session_state.get("studio_classify"),
+                    account=account_view(), signed_in=bool(email), classify=st.session_state.get("studio_classify"), asset_agent=agents().view(owner),
                     server_error=st.session_state.get("studio_error", ""), key="studio", default=None)
     if not isinstance(result, dict):
         return

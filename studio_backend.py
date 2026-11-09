@@ -14,6 +14,7 @@ import math
 import os
 import queue
 import re
+import sqlite3
 import subprocess
 import tempfile
 import threading
@@ -111,6 +112,8 @@ MSG = {
         "no_browser": "The browser stopped responding, so I stopped. Check if the tab was closed.",
         "model_failed": "{error} Kept the previous version.",
         "internal": "Something broke on our side. Kept the previous version.",
+        "restarted": "The server restarted while this was running, so it stopped.",
+        "restarted_refund": "The server restarted while this was running, so it stopped. {n} credits were refunded.",
         "reverted": "Round {n} was the best, so I went back to it.",
         "edit_limit": "Hit the code-edit call limit ({n}), so I stopped.",
         "talk_fallback": "Could you say that again?",
@@ -196,6 +199,8 @@ MSG = {
         "no_browser": "브라우저 응답이 없어 멈췄어. 탭이 닫혔는지 확인해 줘.",
         "model_failed": "{error} 이전 버전을 유지해.",
         "internal": "작업 중 내부 오류가 났어. 이전 버전을 유지해.",
+        "restarted": "작업 중에 서버가 다시 시작돼서 멈췄어.",
+        "restarted_refund": "작업 중에 서버가 다시 시작돼서 멈췄어. {n}크레딧은 돌려줬어.",
         "reverted": "{n}회차가 가장 나아서 그 버전으로 되돌렸어.",
         "edit_limit": "코드 수정 호출 한도({n}회)에 닿아 멈췄어.",
         "talk_fallback": "무슨 말인지 다시 알려 줘.",
@@ -386,10 +391,11 @@ class Gemini:
     name = "Gemini"
     hears = True
 
-    def __init__(self, key: str, model: str = "", base_url: str = "", effort: str = ""):
+    def __init__(self, key: str, model: str = "", base_url: str = "", effort: str = "", system: str | None = None):
         self.key = key
         self.model = model or DEFAULT_MODEL
         self.effort = effort
+        self.system = SYSTEM if system is None else system
         self.base_url = (base_url or "https://generativelanguage.googleapis.com").rstrip("/")
         self.last_usage: dict = {}  # read by the bakeoff tool, never by the product
 
@@ -398,7 +404,7 @@ class Gemini:
         if self.effort:
             config["thinkingConfig"] = {"thinkingLevel": self.effort}
         body = json.dumps({
-            "systemInstruction": {"parts": [{"text": SYSTEM}]},
+            "systemInstruction": {"parts": [{"text": self.system}]},
             "contents": [{"role": "user", "parts": parts}],
             "generationConfig": config,
         }).encode()
@@ -471,11 +477,12 @@ class Claude:
     name = "Claude"
     hears = False
 
-    def __init__(self, key: str, model: str = "", client=None, effort: str = ""):
+    def __init__(self, key: str, model: str = "", client=None, effort: str = "", system: str | None = None):
         self.key = key
         self.model = model or DEFAULT_CLAUDE_MODEL
         self.client = client
         self.effort = effort
+        self.system = SYSTEM if system is None else system
         self.last_usage: dict = {}
 
     def _sdk(self):
@@ -496,7 +503,7 @@ class Claude:
             response = self._sdk().messages.create(
                 model=self.model, max_tokens=16000, thinking={"type": "adaptive"},
                 # The long system prompt is the same on every call, so later calls read it from cache.
-                system=[{"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}}],
+                system=[{"type": "text", "text": self.system, "cache_control": {"type": "ephemeral"}}],
                 output_config=output,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -651,16 +658,16 @@ class Router:
         return {"models": models, "efforts": efforts,
                 "model": named if named in known else (models[0]["id"] if models else ""), "effort": DEFAULT_EFFORT}
 
-    def engine(self, model: str = "", effort: str = ""):
+    def engine(self, model: str = "", effort: str = "", system: str | None = None):
         choice = next((m for m in model_choices() if m["id"] == model and self.keys[m["provider"]]), None)
         provider = choice["provider"] if choice else self.first
         name = choice["id"] if choice else self.named[provider]
         effort = effort or DEFAULT_EFFORT
         if provider == "gemini":
-            return Gemini(self.keys["gemini"], name, self.gemini_url, effort)
+            return Gemini(self.keys["gemini"], name, self.gemini_url, effort, system)
         if provider == "openrouter":
-            return OpenRouter(self.keys["openrouter"], name, effort)
-        return Claude(self.keys["claude"], name, self.clients.get("claude"), effort)
+            return OpenRouter(self.keys["openrouter"], name, effort, system=system)
+        return Claude(self.keys["claude"], name, self.clients.get("claude"), effort, system)
 
 
 class AgyCli:
@@ -955,6 +962,81 @@ def listen_prompt(goal: str, report: dict, previous: str, lang: str) -> str:
             + "\n" + msg(lang, "reply_lang"))
 
 
+class JobStore:
+    """Job views, paid calls still in flight and daily call counts on disk, so a restart keeps finished results,
+    fails jobs that were running and refunds their unfinished calls once (the ledger refund is idempotent by ref)."""
+
+    def __init__(self, path: str = ":memory:"):
+        self.lock = threading.Lock()
+        self.db = sqlite3.connect(path, check_same_thread=False)
+        with self.lock, self.db:
+            self.db.execute("pragma journal_mode=wal")
+            self.db.executescript(
+                "create table if not exists views (kind text, owner text, view text, lang text, primary key (kind, owner));"
+                "create table if not exists charges (ref text primary key, kind text, owner text, email text, cost integer);"
+                "create table if not exists counts (day text, name text, n integer, primary key (day, name));")
+
+    def save(self, kind: str, owner: str, view: dict, lang: str = DEFAULT_LANG):
+        with self.lock, self.db:
+            self.db.execute("insert or replace into views values (?,?,?,?)", (kind, owner, json.dumps(view), lang))
+
+    def charged(self, kind: str, owner: str, email: str, cost: int, ref: str):
+        with self.lock, self.db:
+            self.db.execute("insert or replace into charges values (?,?,?,?,?)", (ref, kind, owner, email, cost))
+
+    def settled(self, ref: str):
+        with self.lock, self.db:
+            self.db.execute("delete from charges where ref=?", (ref,))
+
+    def recover(self, kind: str, ledger, running: str, fail) -> dict:
+        """Refund every call that was paid but never returned, then hand each view still `running` to
+        fail(view, lang, refunded) and save it. Returns {owner: view}."""
+        with self.lock:
+            charges = self.db.execute("select ref, owner, email, cost from charges where kind=?", (kind,)).fetchall()
+            rows = self.db.execute("select owner, view, lang from views where kind=?", (kind,)).fetchall()
+        refunded: dict[str, int] = {}
+        for ref, owner, email, cost in charges:
+            if ledger is None:
+                continue  # kept until a start with a ledger can refund it
+            try:
+                ledger.refund(email, cost, ref)
+            except LedgerError:
+                continue  # tried again on the next start
+            refunded[owner] = refunded.get(owner, 0) + cost
+            self.settled(ref)
+        out = {}
+        for owner, view, lang in rows:
+            view = json.loads(view)
+            if view.get("status") == running:
+                fail(view, lang, refunded.get(owner, 0))
+                self.save(kind, owner, view, lang)
+            out[owner] = view
+        return out
+
+    def counts(self, day: str) -> dict:
+        with self.lock, self.db:
+            self.db.execute("delete from counts where day<>?", (day,))
+            return dict(self.db.execute("select name, n from counts where day=?", (day,)).fetchall())
+
+    def count(self, day: str, names):
+        with self.lock, self.db:
+            for name in names:
+                self.db.execute("insert into counts values (?,?,1) on conflict (day, name) do update set n=n+1", (day, name))
+
+
+def job_store(path: str = "") -> JobStore:
+    """OLMUSE_JOBS_DB picks the file; the default sits next to the local credits file in .studio-data."""
+    path = path or os.environ.get("OLMUSE_JOBS_DB") or os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), ".studio-data", "jobs.sqlite3")
+    if path != ":memory:":
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    return JobStore(path)
+
+
+def restart_message(lang: str, refunded: int) -> str:
+    return msg(lang, "restarted_refund", n=refunded) if refunded else msg(lang, "restarted")
+
+
 class Job:
     def __init__(self, request: dict, owner: str = ""):
         self.id = uuid.uuid4().hex
@@ -971,6 +1053,7 @@ class Job:
         self.polled = 0.0          # last time any session read this job
         self.offered = 0.0         # when the newest candidate was put up for a browser
         self.last_charge = None    # (email, cost, ref) of the newest paid call
+        self.store: JobStore | None = None
 
     @property
     def running(self) -> bool:
@@ -981,6 +1064,11 @@ class Job:
             self.view.update(fields)
             if "candidate" in fields and fields["candidate"]:
                 self.offered = time.monotonic()
+            self._save()
+
+    def _save(self):
+        if self.store:
+            self.store.save("studio", self.owner, self.view, self.lang)
 
     def text(self, key: str, **fields) -> str:
         return msg(self.lang, key, **fields)
@@ -991,6 +1079,7 @@ class Job:
             if detail:
                 message["detail"] = detail
             self.view["messages"].append(message)
+            self._save()
 
     def end(self, status: str, kind: str = "", text: str = ""):
         self.update(status=status, stage="done")
@@ -1029,7 +1118,8 @@ class Jobs:
     in all and session_limit per session. None means no limit."""
 
     def __init__(self, model=None, daily_limit: int | None = 200, feedback_timeout: int = FEEDBACK_TIMEOUT, ledger=None,
-                 account_limit: int | None = None, teacher_limit: int | None = None, session_limit: int | None = None):
+                 account_limit: int | None = None, teacher_limit: int | None = None, session_limit: int | None = None,
+                 store: JobStore | None = None):
         self.model = model
         self.ledger = ledger
         self.daily_limit = daily_limit
@@ -1038,6 +1128,16 @@ class Jobs:
         self.jobs: dict[str, Job] = {}
         self.lock = threading.Lock()
         self.day, self.counts = "", {}
+        self.store = store
+        self.restored: dict[str, dict] = {}  # views from before a restart, shown until the owner starts a new job
+        if store:
+            self.restored = store.recover("studio", ledger, "running", self._restart_failed)
+
+    @staticmethod
+    def _restart_failed(view: dict, lang: str, refunded: int):
+        view.update(status="failed", stage="done")
+        view.setdefault("messages", []).append(
+            {"n": len(view["messages"]), "kind": "error", "text": restart_message(lang, refunded)})
 
     def submit(self, owner: str, request: dict) -> str:
         lang = lang_of(request.get("lang"))
@@ -1048,7 +1148,10 @@ class Jobs:
             if current and current.running:
                 raise ValueError(msg(lang, "busy"))
             job = Job(request, owner)
+            job.store = self.store
             self.jobs[owner] = job
+            self.restored.pop(owner, None)
+            job._save()
         threading.Thread(target=self._run, args=(job,), daemon=True).start()
         return job.id
 
@@ -1068,7 +1171,10 @@ class Jobs:
 
     def snapshot(self, owner: str):
         job = self.jobs.get(owner)
-        return job.snapshot() if job else None
+        if job:
+            return job.snapshot()
+        view = self.restored.get(owner)
+        return json.loads(json.dumps(view)) if view else None
 
     def _buckets(self, account: str, owner: str) -> list[tuple[str, int | None, str]]:
         """(counter, limit, message key) that one call by this requester counts against."""
@@ -1079,7 +1185,13 @@ class Jobs:
     def _today(self):
         today = datetime.date.today().isoformat()
         if today != self.day:
-            self.day, self.counts = today, {}
+            self.day, self.counts = today, self.store.counts(today) if self.store else {}
+
+    def _bump(self, names: list):
+        for name in names:
+            self.counts[name] = self.counts.get(name, 0) + 1
+        if self.store:
+            self.store.count(self.day, names)
 
     def calls_left(self, account: str = "", owner: str = "") -> int | None:
         """Calls this requester may still make today, or None when nothing limits them."""
@@ -1087,6 +1199,16 @@ class Jobs:
             self._today()
             left = [limit - self.counts.get(name, 0) for name, limit, _ in self._buckets(account, owner) if limit is not None]
         return max(0, min(left)) if left else None
+
+    def count_call(self, account: str, owner: str, lang: str = DEFAULT_LANG):
+        """One model call outside a job (the asset board's agent) counts against the same daily limits."""
+        with self.lock:
+            self._today()
+            buckets = self._buckets(account, owner)
+            for name, limit, key in buckets:
+                if limit is not None and self.counts.get(name, 0) >= limit:
+                    raise ValueError(msg(lang, key, n=limit))
+            self._bump([name for name, _, _ in buckets])
 
     def _spend(self, job: Job):
         if job.cancelled.is_set():
@@ -1100,8 +1222,7 @@ class Jobs:
             for name, limit, key in buckets:
                 if limit is not None and self.counts.get(name, 0) >= limit:
                     raise Stop("limit", job.text(key, n=limit))
-            for name, _, _ in buckets:
-                self.counts[name] = self.counts.get(name, 0) + 1
+            self._bump([name for name, _, _ in buckets])
 
     def _ask(self, job: Job, call, *args):
         """One model call. A signed-in user pays before it runs and gets it back if the model fails."""
@@ -1116,12 +1237,17 @@ class Jobs:
             job.update(credits=credits, calls=job.view.get("calls", 0) + 1)
             if not ok:
                 raise Stop("limit", job.text("no_credits"))
+            if self.store:
+                self.store.charged("studio", job.owner, email, cost, ref)
         try:
             reply = call(*args)
         except ModelError:
             if ref:
                 self._refund(job, email, cost, ref)
             raise
+        finally:
+            if ref and self.store:
+                self.store.settled(ref)
         if ref:
             job.last_charge = (email, cost, ref, time.monotonic())
         return reply

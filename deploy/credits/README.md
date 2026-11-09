@@ -4,7 +4,7 @@ Buy Me a Coffee 결제를 olmuse 크레딧으로 바꾸고, 앱이 크레딧을 
 AWS Lambda(Function URL, 인증 없음) + DynamoDB 테이블 1개, 리전 `ap-northeast-2`. 함수와 테이블 이름은 둘 다 `strudel-credits`이다.
 
 - 웹훅 URL: `https://6wasuz6jowaayhoedd4h3vmthe0alpoq.lambda-url.ap-northeast-2.on.aws/webhooks/bmc`
-- 앱 API: 같은 주소의 `/api/account`, `/api/charge`, `/api/refund`, `/api/history`, `/api/find`(결제 찾기), `/api/reviews`(운영자용 보류 목록)(POST, `Authorization: Bearer <APP_TOKEN>`). 요청과 응답 형식은 `lambda_function.py` 맨 위에 적어 두었다.
+- 앱 API: 같은 주소의 `/api/account`, `/api/charge`, `/api/refund`, `/api/history`, `/api/find`(결제 찾기), `/api/reviews`(운영자용 보류 목록), `/api/coupon_make`(운영자용 쿠폰 만들기), `/api/redeem`(쿠폰 쓰기)(POST, `Authorization: Bearer <APP_TOKEN>`). 요청과 응답 형식은 `lambda_function.py` 맨 위에 적어 두었다.
 
 ## 구조
 - `lambda_function.py`: 표준 라이브러리와 boto3만 쓴다. 테이블 항목 종류는 파일 머리말에 정리했다.
@@ -38,6 +38,12 @@ BMC 대시보드에 웹훅을 따로 등록하지 않는다(관제 결정, 2026-
 - 시크릿은 블로그와 같은 `BMC_WEBHOOK_SECRET`이어야 한다. `STRUDEL_BMC_WEBHOOK_SECRET`을 따로 넣지 않는다.
 - 블로그 후원자 명단에서 `SD-` 건을 빼는 일은 블로그 쪽 담당이다.
 - 2026-11-07 끝까지 시험: 서명한 시험 후원(1 USD, 코드 포함)을 블로그 입구로 보내 이 장부에 +20이 들어오고, 블로그 대기열의 시험 건은 ack로 지웠다.
+
+## 쿠폰
+- 만들기: `python tools/coupon.py OLMUSE-START-1 10000` (계정 하나가 한 번), `--uses 50`이면 서로 다른 50개 계정이 한 번씩. 코드는 영문·숫자만 남기고 대문자로 바꾼다(6자 이상).
+- 쓰기: 사용자가 크레딧 창의 "쿠폰이 있어?"에 코드를 넣는다. 계정당 한 번, 하루 10번 시도. 기록에는 `coupon`으로 남는다.
+- DynamoDB 예약어 때문에 남은 횟수 속성 이름은 `remain`이다(`left` 아님).
+- 배포 확인(2026-11-09): 시험 계정에 쿠폰 `SELFTESTCOUPON1`(1크레딧)을 써서 적용·중복 거절·없는 코드 거절을 확인했다.
 
 ## 가격 바꾸기
 `deploy.ps1 -CreditsPerUsd 25 -FreeCredits 30`처럼 다시 돌린다. 기본값은 둘 다 20이다. 인자 없이 다시 돌리면 20으로 돌아간다.

@@ -6,6 +6,7 @@ A call is charged before it runs and refunded if the model fails, so a failure n
 import hashlib
 import hmac
 import json
+import re
 import sqlite3
 import threading
 import time
@@ -26,6 +27,13 @@ class LedgerError(Exception):
 
 def call_cost(model: str, effort: str) -> int:
     return MODEL_COST.get(model, 2) + EFFORT_EXTRA.get(effort, 0)
+
+
+COUPON_STATUS = {200: "ok", 404: "none", 409: "used", 410: "empty", 429: "too_many"}
+
+
+def coupon_code(raw) -> str:
+    return re.sub(r"[^A-Z0-9]", "", str(raw or "").upper())[:40]
 
 
 def price_table() -> dict:
@@ -73,6 +81,19 @@ class RemoteLedger:
                 "credits": int(body.get("credits", 0)), "too_many": status == 429}
 
 
+    def make_coupon(self, code: str, credits: int, uses: int = 1) -> str:
+        status, body = self._post("/api/coupon_make", {"email": "operator@olmuse.app", "code": code, "credits": credits, "uses": uses},
+                                  ok=(200, 400, 409))
+        if status != 200:
+            raise ValueError(body.get("error", "coupon not made"))
+        return body["code"]
+
+    def redeem(self, email: str, code: str) -> dict:
+        """{status: ok|none|used|empty|too_many, added, credits}"""
+        status, body = self._post("/api/redeem", {"email": email, "code": code}, ok=(200, 404, 409, 410, 429))
+        return {"status": COUPON_STATUS[status], "added": int(body.get("added", 0)), "credits": int(body.get("credits", 0))}
+
+
 class LocalLedger:
     """Same contract as the Lambda. Purchases cannot reach it; `grant` stands in for them in tests."""
 
@@ -86,7 +107,10 @@ class LocalLedger:
             create table if not exists refs (ref text primary key, key text, amount integer, refunded integer default 0);
             create table if not exists history (key text, kind text, amount integer, credits integer, at text, note text);
             create table if not exists orphans (payer text, amount text, day text, credits integer, taken integer default 0);
+            create table if not exists coupons (code text primary key, credits integer, left integer);
+            create table if not exists coupon_uses (code text, key text, primary key (code, key));
         """)
+        self.redeem_tries: dict[tuple, int] = {}
         self.find_tries: dict[tuple, int] = {}
 
     def _key(self, email: str) -> str:
@@ -178,6 +202,37 @@ class LocalLedger:
                 self._log(key, "buy", credits, self._add(key, credits), "결제 찾기")
                 found, added = found + 1, added + credits
             return {"found": found, "added": added, "credits": self._credits(key), "too_many": False}
+
+    def make_coupon(self, code: str, credits: int, uses: int = 1) -> str:
+        code = coupon_code(code)
+        if len(code) < 6 or not 0 < credits <= 1_000_000 or not 0 < uses <= 100_000:
+            raise ValueError("code needs 6+ letters/digits; credits 1..1000000; uses 1..100000")
+        with self.lock, self.db:
+            if self.db.execute("select 1 from coupons where code=?", (code,)).fetchone():
+                raise ValueError("exists")
+            self.db.execute("insert into coupons values (?,?,?)", (code, credits, uses))
+        return code
+
+    def redeem(self, email: str, code: str) -> dict:
+        import datetime
+        key, code = self._opened(email), coupon_code(code)
+        today = (key, datetime.date.today().isoformat())
+        out = lambda status, added=0: {"status": status, "added": added, "credits": self._credits(key)}
+        with self.lock, self.db:
+            if self.redeem_tries.get(today, 0) >= 10:
+                return out("too_many")
+            self.redeem_tries[today] = self.redeem_tries.get(today, 0) + 1
+            row = self.db.execute("select credits, left from coupons where code=?", (code,)).fetchone()
+            if not row:
+                return out("none")
+            if self.db.execute("select 1 from coupon_uses where code=? and key=?", (code, key)).fetchone():
+                return out("used")
+            if row[1] <= 0:
+                return out("empty")
+            self.db.execute("update coupons set left=left-1 where code=?", (code,))
+            self.db.execute("insert into coupon_uses values (?,?)", (code, key))
+            self._log(key, "coupon", row[0], self._add(key, row[0]), code)
+            return out("ok", row[0])
 
     def history(self, email: str) -> list:
         key = self._key(email)

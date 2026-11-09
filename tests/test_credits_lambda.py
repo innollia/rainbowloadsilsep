@@ -363,3 +363,22 @@ def test_replayed_forward_from_blog_credits_once_and_still_says_credit(lf):
         again = hook(lf, {**p, "attempt": attempt})[1]
         assert again.get("duplicate") is True and again["credit"] is True
     assert credits(lf, "retry@example.com") == 20 + 40
+
+
+def test_coupon_once_per_account_and_runs_out(lf):
+    assert api(lf, "/api/coupon_make", {"email": "op@x.io", "code": "olmuse-start-1", "credits": 10000, "uses": 2})[0] == 200
+    assert api(lf, "/api/coupon_make", {"email": "op@x.io", "code": "OLMUSESTART1", "credits": 5, "uses": 1})[0] == 409
+    before = credits(lf, "a@x.io")
+    st, body = api(lf, "/api/redeem", {"email": "a@x.io", "code": "olmuse start 1"})
+    assert st == 200 and body == {"added": 10000, "credits": before + 10000}
+    assert api(lf, "/api/redeem", {"email": "a@x.io", "code": "OLMUSESTART1"})[0] == 409
+    assert api(lf, "/api/redeem", {"email": "b@x.io", "code": "OLMUSESTART1"})[0] == 200
+    assert api(lf, "/api/redeem", {"email": "c@x.io", "code": "OLMUSESTART1"})[0] == 410
+    assert api(lf, "/api/redeem", {"email": "c@x.io", "code": "NOPE00"})[0] == 404
+    assert api(lf, "/api/history", {"email": "a@x.io"})[1]["items"][0]["kind"] == "coupon"
+
+
+def test_coupon_tries_are_limited(lf):
+    for _ in range(10):
+        assert api(lf, "/api/redeem", {"email": "d@x.io", "code": "WRONG0"})[0] == 404
+    assert api(lf, "/api/redeem", {"email": "d@x.io", "code": "WRONG0"})[0] == 429
