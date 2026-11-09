@@ -62,6 +62,7 @@
     flag: '<path d="M6 21V4h12l-3 4 3 4H6"/>',
     upload: '<path d="M12 15V4M7 8l5-5 5 5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/>',
     menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+    folderPlus: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v6M9 14h6"/>',
     gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/>',
   };
   const setIcon = (el, name) => { el.innerHTML = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`; };
@@ -75,12 +76,14 @@
   const TEXT = {
     en: {
       docTitle: 'Game sound assets',
+      deleteItem: 'Delete', trashed: (n) => `Moved ${n} to the trash`, trashHead: 'Trash', trashEmpty: 'The trash is empty.', restore: 'Put back', restoreAll: 'Put all back', deleteForever: 'Delete for good', emptyTrash: 'Empty trash',
+      tagTrash: 'To trash', specAppliedTrash: (n, g) => `Spec applied: ${n} added, ${g} not in the spec moved to the trash`,
       addSound: 'Add', newSound: 'New sound', addCat: 'Add group', newCat: 'New group', catSettings: 'Group settings', kindLabel: 'Kind',
       kinds: { sfx: 'Effect', amb: 'Ambience', music: 'Music' }, catIdHelp: 'Lowercase English. Sounds in the group follow it.', deleteCat: 'Delete group',
-      catNotEmpty: 'Move or delete the sounds in it first.', moveTo: 'Move to', deleteSound: 'Delete', deleteMany: (n) => `Delete ${n} sounds`, confirmDelete: (n) => `Delete ${n}? This cannot be undone.`,
+      catNotEmpty: 'Move or delete the sounds in it first.', moveTo: 'Move to', deleteSound: 'Move to trash', deleteMany: (n) => `Move ${n} to trash`, confirmDelete: (n) => `Delete ${n}? This cannot be undone.`,
       idRule: 'ID rule', idHelp: 'Pattern can use {kind} (prefix of the kind), {cat} (group id) and {name} (the name in English words).', idPattern: 'Pattern', idSep: 'Separator', idPrefix: 'Prefix',
       idCheck: 'Flag ids that break the rule', idExample: (s, n) => `Example: ${s} · ${n} ids break it now`, idRenameAll: 'Rename every id by the rule', idRenamed: (n) => `Renamed ${n} ids`,
-      specKeepsAudio: (n) => `${n} sounds already made stay as they are. Only removed items lose their sound.`, specNewCats: (list) => `New groups: ${list}`, specIdWarn: (n, list) => `${n} ids don't follow the id rule; they are kept as given: ${list}`,
+      specKeepsAudio: (n) => `${n} sounds already made stay as they are. Items not in the spec go to the trash and can be put back.`, specNewCats: (list) => `New groups: ${list}`, specIdWarn: (n, list) => `${n} ids don't follow the id rule; they are kept as given: ${list}`,
       exportFormat: 'Files', fmt: 'Format', rate: 'Sample rate', bits: 'Bit depth', quality: 'Quality', qualities: { high: 'High', mid: 'Medium', low: 'Small' },
       folders: 'Folders', foldersFlat: 'One folder', foldersCat: 'A folder per group', engine: 'Game engine', engineNone: 'None (files only)',
       bundleAudio: (p) => `Approved sounds, ${p}`, bundleGodot: 'Godot 4: a plugin and a scene per dynamic sound (godot/)', encoding: (i, n) => `Converting ${i} of ${n}…`, exportFailed: (m) => `Export failed: ${m}`,
@@ -146,7 +149,7 @@ ${p.form}`,
       sendPrompt: 'Send prompt', receiveSpec: 'Receive spec', pasteToAgent: 'Paste this into the agent that worked on the music.', prompt: 'Prompt',
       copyPrompt: 'Copy prompt', copiedPrompt: 'Copied the prompt', pasteSpec: 'Paste the spec the agent gave you.', insertExample: 'Insert example',
       notJson: (m) => `Not JSON: ${m}`, noAssets: 'There is no assets list.', badItems: (n, list) => `${n} items break the rules: ${list}`, noName: 'no name',
-      planSummary: (a, c, k, g) => `Add ${a} · Change ${c} · Keep ${k} · Remove ${g}`, tagAdd: 'Add', tagChange: 'Change', tagRemove: 'Remove',
+      planSummary: (a, c, k, g) => `Add ${a} · Change ${c} · Keep ${k} · To trash ${g}`, tagAdd: 'Add', tagChange: 'Change', tagRemove: 'Remove',
       moreRemoved: (n) => `${n} more removed`, startWithSpec: 'Start with this spec', addOnly: 'Add only, remove nothing',
       specApplied: (n) => `Spec applied. ${n} new assets`,
       exportIssues: (n, names) => `${n} assets with spec issues will also be exported: ${names}`, exportUnapproved: (n) => `${n} unapproved assets will be left out.`,
@@ -183,12 +186,14 @@ ${p.form}`,
     },
     ko: {
       docTitle: '게임 소리 에셋',
+      deleteItem: '지우기', trashed: (n) => `${n}개를 휴지통으로 옮겼어요`, trashHead: '휴지통', trashEmpty: '휴지통이 비었어요.', restore: '되살리기', restoreAll: '모두 되살리기', deleteForever: '완전히 지우기', emptyTrash: '휴지통 비우기',
+      tagTrash: '휴지통으로', specAppliedTrash: (n, g) => `명세를 반영했어요. ${n}개 추가, 명세에 없는 ${g}개는 휴지통으로 옮겼어요`,
       addSound: '추가', newSound: '새 소리', addCat: '분류 추가', newCat: '새 분류', catSettings: '분류 설정', kindLabel: '종류',
       kinds: { sfx: '효과음', amb: '환경음', music: '음악' }, catIdHelp: '소문자 영문. 분류 안 소리도 따라 바뀝니다.', deleteCat: '분류 지우기',
-      catNotEmpty: '먼저 안의 소리를 옮기거나 지우세요.', moveTo: '분류 옮기기', deleteSound: '지우기', deleteMany: (n) => `${n}개 지우기`, confirmDelete: (n) => `${n}개를 지울까요? 되돌릴 수 없어요.`,
+      catNotEmpty: '먼저 안의 소리를 옮기거나 지우세요.', moveTo: '분류 옮기기', deleteSound: '휴지통으로', deleteMany: (n) => `${n}개 휴지통으로`, confirmDelete: (n) => `${n}개를 지울까요? 되돌릴 수 없어요.`,
       idRule: 'id 규칙', idHelp: '모양에는 {kind}(종류 앞말), {cat}(분류 id), {name}(이름을 영어 단어로)을 쓸 수 있어요.', idPattern: '모양', idSep: '구분자', idPrefix: '앞말',
       idCheck: '규칙에 안 맞는 id 표시', idExample: (s, n) => `예: ${s} · 지금 규칙에 안 맞는 id ${n}개`, idRenameAll: '모든 id를 규칙대로 다시 짓기', idRenamed: (n) => `id ${n}개를 바꿨어요`,
-      specKeepsAudio: (n) => `이미 만든 소리 ${n}개는 그대로 둡니다. 지운 항목의 소리만 사라집니다.`, specNewCats: (list) => `새 분류: ${list}`, specIdWarn: (n, list) => `id ${n}개가 id 규칙과 달라요. 받은 그대로 씁니다: ${list}`,
+      specKeepsAudio: (n) => `이미 만든 소리 ${n}개는 그대로 둡니다. 명세에 없는 항목은 휴지통으로 가고 되살릴 수 있어요.`, specNewCats: (list) => `새 분류: ${list}`, specIdWarn: (n, list) => `id ${n}개가 id 규칙과 달라요. 받은 그대로 씁니다: ${list}`,
       exportFormat: '파일', fmt: '형식', rate: '샘플레이트', bits: '비트', quality: '품질', qualities: { high: '높게', mid: '보통', low: '작게' },
       folders: '폴더', foldersFlat: '한 폴더', foldersCat: '분류별 폴더', engine: '게임 엔진', engineNone: '없음(파일만)',
       bundleAudio: (p) => `승인한 소리, ${p}`, bundleGodot: 'Godot 4: 플러그인과 동적 소리마다 장면 하나(godot/)', encoding: (i, n) => `변환 중 ${i}/${n}…`, exportFailed: (m) => `내보내기 실패: ${m}`,
@@ -254,7 +259,7 @@ ${p.form}`,
       sendPrompt: '프롬프트 보내기', receiveSpec: '명세 받기', pasteToAgent: '음악 작업을 하던 에이전트에게 붙여 넣으세요.', prompt: '프롬프트',
       copyPrompt: '프롬프트 복사', copiedPrompt: '프롬프트를 복사했어요', pasteSpec: '에이전트가 준 명세를 붙여 넣으세요.', insertExample: '예시 넣기',
       notJson: (m) => `JSON이 아니에요: ${m}`, noAssets: 'assets 목록이 없어요.', badItems: (n, list) => `규칙에 맞지 않는 항목 ${n}개: ${list}`, noName: '이름 없음',
-      planSummary: (a, c, k, g) => `추가 ${a} · 변경 ${c} · 유지 ${k} · 삭제 ${g}`, tagAdd: '추가', tagChange: '변경', tagRemove: '삭제',
+      planSummary: (a, c, k, g) => `추가 ${a} · 변경 ${c} · 유지 ${k} · 휴지통 ${g}`, tagAdd: '추가', tagChange: '변경', tagRemove: '삭제',
       moreRemoved: (n) => `외 ${n}개 삭제`, startWithSpec: '이 명세로 작업 시작', addOnly: '삭제 없이 추가만',
       specApplied: (n) => `명세를 적용했어요. 새 에셋 ${n}개`,
       exportIssues: (n, names) => `규격 문제가 남은 에셋 ${n}개도 함께 나갑니다: ${names}`, exportUnapproved: (n) => `아직 승인되지 않은 에셋 ${n}개는 빠집니다.`,
@@ -503,7 +508,7 @@ ${p.form}`,
       grid.append(...list.map(makeTile));
       group.append(h, grid); box.append(group);
     }
-    if (!filter.status && !filter.imported) { const addC = el('button', 'ghost addCat', '+ ' + t('addCat')); addC.onclick = newCat; box.append(addC); }
+    if (!filter.status && !filter.imported) box.append(iconButton('folderPlus', t('addCat'), newCat, 'ghost iconBtn addCat'));
     box.scrollTop = top;
     assets.filter((a) => a.versions.length).forEach(drawTile);
     renderSide(); renderHeader(); syncDock();
@@ -550,12 +555,13 @@ ${p.form}`,
     };
     side.append(el('h2', '', t('category')), item(t('all'), assets.length, !filter.cat, () => { filter.cat = null; renderBoard(); }));
     for (const c of cats) side.append(item(tx(c.name), assets.filter((a) => a.cat === c.id).length, filter.cat === c.id, () => { filter.cat = filter.cat === c.id ? null : c.id; renderBoard(); }, c.hue));
-    const addC = el('button', 'addCat', '+ ' + t('addCat')); addC.onclick = newCat; side.append(addC);
+    side.append(iconButton('folderPlus', t('addCat'), newCat, 'iconBtn addCat'));
     side.append(el('h2', '', t('statusHead')));
     for (const [id, label] of Object.entries(t('status'))) {
       const n = assets.filter((a) => a.status === id).length;
       if (n) side.append(item(label, n, filter.status === id, () => { filter.status = filter.status === id ? null : id; renderBoard(); }));
     }
+    if (trash.length) { side.append(el('h2', '', t('trashHead'))); side.append(item(t('trashHead'), trash.length, false, trashDialog)); }
     const mine = assets.filter((a) => a.imported).length;
     if (mine) side.append(el('h2', '', t('originHead')), item(t('imported'), mine, filter.imported, () => { filter.imported = !filter.imported; renderBoard(); }));
   }
@@ -641,12 +647,40 @@ ${p.form}`,
     list.forEach((a) => { a.cat = cat; a.music = kindOf(cat) === 'music'; if (kindOf(cat) !== 'sfx') a.loop = true; a.guessed = false; });
     renderBoard();
   }
-  function removeAssets(list) {
-    if (!confirm(t('confirmDelete', list.length))) return;
-    stopSound();
-    list.forEach((a) => { selected.delete(a.id); const i = assets.indexOf(a); if (i >= 0) assets.splice(i, 1); });
-    dynamics.forEach((d) => { d.layers = d.layers.filter((l) => byId(l.asset)); });
-    renderBoard();
+  // Nothing is deleted straight away: removed sounds go to the trash and can be put back.
+  let trash = [];
+  function toTrash(list) {
+    if (!list.length) return;
+    if (list.some((a) => a === player?.asset)) stopSound();
+    list.forEach((a) => { selected.delete(a.id); const i = assets.indexOf(a); if (i >= 0) assets.splice(i, 1); a.trashedAt = Date.now(); trash.push(a); });
+  }
+  function removeAssets(list) { toTrash(list); renderBoard(); toast(t('trashed', list.length), 4000); }
+  function restoreFromTrash(list) {
+    const taken = new Set(assets.map((a) => a.id));
+    list.forEach((a) => {
+      trash.splice(trash.indexOf(a), 1); delete a.trashedAt;
+      if (!catOf(a.cat)) a.cat = fitCat(a.cat);
+      if (taken.has(a.id)) a.id = makeId(nm(a), a.cat, taken); else taken.add(a.id);
+      assets.push(a);
+    });
+  }
+  function trashDialog() {
+    openDialog(t('trashHead')); reopen = trashDialog;
+    if (!trash.length) dlg.append(el('p', 'note', t('trashEmpty')));
+    for (const a of [...trash].reverse()) {
+      const r = el('div', 'lineItem'), back = el('button', '', t('restore')), gone = el('button', 'ghost', t('deleteForever'));
+      back.onclick = () => { restoreFromTrash([a]); renderBoard(); trashDialog(); };
+      gone.onclick = () => { if (!confirm(t('confirmDelete', 1))) return; trash.splice(trash.indexOf(a), 1); renderBoard(); trashDialog(); };
+      r.append(el('span', 'grow', `${nm(a)} · ${tx(catOf(a.cat)?.name ?? a.cat)}${a.versions.length ? '' : ` · ${statusText('pending')}`}`), back, gone);
+      dlg.append(r);
+    }
+    if (trash.length) {
+      const foot = el('div', 'dlgRow'), all = el('button', '', t('restoreAll')), empty = el('button', 'ghost', t('emptyTrash'));
+      all.onclick = () => { restoreFromTrash([...trash]); renderBoard(); dlg.close(); };
+      empty.onclick = () => { if (!confirm(t('confirmDelete', trash.length))) return; trash = []; renderBoard(); dlg.close(); };
+      foot.append(empty, all); dlg.append(foot);
+    }
+    if (!dlg.open) dlg.showModal();
   }
 
   // Right-click on a tile: the common actions in one place.
@@ -1119,7 +1153,7 @@ ${p.form}`,
     const line = (tag, cls, text) => { const r = el('div', 'lineItem'); r.append(el('span', 'tag ' + cls, tag), el('span', 'grow', text)); return r; };
     added.forEach((x) => out.push(line(t('tagAdd'), 'add', `${x.name} · ${x.id}`)));
     changed.forEach((x) => out.push(line(t('tagChange'), 'chg', `${nm(byId(x.id))}: ${specDiff(byId(x.id), x).map((k) => t('specField')[k]).join(', ')}`)));
-    gone.slice(0, 6).forEach((a) => out.push(line(t('tagRemove'), 'del', nm(a))));
+    gone.slice(0, 6).forEach((a) => out.push(line(t('tagTrash'), 'del', nm(a))));
     if (gone.length > 6) out.push(el('p', '', t('moreRemoved', gone.length - 6)));
     const row = el('div', 'dlgRow'), run = el('button', 'primary', t('startWithSpec')), keep = el('button', '', t('addOnly'));
     const apply = (remove) => {
@@ -1132,8 +1166,8 @@ ${p.form}`,
       for (const id of newCats) if (!catOf(id)) addCat(id, KIND_OF[id] || (spec.assets.find((x) => x.category === id)?.loop ? 'amb' : 'sfx'), id);
       added.forEach((x) => { x.category ||= cats[0].id; const amb = kindOf(x.category) === 'amb'; const a = { id: x.id, name: x.name, cat: x.category, music: kindOf(x.category) === 'music', loop: !!x.loop || amb, layers: amb ? [STUDIO_DATA.bed(x.name, x.length >= 16 ? 16 : 8, 0.1, 0.4, [[1, 0.25, 0], [3, 0.15, 1]])] : [{ kind: 'tone', from: 500, to: 700, len: Math.min(0.6, x.length || 0.3), wave: 'triangle', gain: 0.4, at: 0 }], status: 'draft', versions: [], current: 0, drafts: [], pick: -1, chat: [], progress: 0, length: x.length, when: x.when || '', description: x.description || '' }; assets.push(a); make(a, {}, { key: 'fromSpec' }); });
       changed.forEach((x) => { const a = byId(x.id); for (const k of specDiff(a, x)) a[SPEC_KEYS[k]] = k === 'loop' ? !!x.loop : x[k] ?? ''; });
-      if (remove) gone.forEach((a) => assets.splice(assets.indexOf(a), 1));
-      dlg.close(); renderBoard(); toast(t('specApplied', added.length));
+      if (remove) toTrash(gone);
+      dlg.close(); renderBoard(); toast(remove && gone.length ? t('specAppliedTrash', added.length, gone.length) : t('specApplied', added.length), 5000);
     };
     run.onclick = () => apply(true); keep.onclick = () => apply(false);
     row.append(keep, run); out.push(row);
@@ -1639,7 +1673,7 @@ ${p.form}`,
         const slider = el('input'); slider.type = 'range'; slider.min = p.min; slider.max = p.max; slider.step = (p.max - p.min) / 100; slider.value = p.value ?? p.default;
         slider.setAttribute('aria-label', p.name); slider.oninput = () => { p.value = +slider.value; dynLevels(); };
         const name = input(p.name, (v) => { p.name = v; }, 'text', '120px'), def = input(p.default, (v) => { p.default = v; }, 'number', '70px'); def.title = t('paramDefault');
-        const del = iconButton('close', t('deleteSound'), () => { d.params.splice(d.params.indexOf(p), 1); d.layers.forEach((l) => { if (l.param === p.id) l.param = ''; }); redraw(); }, 'ghost iconBtn');
+        const del = iconButton('close', t('deleteItem'), () => { d.params.splice(d.params.indexOf(p), 1); d.layers.forEach((l) => { if (l.param === p.id) l.param = ''; }); redraw(); }, 'ghost iconBtn');
         const r = el('div', 'lineItem'); r.append(el('code', '', p.id), name, slider, def, del); dlg.append(r);
       }
       const addP = el('button', 'ghost', '+ ' + t('addParam'));
@@ -1653,7 +1687,7 @@ ${p.form}`,
         const pick = select(l.asset, usable.map((a) => [a.id, nm(a)]), (v) => { l.asset = v; if (dynPlayer?.d === d) dynStart(d); });
         const role = select(l.role, roles, (v) => { l.role = v; if (dynPlayer?.d === d) dynStart(d); redraw(); });
         const param = select(l.param || '', [['', t('always')], ...d.params.map((p) => [p.id, p.name])], (v) => { l.param = v; redraw(); });
-        const del = iconButton('close', t('deleteSound'), () => { d.layers.splice(d.layers.indexOf(l), 1); if (dynPlayer?.d === d) dynStart(d); redraw(); }, 'ghost iconBtn');
+        const del = iconButton('close', t('deleteItem'), () => { d.layers.splice(d.layers.indexOf(l), 1); if (dynPlayer?.d === d) dynStart(d); redraw(); }, 'ghost iconBtn');
         r.append(pick, role, param);
         if (l.param) { const a = input(l.on[0], (v) => { l.on[0] = v; }, 'number', '64px'), b = input(l.on[1], (v) => { l.on[1] = v; }, 'number', '64px'); a.title = t('fadeFrom'); b.title = t('fadeTo'); r.append(el('span', 'tag', t('onRange')), a, b); }
         if (l.role === 'scatter') { const a = input(l.scatter.min_gap, (v) => { l.scatter.min_gap = v; }, 'number', '56px'), b = input(l.scatter.max_gap, (v) => { l.scatter.max_gap = v; }, 'number', '56px'); r.append(el('span', 'tag', t('gap')), a, b); }
@@ -1661,7 +1695,7 @@ ${p.form}`,
       }
       const addL = el('button', 'ghost', '+ ' + t('addLayer')); addL.disabled = !usable.length;
       addL.onclick = () => { const a = usable[0]; d.layers.push({ asset: a.id, role: d.type === 'music' ? 'stem' : a.loop ? 'bed' : 'scatter', param: d.params[0]?.id || '', on: [0, 1], scatter: { min_gap: 2, max_gap: 8, pitch: [0.9, 1.1], pan: [-0.8, 0.8] } }); redraw(); };
-      const foot = el('div', 'dlgRow'), del = el('button', 'ghost', t('deleteSound'));
+      const foot = el('div', 'dlgRow'), del = el('button', 'ghost', t('deleteItem'));
       del.onclick = () => { if (!confirm(t('confirmDelete', 1))) return; dynStop(); dynamics.splice(dynamics.indexOf(d), 1); dlg.close(); renderBoard(); };
       foot.append(del); dlg.append(addL, el('p', 'note', t('dynHelp')), foot);
     }
@@ -1687,6 +1721,7 @@ ${p.form}`,
   function snapshot() {
     return {
       v: 1, game, brief, platform, demo, stage, loud: [...rule('loud').range], cats, idRule, exportOpts,
+      trash: trash.map((a) => { const { versions, drafts: options, source, progress, ...rest } = a; return { ...rest, key: source ? keyOf(a) : a.key, status: a.status === 'working' || a.status === 'review' ? (versions.length ? 'draft' : 'pending') : a.status, versions: versions.map(recipe), drafts: [], pick: -1, hasSource: !!source }; }),
       dynamics: dynamics.map((d) => ({ ...d, params: d.params.map((p) => ({ ...p })) })),
       assets: assets.map((a) => {
         const { versions, drafts: options, source, progress, ...rest } = a;
@@ -1697,10 +1732,10 @@ ${p.form}`,
     };
   }
   async function write() {
-    const data = snapshot(), d = await idb(), keep = new Set(assets.filter((a) => a.source).map(keyOf));
+    const data = snapshot(), d = await idb(), keep = new Set([...assets, ...trash].filter((a) => a.source).map(keyOf));
     const q = d.transaction(['board', 'audio'], 'readwrite');
     q.objectStore('board').put(data, 'board');
-    for (const a of assets) if (a.source && !savedAudio.has(a.key)) q.objectStore('audio').put(new Blob([a.source]), a.key);
+    for (const a of [...assets, ...trash]) if (a.source && !savedAudio.has(a.key)) q.objectStore('audio').put(new Blob([a.source]), a.key);
     for (const k of savedAudio) if (!keep.has(k)) q.objectStore('audio').delete(k);
     await done(q);
     savedAudio.clear(); keep.forEach((k) => savedAudio.add(k));
@@ -1751,8 +1786,8 @@ ${p.form}`,
     if (data.idRule) idRule = data.idRule;
     if (data.exportOpts) exportOpts = { ...exportOpts, ...data.exportOpts };
     if (Array.isArray(data.dynamics)) dynamics = data.dynamics;
-    assets.length = 0;
-    for (const x of data.assets) {
+    assets.length = 0; trash = [];
+    for (const x of [...data.assets, ...(data.trash || []).map((y) => ({ ...y, inTrash: true }))]) {
       const { hasSource, ...a } = x;
       a.progress = 0;
       if (hasSource) {
@@ -1762,7 +1797,7 @@ ${p.form}`,
         if (source) { a.source = source; savedAudio.add(a.key); }
         else Object.assign(a, { versions: [], drafts: [], pick: -1, current: 0, status: 'pending' }); // the browser dropped the audio
       }
-      assets.push(a);
+      if (a.inTrash) { delete a.inTrash; trash.push(a); } else assets.push(a);
     }
     return true;
   }

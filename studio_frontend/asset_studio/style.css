@@ -48,7 +48,7 @@ button.primary:disabled { background:var(--raised); color:var(--disabled); }
 .group h2 .catGear { width:32px; min-height:28px; color:var(--text3); }
 .group h2 .catGear .ico { width:16px; height:16px; }
 .addCat { margin-top:16px; color:var(--text3); }
-#side .addCat { margin-top:6px; justify-content:flex-start; font-size:.85rem; }
+#side .addCat { margin-top:6px; width:40px; min-height:36px; justify-content:center; color:var(--text3); }
 #tileMenu .ctxHead { font-size:.72rem; color:var(--text3); padding:8px 12px 2px; }
 #tileMenu .ctxSep { height:1px; background:var(--divider); margin:6px 4px; }
 .dynGroup h2 i { background:var(--text2); }

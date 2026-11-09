@@ -21,6 +21,8 @@ if (-not $ServerOnly) {
   Get-CimInstance Win32_Process -Filter "Name='cloudflared.exe'" | Where-Object { $_.CommandLine -match 'olmuse' } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 }
+# Scripts and styles carry a content hash so a browser never pairs a new page with an old cached script.
+python (Join-Path $PSScriptRoot 'tools\stamp_assets.py')
 Stop-Server
 Start-Process python -WindowStyle Hidden -WorkingDirectory $PSScriptRoot -ArgumentList '-m', 'streamlit', 'run', 'app.py', '--server.address', '127.0.0.1', '--server.port', '8501', '--server.headless', 'true'
 if ($ServerOnly) { return }
