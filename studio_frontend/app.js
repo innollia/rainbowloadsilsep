@@ -554,7 +554,9 @@
   function renderProgress() {
     const running = job?.status === 'running';
     $('progress').hidden = !running;
-    if (!running) return;
+    if (!renderProgress.drawn) { renderProgress.drawn = true; window.waitAnim?.mount($('progress')); }
+    if (!running) { window.waitAnim?.stop(); return; }
+    window.waitAnim?.run(localStage ? 'listening' : job.stage);
     const stage = localStage || raw('stage_' + job.stage) || job.stage;
     $('progressText').textContent = job.auto ? t('round', { stage, i: job.iteration, n: job.limit }) : stage;
   }
