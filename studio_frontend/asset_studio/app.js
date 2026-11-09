@@ -103,14 +103,9 @@
       refFromProject: 'Project', refKinds: { audio: 'Sound', midi: 'MIDI', score: 'Score', text: 'Note', link: 'Link' },
       refBadType: 'not a sound, MIDI or score file', refTooBig: 'file too large', refBadLink: 'Enter a link starting with http:// or https://', refAdded: (n) => `Added ${n} reference${n > 1 ? 's' : ''}`,
       refGone: 'This file was not kept in the browser.', refCannotPlay: 'The browser cannot play this file.',
-      agentPh: 'Ask in words (references, groups, names, how sounds should change)…', agentTitle: 'Assistant', agentThinking: 'Thinking…', agentUndo: 'Undo', agentUndone: 'Undone',
-      agentDid: (n) => `${n} change${n === 1 ? '' : 's'} made`, agentFailed: (x) => `Could not answer: ${x}`, agentClose: 'Hide assistant', agentOpen: 'Assistant',
+      agentPh: 'Ask in words (references, groups, names, how sounds should change)…', agentThinking: 'Thinking…', agentUndo: 'Undo', agentUndone: 'Undone',
+      agentDid: (n) => `${n} change${n === 1 ? '' : 's'} made`, agentFailed: (x) => `Could not answer: ${x}`,
       agentLocal: 'AI is not connected here, so I only understand links, notes ("note: …") and remakes of the picked sounds.', agentNoted: 'Saved it as a reference.', agentRemake: (n) => `Remaking ${n} sound${n === 1 ? '' : 's'}.`,
-      handoffTitle: 'A few questions before work starts. Answers are saved as project references.', handoffRec: 'Recommended', handoffOwn: 'Or type an answer', handoffSkip: 'Skip', handoffSkipped: '(skipped)', handoffEnd: 'Thanks. Every sound will follow these.', handoffStep: (i, n) => `${i}/${n}`,
-      handoffLocal: [['What mood should the sounds have overall?', ['Warm and soft', 'Bright and lively', 'Dark and tense', 'Grand and epic'], 'Warm and soft'],
-        ['How realistic should they be?', ['Realistic', 'Lightly stylised', 'Cartoon-like', 'Retro / chiptune'], 'Lightly stylised'],
-        ['What must never be heard?', ['Harsh highs', 'Long tails', 'Loud bass', 'Nothing in particular'], 'Harsh highs'],
-        ['What comes first in the mix?', ['Effects', 'Music', 'Voice', 'Even'], 'Effects']],
       parentCat: 'Inside', noParent: 'Top level', addSubCat: 'Add a group inside', foldersKind: 'A folder per kind (sfx, amb, music)', rootFolder: 'Audio folder',
       rulesHead: 'Use the file rules your agent knows', rulesHelp: 'If an AI agent worked on this game, copy this prompt to it and paste its answer below. It sets the id rule, folders and groups from the names the game already uses.',
       copyRules: 'Copy prompt', pasteRules: "Paste the agent's answer (JSON)", rulesId: 'ID rule', rulesFilesTag: 'Files', rulesFiles: (n) => `${n} files get their group and name`, applyRules: 'Apply the rules',
@@ -172,12 +167,15 @@ ${p.files}`,
       ] },
       specPrompt: (p) => `Please write a game sound spec as JSON. This spec goes into a sound production tool that makes the assets.
 
-Based on the design docs and code of the game you are working on, list every sound the game needs. Do not invent values that have no basis; leave them null, and put anything that needs deciding in questions.
+Before writing it, ask the user a few hand-over questions the way a sound designer would when taking over the work: one at a time, each with a few short options and the one you recommend. Ask only what the design docs and code leave open and what would change many sounds: overall mood and reference games or music, how realistic or stylised, what must never be heard, what comes first in the mix (effects, music, voice). If you cannot ask the user, put those questions in questions instead.
+
+Then, based on the design docs, the code and the user's answers, list every sound the game needs. Do not invent values that have no basis; leave them null, and put anything that still needs deciding in questions.
 
 Fields
 - game: game name
 - platform: main device, one of ${p.platforms}
-- style: overall sound direction of the game, one or two sentences
+- style: overall sound direction of the game, one or two sentences, including the user's answers
+- references: notes and links every sound should follow, each { name, note, url }. One per hand-over answer (name the question, note the answer), plus reference tracks or pages the user named (url)
 - categories: sound groups for this game, each { id, name, kind } with kind sfx (effect), amb (ambience) or music. Start from ${p.cats} and add, rename or drop groups to fit the game
 - assets: list of sounds
   - id: ${p.idRule}. If the code already uses a name, keep it
@@ -191,7 +189,7 @@ Fields
 
 Do not reference tracks or samples with unclear licenses. Available materials: ${p.licenses}.
 
-Reply only with JSON in the format below, no explanation.
+When the questions are done, reply only with JSON in the format below, no explanation.
 ${p.form}`,
       sendPrompt: 'Send prompt', receiveSpec: 'Receive spec', pasteToAgent: 'Paste this into the agent that worked on the music.', prompt: 'Prompt',
       copyPrompt: 'Copy prompt', copiedPrompt: 'Copied the prompt', pasteSpec: 'Paste the spec the agent gave you.', insertExample: 'Insert example',
@@ -244,14 +242,9 @@ ${p.form}`,
       refFromProject: '프로젝트', refKinds: { audio: '소리', midi: 'MIDI', score: '악보', text: '메모', link: '링크' },
       refBadType: '소리, MIDI, 악보 파일이 아니에요', refTooBig: '파일이 너무 커요', refBadLink: 'http:// 또는 https://로 시작하는 링크를 넣어 주세요', refAdded: (n) => `레퍼런스 ${n}개를 넣었어요`,
       refGone: '이 파일은 브라우저에 남아 있지 않아요.', refCannotPlay: '브라우저가 이 파일을 재생하지 못해요.',
-      agentPh: '말로 시키기 (레퍼런스, 분류, 이름, 소리 고치기)…', agentTitle: '도우미', agentThinking: '생각하는 중…', agentUndo: '되돌리기', agentUndone: '되돌렸어요',
-      agentDid: (n) => `${n}가지를 바꿨어요`, agentFailed: (x) => `답하지 못했어요: ${x}`, agentClose: '도우미 숨기기', agentOpen: '도우미',
+      agentPh: '말로 시키기 (레퍼런스, 분류, 이름, 소리 고치기)…', agentThinking: '생각하는 중…', agentUndo: '되돌리기', agentUndone: '되돌렸어요',
+      agentDid: (n) => `${n}가지를 바꿨어요`, agentFailed: (x) => `답하지 못했어요: ${x}`,
       agentLocal: '여기서는 AI가 연결되지 않아 링크, 메모("메모: …"), 고른 소리 다시 만들기만 알아들어요.', agentNoted: '레퍼런스로 저장했어요.', agentRemake: (n) => `소리 ${n}개를 다시 만들어요.`,
-      handoffTitle: '작업 전에 몇 가지만 물어볼게요. 답은 프로젝트 레퍼런스로 저장돼요.', handoffRec: '추천', handoffOwn: '직접 쓰기', handoffSkip: '건너뛰기', handoffSkipped: '(건너뜀)', handoffEnd: '고마워요. 모든 소리에 이대로 적용할게요.', handoffStep: (i, n) => `${i}/${n}`,
-      handoffLocal: [['전체 소리의 분위기는 어떤가요?', ['따뜻하고 부드럽게', '밝고 경쾌하게', '어둡고 긴장감 있게', '웅장하게'], '따뜻하고 부드럽게'],
-        ['얼마나 사실적이어야 하나요?', ['사실적으로', '살짝 과장되게', '만화처럼', '레트로·칩튠'], '살짝 과장되게'],
-        ['절대 들리면 안 되는 소리는요?', ['귀를 찌르는 고음', '긴 잔향', '큰 저음', '특별히 없음'], '귀를 찌르는 고음'],
-        ['믹스에서 무엇이 먼저인가요?', ['효과음', '음악', '목소리', '고르게'], '효과음']],
       parentCat: '상위 분류', noParent: '맨 위', addSubCat: '안에 분류 추가', foldersKind: '종류별 폴더(sfx, amb, music)', rootFolder: '소리 폴더',
       rulesHead: '에이전트가 아는 파일 규칙 쓰기', rulesHelp: '이 게임을 작업한 AI 에이전트가 있으면 이 프롬프트를 보내고 답을 아래에 붙여 넣으세요. 게임이 이미 쓰는 이름에 맞춰 id 규칙, 폴더, 분류를 바꿉니다.',
       copyRules: '프롬프트 복사', pasteRules: '에이전트의 답(JSON)을 붙여 넣으세요', rulesId: 'ID 규칙', rulesFilesTag: '파일', rulesFiles: (n) => `파일 ${n}개의 분류와 이름을 맞춥니다`, applyRules: '규칙 적용',
@@ -313,12 +306,15 @@ ${p.files}`,
       ] },
       specPrompt: (p) => `게임 소리 명세서를 JSON으로 작성해 주세요. 이 명세서를 소리 제작 도구에 넣어 에셋을 만듭니다.
 
-맡고 있는 게임의 기획서와 코드를 근거로, 게임에 필요한 소리를 빠짐없이 적어 주세요. 근거가 없는 값은 지어내지 말고 null로 두고, 정해야 할 것은 questions에 적어 주세요.
+쓰기 전에 사운드 디자이너가 작업을 넘겨받을 때처럼 사용자에게 인수인계 질문을 몇 가지 해 주세요. 한 번에 하나씩, 짧은 선택지 몇 개와 추천 답을 붙여서요. 기획서와 코드로 알 수 없고 여러 소리를 바꾸는 것만 물어보세요: 전체 분위기와 참고할 게임이나 음악, 얼마나 사실적이거나 과장할지, 절대 들리면 안 되는 소리, 믹스에서 무엇이 먼저인지(효과음, 음악, 목소리). 사용자에게 물을 수 없으면 그 질문을 questions에 적어 주세요.
+
+그다음 기획서, 코드, 사용자의 답을 근거로 게임에 필요한 소리를 빠짐없이 적어 주세요. 근거가 없는 값은 지어내지 말고 null로 두고, 아직 정해야 할 것은 questions에 적어 주세요.
 
 항목
 - game: 게임 이름
 - platform: ${p.platforms} 중 주요 기기
-- style: 게임 전체의 소리 방향, 한두 문장
+- style: 게임 전체의 소리 방향, 한두 문장. 사용자의 답을 담아서
+- references: 모든 소리가 따를 메모와 링크, 각각 { name, note, url }. 인수인계 답마다 하나(name은 질문, note는 답), 사용자가 말한 참고곡이나 페이지는 url로
 - categories: 이 게임의 소리 분류. 각각 { id, name, kind }, kind는 sfx(효과음), amb(환경음), music(음악). ${p.cats}에서 시작해 게임에 맞게 더하고 바꾸고 빼세요
 - assets: 소리 목록
   - id: ${p.idRule}. 코드에 이미 쓰는 이름이 있으면 그대로
@@ -332,7 +328,7 @@ ${p.files}`,
 
 저작권이 불분명한 곡이나 샘플은 참조하지 마세요. 쓸 수 있는 재료는 ${p.licenses}입니다.
 
-설명 없이 아래 형식의 JSON만 답해 주세요.
+질문이 끝나면 설명 없이 아래 형식의 JSON만 답해 주세요.
 ${p.form}`,
       sendPrompt: '프롬프트 보내기', receiveSpec: '명세 받기', pasteToAgent: '음악 작업을 하던 에이전트에게 붙여 넣으세요.', prompt: '프롬프트',
       copyPrompt: '프롬프트 복사', copiedPrompt: '프롬프트를 복사했어요', pasteSpec: '에이전트가 준 명세를 붙여 넣으세요.', insertExample: '예시 넣기',
@@ -670,7 +666,7 @@ ${p.form}`,
     $('selCount').hidden = !count; $('selCount').textContent = t('selected', count);
     $('selAll').hidden = $('selApprove').hidden = $('selClear').hidden = !count;
     document.body.classList.toggle('selecting', !!count);
-    $('ask').placeholder = handoff ? t('handoffOwn') : count ? t('askSelected', count) : target?.versions.length ? t('askOne', nm(target)) : t('agentPh');
+    $('ask').placeholder = count ? t('askSelected', count) : target?.versions.length ? t('askOne', nm(target)) : t('agentPh');
     $('send').disabled = agentBusy;
   }
 
@@ -1012,7 +1008,7 @@ ${p.form}`,
   };
   // The assistant: whatever is typed below goes to it. It answers with changes the board applies at once,
   // and every answer that changed something can be undone. Without AI it understands links, notes and remakes.
-  let agentLog = [], agentBusy = false, agentOn = false, handoffDone = false, agentN = 0, handoff = null;
+  let agentLog = [], agentBusy = false, agentOn = false, agentN = 0;
   const agentWaits = new Map();
   const pickedSounds = () => (selected.size ? [...selected].map(byId) : focused ? [byId(focused)] : []).filter(Boolean);
   function boardState() {
@@ -1028,8 +1024,7 @@ ${p.form}`,
   }
   // Without AI: a link or a "note:" line becomes a reference for the picked sounds (or the project); anything else
   // remakes the picked sounds the way the old box did.
-  function localAgent(text, mode) {
-    if (mode === 'handoff') return { reply: '', actions: [], questions: t('handoffLocal').map(([question, options, recommended]) => ({ question, options, recommended })) };
+  function localAgent(text) {
     const picked = pickedSounds(), url = text.match(/https?:\/\/\S+/i)?.[0], note = text.match(/^\s*(?:메모|참고|레퍼런스|note|reference)\s*[:：]\s*(.+)$/is)?.[1];
     const targets = picked.length ? picked.map((a) => 'asset:' + a.id) : ['project'];
     if (url || note) return { reply: t('agentNoted'), questions: [], actions: targets.map((target) => ({ op: 'add_ref', target, kind: url ? 'link' : 'text', url: url || '', text: url ? text.replace(url, '').trim() : note.trim(), name: '', assets: [] })) };
@@ -1037,13 +1032,13 @@ ${p.form}`,
     if (usable.length) return { reply: t('agentRemake', usable.length), questions: [], actions: [{ op: 'revise', assets: usable.map((a) => a.id), text }] };
     return { reply: t('agentLocal'), actions: [], questions: [] };
   }
-  function askAgent(text, mode = '') {
-    if (!agentOn || window.parent === window) return Promise.resolve(localAgent(text, mode));
+  function askAgent(text) {
+    if (!agentOn || window.parent === window) return Promise.resolve(localAgent(text));
     const n = `${Date.now()}:${++agentN}`;
     return new Promise((ok, no) => {
       const timer = setTimeout(() => { agentWaits.delete(n); no(new Error('timeout')); }, 240000);
       agentWaits.set(n, { ok: (v) => { clearTimeout(timer); ok(v); }, no: (e) => { clearTimeout(timer); no(e); } });
-      parent.postMessage({ type: 'asset:agent', payload: { n, text, mode, state: boardState() } }, '*');
+      parent.postMessage({ type: 'asset:agent', payload: { n, text, state: boardState() } }, '*');
     });
   }
   addEventListener('message', (e) => {
@@ -1088,43 +1083,27 @@ ${p.form}`,
     };
   }
   // No window of its own: the answer shows in the toast (with undo), a hand-over question sits in the dock's input row.
-  function renderAgent() { /* hand-over questions have no place on screen yet */ }
   function say(text, undo) {
     toast(text, undo ? 8000 : 4000);
     if (undo) { const u = el('button', 'ghost', t('agentUndo')); u.onclick = () => { undo(); autosave(); toast(t('agentUndone')); }; $('toast').append(' ', u); }
   }
-  async function sendAgent(text, mode = '') {
+  async function sendAgent(text) {
     if (agentBusy) return;
-    if (text) agentLog.push({ me: true, text });
-    agentBusy = true; syncDock(); if (mode !== 'handoff') toast(t('agentThinking'), 0);
+    agentLog.push({ me: true, text });
+    agentBusy = true; syncDock(); toast(t('agentThinking'), 0);
     try {
-      const answer = await askAgent(text, mode);
-      if (mode === 'handoff') {
-        const qs = (answer.questions || []).filter((q) => q.question && q.options?.length);
-        handoff = qs.length ? { qs, at: 0 } : null;
-      } else {
-        const undo = applyActions(answer.actions);
-        agentLog.push({ text: answer.reply || '' });
-        say(answer.reply || t('agentDid', (answer.actions || []).length), undo);
-      }
+      const answer = await askAgent(text);
+      const undo = applyActions(answer.actions);
+      agentLog.push({ text: answer.reply || '' });
+      say(answer.reply || t('agentDid', (answer.actions || []).length), undo);
     } catch (e) { say(t('agentFailed', e.message || e)); }
-    agentBusy = false; renderAgent(); syncDock(); autosave();
-  }
-  // Hand-over questions one at a time in the input row; each answer becomes a project note.
-  function answerHandoff(answer) {
-    const q = handoff.qs[handoff.at], id = `handoff${handoff.at}`;
-    const r = projectRefs.find((x) => x.id === id);
-    if (r) projectRefs.splice(projectRefs.indexOf(r), 1);
-    if (answer) projectRefs.push({ id, kind: 'text', name: q.question.slice(0, 60), note: `${q.question} → ${answer}`, url: '', at: Date.now(), by: 'handoff' });
-    handoff.at++;
-    if (handoff.at >= handoff.qs.length) { handoff = null; toast(t('handoffEnd'), 3000); }
-    syncRefs(); renderBoard(); renderAgent(); syncDock(); autosave();
+    agentBusy = false; syncDock(); autosave();
   }
   $('askForm').onsubmit = (e) => {
     e.preventDefault();
     const text = $('ask').value.trim(); if (!text || agentBusy) return;
     $('ask').value = '';
-    if (handoff) answerHandoff(text); else sendAgent(text);
+    sendAgent(text);
   };
   $('selAll').onclick = () => { ready(visible()).forEach((x) => selected.add(x.id)); renderBoard(); };
   $('selClear').onclick = () => { selected.clear(); renderBoard(); };
@@ -1329,7 +1308,7 @@ ${p.form}`,
     const ex = t('example'), ids = [['sfx_ui_click', 'ui', 0.1, false], ['sfx_combat_parry', 'combat', 0.3, false], ['bgm_garden', 'bgm', 60, true]];
     return JSON.stringify({ game: tx(game), platform: 'mobile', style: ex.style, assets: ids.map(([id, category, length, loop], k) => ({ id, name: ex.assets[k].name, category, length, loop, when: ex.assets[k].when, description: ex.assets[k].description })), questions: [] }, null, 2);
   };
-  const specForm = () => JSON.stringify({ game: '', platform: '', style: '', categories: [{ id: '', name: '', kind: '', parent: '' }], assets: [{ id: '', name: '', category: '', length: 0, loop: false, when: '', description: '' }], questions: [] }, null, 2);
+  const specForm = () => JSON.stringify({ game: '', platform: '', style: '', references: [{ name: '', note: '', url: '' }], categories: [{ id: '', name: '', kind: '', parent: '' }], assets: [{ id: '', name: '', category: '', length: 0, loop: false, when: '', description: '' }], questions: [] }, null, 2);
   // Only what this tool knows goes in. The game itself is the other agent's to fill in.
   const specPrompt = () => t('specPrompt', {
     platforms: PROFILES.map((f) => f.id).filter((id) => id !== 'wide').join(', '),
@@ -1399,6 +1378,11 @@ ${p.form}`,
       if (target) { rule('loud').range = [...target.loud]; platform = target.id; }
       if (spec.game) game = spec.game;
       if (spec.style) brief = spec.style;
+      if (Array.isArray(spec.references)) {
+        projectRefs = projectRefs.filter((r) => r.by !== 'spec');
+        for (const r of spec.references) if (r && (r.note || r.url)) projectRefs.push({ id: newRefId(), kind: r.url ? 'link' : 'text', name: String(r.name || '').slice(0, 80), note: String(r.note || ''), url: String(r.url || ''), at: Date.now(), by: 'spec' });
+        syncRefs();
+      }
       demo = false;
       for (const c of specCats) { const have = catOf(c.id); if (have) { if (c.name) have.name = c.name; if (KINDS.includes(c.kind)) have.kind = c.kind; } else addCat(c.name || c.id, c.kind, c.id); }
       for (const c of specCats) if (c.parent && catOf(c.parent) && !under(c.parent, c.id)) catOf(c.id).parent = c.parent;
@@ -2163,7 +2147,7 @@ ${p.form}`,
   const recipe = (v) => ({ change: v.change, note: v.note, at: v.at });
   function snapshot() {
     return {
-      v: 1, game, brief, platform, demo, stage, loud: [...rule('loud').range], cats, idRule, exportOpts, projectRefs, handoffDone, handoff, agentLog: agentLog.slice(-30),
+      v: 1, game, brief, platform, demo, stage, loud: [...rule('loud').range], cats, idRule, exportOpts, projectRefs, agentLog: agentLog.slice(-30),
       trash: trash.map((a) => { const { versions, drafts: options, source, progress, ...rest } = a; return { ...rest, key: source ? keyOf(a) : a.key, status: a.status === 'working' || a.status === 'review' ? (versions.length ? 'draft' : 'pending') : a.status, versions: versions.map(recipe), drafts: [], pick: -1, hasSource: !!source }; }),
       dynamics: dynamics.map((d) => ({ ...d, params: d.params.map((p) => ({ ...p })) })),
       assets: assets.map((a) => {
@@ -2236,7 +2220,7 @@ ${p.form}`,
     if (data.idRule) idRule = data.idRule;
     if (data.exportOpts) exportOpts = { ...exportOpts, ...data.exportOpts };
     projectRefs = Array.isArray(data.projectRefs) ? data.projectRefs : [];
-    handoffDone = !!data.handoffDone; handoff = null; agentLog = Array.isArray(data.agentLog) ? data.agentLog : [];
+    agentLog = Array.isArray(data.agentLog) ? data.agentLog : [];
     for (const [k, blob] of blobs) if (String(k).startsWith('ref:')) { try { refBlobs.set(k, new Uint8Array(await blob.arrayBuffer())); savedRefs.add(k); } catch { /* unreadable blob */ } }
     if (Array.isArray(data.dynamics)) dynamics = data.dynamics;
     assets.length = 0; trash = [];
