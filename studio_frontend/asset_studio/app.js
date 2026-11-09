@@ -2,6 +2,45 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const { GAME, BRIEF, CATEGORIES, ASSETS, PROFILES, RULES, LICENSES } = window.STUDIO_DATA;
+  // Groups belong to the project: a spec or the user can add, rename and remove them. kind says how a sound in it behaves.
+  const KIND_OF = { ui: 'sfx', combat: 'sfx', char: 'sfx', env: 'amb', bgm: 'music' };
+  const KINDS = ['sfx', 'amb', 'music'];
+  const HUES = ['#E8AE72', '#87B9E8', '#8CCDB2', '#C7A0E8', '#F3C978', '#F29BB2', '#9FD36B', '#7FD1D9', '#E89A7F', '#B7B3F2'];
+  let cats = CATEGORIES.map((c) => ({ ...c, kind: KIND_OF[c.id] || 'sfx' }));
+  const catOf = (id) => cats.find((c) => c.id === id);
+  const kindOf = (id) => catOf(id)?.kind || KIND_OF[id] || 'sfx';
+  const slugOf = (text) => String(text ?? '').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  function addCat(name, kind = 'sfx', id) {
+    const taken = new Set(cats.map((c) => c.id)), base = id || slugOf(name).join('_') || 'group';
+    let cid = base, k = 2;
+    while (taken.has(cid)) cid = `${base}_${k++}`;
+    const c = { id: cid, name, kind: KINDS.includes(kind) ? kind : 'sfx', hue: HUES[cats.length % HUES.length] };
+    cats.push(c);
+    return c;
+  }
+  // The importer guesses one of the starting group ids; land it on a group of the same kind this project has.
+  const fitCat = (id) => catOf(id)?.id || cats.find((c) => c.kind === (KIND_OF[id] || 'sfx'))?.id || cats[0]?.id || addCat(id || 'sounds', KIND_OF[id]).id;
+  let idRule = { pattern: '{kind}_{name}', sep: '_', prefix: { sfx: 'sfx', amb: 'amb', music: 'bgm' }, check: true };
+  const escRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  function makeId(name, cat, taken) {
+    taken ||= new Set(assets.map((a) => a.id));
+    const sep = idRule.sep, pre = idRule.prefix[kindOf(cat)] || kindOf(cat), words = slugOf(name);
+    if (words[0] === pre) words.shift();
+    const catSlug = slugOf(cat).join(sep) || 'group', nameSlug = words.join(sep) || catSlug;
+    const base = idRule.pattern.replace(/\{kind\}/g, pre).replace(/\{cat\}/g, catSlug).replace(/\{name\}/g, nameSlug).slice(0, 64) || nameSlug;
+    let id = base, k = 2;
+    while (taken.has(id)) id = `${base}${sep}${k++}`;
+    taken.add(id);
+    return id;
+  }
+  function idOk(id) {
+    if (!idRule.check) return !!id;
+    const sep = escRe(idRule.sep), word = '[a-z0-9]+', alt = (list) => `(?:${[...new Set(list.filter(Boolean))].map(escRe).join('|')})`;
+    const src = idRule.pattern.split(/(\{kind\}|\{cat\}|\{name\})/).map((p) => (p === '{kind}' ? alt(Object.values(idRule.prefix))
+      : p === '{cat}' ? alt(cats.map((c) => slugOf(c.id).join(idRule.sep))) : p === '{name}' ? `${word}(?:${sep}${word})*` : escRe(p))).join('');
+    try { return new RegExp(`^${src}(?:${sep}\\d+)?$`).test(id); } catch { return true; }
+  }
+  const idRuleText = () => idRule.pattern.replace('{kind}', `(${Object.entries(idRule.prefix).map(([k, p]) => `${p}=${k}`).join(', ')})`).replace('{cat}', '<category id>').replace('{name}', `<lowercase english words joined by "${idRule.sep}">`);
   const ICONS = {
     play: '<path d="M7 4.5v15l12-7.5z" fill="currentColor" stroke="none"/>',
     stop: '<rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor" stroke="none"/>',
@@ -35,7 +74,21 @@
   if (!LANGS.includes(lang)) lang = 'en';
   const TEXT = {
     en: {
-      docTitle: 'Game sound assets', specField: { name: 'name', category: 'category', length: 'length', loop: 'loop', when: 'when', description: 'description' }, openAsset: 'Open', rename: 'Rename', unapprove: 'Cancel approval', menu: 'Menu', settings: 'Settings', language: 'Language', gameInfo: 'Game info', stagesLabel: 'Progress', help: 'How to use', spec: 'Spec', export: 'Export',
+      docTitle: 'Game sound assets',
+      addSound: 'Add', newSound: 'New sound', addCat: 'Add group', newCat: 'New group', catSettings: 'Group settings', kindLabel: 'Kind',
+      kinds: { sfx: 'Effect', amb: 'Ambience', music: 'Music' }, catIdHelp: 'Lowercase English. Sounds in the group follow it.', deleteCat: 'Delete group',
+      catNotEmpty: 'Move or delete the sounds in it first.', moveTo: 'Move to', deleteSound: 'Delete', deleteMany: (n) => `Delete ${n} sounds`, confirmDelete: (n) => `Delete ${n}? This cannot be undone.`,
+      idRule: 'ID rule', idHelp: 'Pattern can use {kind} (prefix of the kind), {cat} (group id) and {name} (the name in English words).', idPattern: 'Pattern', idSep: 'Separator', idPrefix: 'Prefix',
+      idCheck: 'Flag ids that break the rule', idExample: (s, n) => `Example: ${s} · ${n} ids break it now`, idRenameAll: 'Rename every id by the rule', idRenamed: (n) => `Renamed ${n} ids`,
+      specKeepsAudio: (n) => `${n} sounds already made stay as they are. Only removed items lose their sound.`, specNewCats: (list) => `New groups: ${list}`, specIdWarn: (n, list) => `${n} ids don't follow the id rule; they are kept as given: ${list}`,
+      exportFormat: 'Files', fmt: 'Format', rate: 'Sample rate', bits: 'Bit depth', quality: 'Quality', qualities: { high: 'High', mid: 'Medium', low: 'Small' },
+      folders: 'Folders', foldersFlat: 'One folder', foldersCat: 'A folder per group', engine: 'Game engine', engineNone: 'None (files only)',
+      bundleAudio: (p) => `Approved sounds, ${p}`, bundleGodot: 'Godot 4: a plugin and a scene per dynamic sound (godot/)', encoding: (i, n) => `Converting ${i} of ${n}…`, exportFailed: (m) => `Export failed: ${m}`,
+      dynHead: 'Dynamic sounds', addDyn: 'Add dynamic sound', newDyn: 'New dynamic sound', dynType: 'Type', dynTypes: { ambience: 'Layered ambience', music: 'Adaptive music' }, dynLayers: (n) => `${n} layers`,
+      params: 'Game values', addParam: 'Add value', param: 'Value', paramDefault: 'Starting value', intensity: 'Intensity', layersHead: 'Layers', addLayer: 'Add layer', always: 'Always on',
+      roles: { bed: 'Loop', scatter: 'Now and then', stem: 'Music stem' }, onRange: 'Fades in', fadeFrom: 'Silent at', fadeTo: 'Full at', gap: 'Gap s', beatsPerBar: 'Beats per bar',
+      dynNoSounds: 'Make or import some sounds first; layers are made of them.', dynHelp: 'Move a value to hear the layers change. The game sets the same values, for example set_param("intensity", 0.8) in Godot.',
+      specField: { name: 'name', category: 'category', length: 'length', loop: 'loop', when: 'when', description: 'description' }, openAsset: 'Open', rename: 'Rename', unapprove: 'Cancel approval', menu: 'Menu', settings: 'Settings', language: 'Language', gameInfo: 'Game info', stagesLabel: 'Progress', help: 'How to use', spec: 'Spec', export: 'Export',
       backToMusic: 'To music studio', category: 'Category', board: 'Asset board', playAll: 'Play all', stopAll: 'Stop playing all', hoverPlay: 'Play on hover',
       acceptAll: 'Keep all', rejectAll: 'Discard all', selectAll: 'Select all', deselect: 'Deselect', approve: 'Approve', approved: 'Approved', clear: 'Clear',
       ask: 'Edit request', send: 'Send',
@@ -75,10 +128,11 @@ Fields
 - game: game name
 - platform: main device, one of ${p.platforms}
 - style: overall sound direction of the game, one or two sentences
+- categories: sound groups for this game, each { id, name, kind } with kind sfx (effect), amb (ambience) or music. Start from ${p.cats} and add, rename or drop groups to fit the game
 - assets: list of sounds
-  - id: lowercase English starting with sfx_ for effects, amb_ for ambience, bgm_ for music. If the code already uses a name, keep it
+  - id: ${p.idRule}. If the code already uses a name, keep it
   - name: human-readable name
-  - category: one of ${p.cats}
+  - category: one of the categories ids
   - length: target length (seconds). Effects at most ${p.dur}s, ambience an unbroken loop of 8 or 16 seconds
   - loop: whether it repeats. Always true for ambience
   - when: the moment in the game when it plays
@@ -128,7 +182,21 @@ ${p.form}`,
       ],
     },
     ko: {
-      docTitle: '게임 소리 에셋', specField: { name: '이름', category: '분류', length: '길이', loop: '반복', when: '쓰이는 때', description: '설명' }, openAsset: '들어가기', rename: '이름 바꾸기', unapprove: '승인 취소', menu: '메뉴', settings: '설정', language: '언어', gameInfo: '게임 정보', stagesLabel: '진행 단계', help: '사용법', spec: '명세', export: '내보내기',
+      docTitle: '게임 소리 에셋',
+      addSound: '추가', newSound: '새 소리', addCat: '분류 추가', newCat: '새 분류', catSettings: '분류 설정', kindLabel: '종류',
+      kinds: { sfx: '효과음', amb: '환경음', music: '음악' }, catIdHelp: '소문자 영문. 분류 안 소리도 따라 바뀝니다.', deleteCat: '분류 지우기',
+      catNotEmpty: '먼저 안의 소리를 옮기거나 지우세요.', moveTo: '분류 옮기기', deleteSound: '지우기', deleteMany: (n) => `${n}개 지우기`, confirmDelete: (n) => `${n}개를 지울까요? 되돌릴 수 없어요.`,
+      idRule: 'id 규칙', idHelp: '모양에는 {kind}(종류 앞말), {cat}(분류 id), {name}(이름을 영어 단어로)을 쓸 수 있어요.', idPattern: '모양', idSep: '구분자', idPrefix: '앞말',
+      idCheck: '규칙에 안 맞는 id 표시', idExample: (s, n) => `예: ${s} · 지금 규칙에 안 맞는 id ${n}개`, idRenameAll: '모든 id를 규칙대로 다시 짓기', idRenamed: (n) => `id ${n}개를 바꿨어요`,
+      specKeepsAudio: (n) => `이미 만든 소리 ${n}개는 그대로 둡니다. 지운 항목의 소리만 사라집니다.`, specNewCats: (list) => `새 분류: ${list}`, specIdWarn: (n, list) => `id ${n}개가 id 규칙과 달라요. 받은 그대로 씁니다: ${list}`,
+      exportFormat: '파일', fmt: '형식', rate: '샘플레이트', bits: '비트', quality: '품질', qualities: { high: '높게', mid: '보통', low: '작게' },
+      folders: '폴더', foldersFlat: '한 폴더', foldersCat: '분류별 폴더', engine: '게임 엔진', engineNone: '없음(파일만)',
+      bundleAudio: (p) => `승인한 소리, ${p}`, bundleGodot: 'Godot 4: 플러그인과 동적 소리마다 장면 하나(godot/)', encoding: (i, n) => `변환 중 ${i}/${n}…`, exportFailed: (m) => `내보내기 실패: ${m}`,
+      dynHead: '동적 소리', addDyn: '동적 소리 추가', newDyn: '새 동적 소리', dynType: '종류', dynTypes: { ambience: '층 환경음', music: '변하는 음악' }, dynLayers: (n) => `층 ${n}개`,
+      params: '게임 값', addParam: '값 추가', param: '값', paramDefault: '처음 값', intensity: '세기', layersHead: '층', addLayer: '층 추가', always: '항상',
+      roles: { bed: '반복', scatter: '가끔', stem: '음악 층' }, onRange: '커지는 구간', fadeFrom: '이 값에서 무음', fadeTo: '이 값에서 최대', gap: '간격 초', beatsPerBar: '마디당 박',
+      dynNoSounds: '먼저 소리를 만들거나 가져오세요. 층은 그 소리로 만듭니다.', dynHelp: '값을 움직이면 층이 바뀌는 걸 들을 수 있어요. 게임도 같은 값을 넣습니다. 예: Godot에서 set_param("intensity", 0.8).',
+      specField: { name: '이름', category: '분류', length: '길이', loop: '반복', when: '쓰이는 때', description: '설명' }, openAsset: '들어가기', rename: '이름 바꾸기', unapprove: '승인 취소', menu: '메뉴', settings: '설정', language: '언어', gameInfo: '게임 정보', stagesLabel: '진행 단계', help: '사용법', spec: '명세', export: '내보내기',
       backToMusic: '음악 작업실로', category: '분류', board: '에셋 보드', playAll: '전체 듣기', stopAll: '전체 듣기 멈춤', hoverPlay: '올리면 듣기',
       acceptAll: '모두 채택', rejectAll: '모두 버림', selectAll: '전체 선택', deselect: '선택 해제', approve: '승인', approved: '승인됨', clear: '해제',
       ask: '수정 요청', send: '보내기',
@@ -168,10 +236,11 @@ ${p.form}`,
 - game: 게임 이름
 - platform: ${p.platforms} 중 주요 기기
 - style: 게임 전체의 소리 방향, 한두 문장
+- categories: 이 게임의 소리 분류. 각각 { id, name, kind }, kind는 sfx(효과음), amb(환경음), music(음악). ${p.cats}에서 시작해 게임에 맞게 더하고 바꾸고 빼세요
 - assets: 소리 목록
-  - id: 효과음 sfx_, 환경음 amb_, 음악 bgm_ 로 시작하는 소문자 영문. 코드에 이미 쓰는 이름이 있으면 그대로
+  - id: ${p.idRule}. 코드에 이미 쓰는 이름이 있으면 그대로
   - name: 사람이 읽을 이름
-  - category: ${p.cats} 중 하나
+  - category: categories의 id 중 하나
   - length: 목표 길이(초). 효과음은 ${p.dur}초 이하, 환경음은 끊기지 않는 반복 구간 8초나 16초
   - loop: 반복 재생 여부. 환경음은 언제나 true
   - when: 게임의 어떤 순간에 나는 소리인지
@@ -235,7 +304,7 @@ ${p.form}`,
     document.querySelectorAll('[data-i18n-aria]').forEach((e) => e.setAttribute('aria-label', t(e.dataset.i18nAria)));
     document.querySelectorAll('[data-i18n-title]').forEach((e) => { e.title = t(e.dataset.i18nTitle); });
   }
-  const color = (cat) => CATEGORIES.find((c) => c.id === cat)?.hue || 'var(--text3)';
+  const color = (cat) => catOf(cat)?.hue || 'var(--text3)';
   const seconds = (s) => t('sec', s < 10 ? s.toFixed(s < 1 ? 2 : 1) : s.toFixed(0));
   const stems = ['#E8AE72', '#87B9E8', '#8CCDB2', '#C7A0E8', '#F3C978'];
 
@@ -252,6 +321,7 @@ ${p.form}`,
   const MAX_CHECKS = 6;
   const rules = RULES.map((r) => ({ ...r }));
   const rule = (id) => rules.find((r) => r.id === id);
+  Object.assign(rule('name'), { read: (m, a) => idOk(a.id), hint: { en: 'Follows the id rule (Settings)', ko: 'id 규칙을 따름(설정)' } });
   const broken = (a, m) => rules.filter((r) => (!r.applies || r.applies(a)) && (r.text ? !r.read(m, a) : r.bad(r.read(m, a), r)));
   const build = (a, change, note) => { const sound = synth.render(a, change); return { sound, note, change, at: new Date(), peaks: synth.peaks(sound.mix, 200), measure: synth.measure(sound) }; };
   // Stands in for the AI reworking its own result; the backend replaces this with a model call.
@@ -269,7 +339,7 @@ ${p.form}`,
   // Stands in for the AI renaming the file and recording its sources.
   function repaired(a, left) {
     if (left.some((r) => r.id === 'name')) {
-      const old = a.id; a.id = `sfx_${old.replace(/_sfx$/, '')}`;
+      const old = a.id; a.id = makeId(nm(a), a.cat, new Set(assets.filter((x) => x !== a).map((x) => x.id)));
       if (focused === old) focused = a.id;
     }
     // A brought-in sound's license is the user's to record, so the AI does not fill it in.
@@ -412,12 +482,17 @@ ${p.form}`,
   function renderBoard() {
     const box = $('board'), top = box.scrollTop; box.textContent = '';
     box.append(...banner());
-    for (const c of CATEGORIES) {
+    box.append(dynSection());
+    for (const c of cats) {
       const list = visible().filter((a) => a.cat === c.id);
-      if (!list.length) continue;
+      if (!list.length && (filter.status || filter.imported || (filter.cat && filter.cat !== c.id))) continue;
       const group = el('div', 'group'), h = el('h2'), dot = el('i');
-      group.style.setProperty('--c', c.hue);
+      group.style.setProperty('--c', c.hue); group.dataset.cat = c.id;
       h.append(dot, tx(c.name), el('span', '', String(list.length)));
+      const add = el('button', 'ghost', '+ ' + t('addSound')); add.className = 'ghost addSound'; add.onclick = () => addSound(c.id);
+      const more = iconButton('gear', t('catSettings'), () => catDialog(c), 'ghost iconBtn catGear');
+      h.append(add, more);
+      h.addEventListener('contextmenu', (e) => { e.preventDefault(); catDialog(c); });
       const pickable = ready(list);
       if (pickable.length) {
         const all = el('button', 'ghost', pickable.every((x) => selected.has(x.id)) ? t('deselect') : t('selectAll'));
@@ -428,6 +503,7 @@ ${p.form}`,
       grid.append(...list.map(makeTile));
       group.append(h, grid); box.append(group);
     }
+    if (!filter.status && !filter.imported) { const addC = el('button', 'ghost addCat', '+ ' + t('addCat')); addC.onclick = newCat; box.append(addC); }
     box.scrollTop = top;
     assets.filter((a) => a.versions.length).forEach(drawTile);
     renderSide(); renderHeader(); syncDock();
@@ -473,7 +549,8 @@ ${p.form}`,
       return b;
     };
     side.append(el('h2', '', t('category')), item(t('all'), assets.length, !filter.cat, () => { filter.cat = null; renderBoard(); }));
-    for (const c of CATEGORIES) side.append(item(tx(c.name), assets.filter((a) => a.cat === c.id).length, filter.cat === c.id, () => { filter.cat = filter.cat === c.id ? null : c.id; renderBoard(); }, c.hue));
+    for (const c of cats) side.append(item(tx(c.name), assets.filter((a) => a.cat === c.id).length, filter.cat === c.id, () => { filter.cat = filter.cat === c.id ? null : c.id; renderBoard(); }, c.hue));
+    const addC = el('button', 'addCat', '+ ' + t('addCat')); addC.onclick = newCat; side.append(addC);
     side.append(el('h2', '', t('statusHead')));
     for (const [id, label] of Object.entries(t('status'))) {
       const n = assets.filter((a) => a.status === id).length;
@@ -521,6 +598,57 @@ ${p.form}`,
     t.style.setProperty('--hold', HOLD_MS + 'ms'); t.classList.add('pressing');
     addEventListener('pointerup', end); addEventListener('pointercancel', end); addEventListener('pointermove', move);
   }
+  // One sound at a time, for people without an agent writing a spec: an empty slot named in place.
+  function addSound(cat) {
+    leaveDemoKeep();
+    const name = t('newSound'), a = blank({ id: makeId(name, cat), name, cat, music: kindOf(cat) === 'music', loop: kindOf(cat) !== 'sfx' });
+    assets.push(a); if (stage === 'sample' && !assets.some((x) => x.sample)) stage = 'expand';
+    filter = { cat: null, status: null, imported: false }; renderBoard();
+    const tile = tileOf(a); tile?.scrollIntoView({ block: 'nearest' }); renameTile(a, true);
+  }
+  // Leaving the stand-in board by building one's own keeps what is there (unlike an import, which replaces it).
+  function leaveDemoKeep() { if (demo) demo = false; }
+  function newCat() { const c = addCat(t('newCat')); renderBoard(); catDialog(c, true); }
+  function catDialog(c, fresh = false) {
+    openDialog(t('catSettings')); reopen = () => catDialog(c);
+    const name = el('input'); name.value = tx(c.name); name.setAttribute('aria-label', t('nameLabel'));
+    name.oninput = () => { c.name = name.value; renderBoard(); };
+    const kind = el('select'); kind.setAttribute('aria-label', t('kindLabel'));
+    KINDS.forEach((k) => kind.add(new Option(t('kinds')[k], k))); kind.value = c.kind;
+    kind.onchange = () => { c.kind = kind.value; assets.filter((a) => a.cat === c.id).forEach((a) => { a.music = c.kind === 'music'; if (c.kind !== 'sfx') a.loop = true; }); renderBoard(); };
+    const id = el('input'); id.value = c.id; id.setAttribute('aria-label', 'id'); id.title = t('catIdHelp');
+    id.onchange = () => {
+      const next = slugOf(id.value).join('_');
+      if (!next || catOf(next)) { id.value = c.id; return; }
+      assets.filter((a) => a.cat === c.id).forEach((a) => { a.cat = next; });
+      if (filter.cat === c.id) filter.cat = next;
+      c.id = next; id.value = next; renderBoard();
+    };
+    const row = (label, input) => { const r = el('label', 'lineItem'); r.append(el('span', 'grow', label), input); return r; };
+    const del = el('button', 'ghost', t('deleteCat'));
+    del.onclick = () => {
+      if (assets.some((a) => a.cat === c.id)) { toast(t('catNotEmpty'), 3000); return; }
+      cats.splice(cats.indexOf(c), 1); if (filter.cat === c.id) filter.cat = null; dlg.close(); renderBoard();
+    };
+    const foot = el('div', 'dlgRow'); foot.append(del);
+    dlg.append(row(t('nameLabel'), name), row(t('kindLabel'), kind), row('id', id), foot);
+    if (!dlg.open) dlg.showModal();
+    if (fresh) { name.focus(); name.select(); }
+  }
+  // Right-click actions on several tiles act on the whole selection when the clicked tile is part of it.
+  const targetsOf = (a) => (selected.has(a.id) && selected.size > 1 ? [...selected].map(byId).filter(Boolean) : [a]);
+  function moveTo(list, cat) {
+    list.forEach((a) => { a.cat = cat; a.music = kindOf(cat) === 'music'; if (kindOf(cat) !== 'sfx') a.loop = true; a.guessed = false; });
+    renderBoard();
+  }
+  function removeAssets(list) {
+    if (!confirm(t('confirmDelete', list.length))) return;
+    stopSound();
+    list.forEach((a) => { selected.delete(a.id); const i = assets.indexOf(a); if (i >= 0) assets.splice(i, 1); });
+    dynamics.forEach((d) => { d.layers = d.layers.filter((l) => byId(l.asset)); });
+    renderBoard();
+  }
+
   // Right-click on a tile: the common actions in one place.
   const tileCtx = el('div'); tileCtx.id = 'tileMenu'; tileCtx.setAttribute('role', 'menu'); tileCtx.hidden = true; document.body.append(tileCtx);
   const closeTileMenu = () => { tileCtx.hidden = true; };
@@ -532,10 +660,15 @@ ${p.form}`,
       b.onclick = () => { closeTileMenu(); fn(); }; tileCtx.append(b);
     };
     const canApprove = a.status === 'draft' || a.status === 'flagged';
+    const many = targetsOf(a);
     item(t('openAsset'), 'Enter', () => openDetail(a), !a.versions.length);
     item(t('rename'), 'F2', () => renameTile(a));
     if (a.status === 'approved') item(t('unapprove'), 'A', () => { a.status = 'draft'; renderBoard(); });
     else item(t('approve'), 'A', () => { approve(a); renderBoard(); }, !canApprove);
+    tileCtx.append(el('div', 'ctxHead', t('moveTo')));
+    for (const c of cats) if (c.id !== a.cat) item(tx(c.name), '', () => moveTo(many, c.id));
+    tileCtx.append(el('div', 'ctxSep'));
+    item(many.length > 1 ? t('deleteMany', many.length) : t('deleteSound'), 'Del', () => removeAssets(many));
     tileCtx.hidden = false;
     const q = tileCtx.getBoundingClientRect();
     tileCtx.style.left = Math.min(x, innerWidth - q.width - 8) + 'px'; tileCtx.style.top = Math.min(y, innerHeight - q.height - 8) + 'px';
@@ -549,7 +682,7 @@ ${p.form}`,
     else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus(); }
   });
   // Edits the name in place on the tile: Enter or leaving keeps it, Escape puts the old one back.
-  function renameTile(a) {
+  function renameTile(a, renamingNew = false) {
     const tile = tileOf(a), label = tile?.querySelector('.name');
     if (!label) return;
     const input = el('input', 'renameIn'); input.value = nm(a); input.setAttribute('aria-label', t('rename'));
@@ -557,7 +690,7 @@ ${p.form}`,
     const finish = (keep) => {
       if (done) return; done = true;
       const value = input.value.trim();
-      if (keep && value && value !== nm(a)) a.name = value;
+      if (keep && value && value !== nm(a)) { a.name = value; if (renamingNew) a.id = makeId(value, a.cat, new Set(assets.filter((x) => x !== a).map((x) => x.id))); }
       renderBoard(); tileOf(byId(a.id))?.focus();
     };
     input.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') finish(true); if (e.key === 'Escape') finish(false); };
@@ -633,6 +766,7 @@ ${p.form}`,
     else if (e.key.toLowerCase() === 'x' && a?.versions.length) toggle(a);
     else if (e.key.toLowerCase() === 'a' && a) setStatus(a, 'approved');
     else if (e.key === 'F2' && a) { e.preventDefault(); renameTile(a); }
+    else if (e.key === 'Delete' && a) { e.preventDefault(); removeAssets(targetsOf(a)); }
     else if (e.key.toLowerCase() === 'r' && a) setStatus(a, 'flagged');
     else if (e.key === 'Escape') { selected.clear(); refreshSelection(); }
   });
@@ -923,11 +1057,12 @@ ${p.form}`,
     const ex = t('example'), ids = [['sfx_ui_click', 'ui', 0.1, false], ['sfx_combat_parry', 'combat', 0.3, false], ['bgm_garden', 'bgm', 60, true]];
     return JSON.stringify({ game: tx(game), platform: 'mobile', style: ex.style, assets: ids.map(([id, category, length, loop], k) => ({ id, name: ex.assets[k].name, category, length, loop, when: ex.assets[k].when, description: ex.assets[k].description })), questions: [] }, null, 2);
   };
-  const specForm = () => JSON.stringify({ game: '', platform: '', style: '', assets: [{ id: '', name: '', category: '', length: 0, loop: false, when: '', description: '' }], questions: [] }, null, 2);
+  const specForm = () => JSON.stringify({ game: '', platform: '', style: '', categories: [{ id: '', name: '', kind: '' }], assets: [{ id: '', name: '', category: '', length: 0, loop: false, when: '', description: '' }], questions: [] }, null, 2);
   // Only what this tool knows goes in. The game itself is the other agent's to fill in.
   const specPrompt = () => t('specPrompt', {
     platforms: PROFILES.map((f) => f.id).filter((id) => id !== 'wide').join(', '),
-    cats: CATEGORIES.map((c) => c.id).join(', '),
+    cats: cats.map((c) => `${c.id}(${c.kind})`).join(', '),
+    idRule: idRuleText(),
     dur: rule('dur').limit,
     licenses: LICENSES.map((l) => `${l.name}(${l.license})`).join(', '),
     form: specForm(),
@@ -970,10 +1105,17 @@ ${p.form}`,
     let spec;
     try { spec = JSON.parse(text); } catch (e) { return [el('p', 'note err', t('notJson', e.message))]; }
     if (!Array.isArray(spec.assets)) return [el('p', 'note err', t('noAssets'))];
-    const cats = CATEGORIES.map((c) => c.id), bad = spec.assets.filter((x) => !/^(sfx|amb|bgm)_[a-z0-9_]+$/.test(x.id || '') || !cats.includes(x.category));
-    if (bad.length) return [el('p', 'note err', t('badItems', bad.length, bad.map((x) => x.id || t('noName')).join(', ')))];
+    const seen = new Set(), bad = spec.assets.filter((x) => !x || typeof x.id !== 'string' || !x.id.trim() || seen.has(x.id) || !seen.add(x.id));
+    if (bad.length) return [el('p', 'note err', t('badItems', bad.length, bad.map((x) => x?.id || t('noName')).join(', ')))];
+    const specCats = Array.isArray(spec.categories) ? spec.categories.filter((c) => c && c.id) : [];
+    const newCats = [...new Set([...specCats.map((c) => c.id), ...spec.assets.map((x) => x.category).filter(Boolean)])].filter((id) => !catOf(id));
+    const offRule = spec.assets.filter((x) => !idOk(x.id));
     const ids = new Set(spec.assets.map((x) => x.id)), added = spec.assets.filter((x) => !byId(x.id)), changed = spec.assets.filter((x) => byId(x.id) && specDiff(byId(x.id), x).length), kept = spec.assets.filter((x) => byId(x.id) && !specDiff(byId(x.id), x).length), gone = assets.filter((a) => !ids.has(a.id));
     const out = [el('h3', '', t('planSummary', added.length, changed.length, kept.length, gone.length))];
+    const made = assets.filter((a) => a.versions.length && ids.has(a.id)).length;
+    if (made) out.push(el('p', 'note', t('specKeepsAudio', made)));
+    if (newCats.length) out.push(el('p', 'note', t('specNewCats', newCats.join(', '))));
+    if (offRule.length) out.push(el('p', 'note', t('specIdWarn', offRule.length, offRule.slice(0, 6).map((x) => x.id).join(', '))));
     const line = (tag, cls, text) => { const r = el('div', 'lineItem'); r.append(el('span', 'tag ' + cls, tag), el('span', 'grow', text)); return r; };
     added.forEach((x) => out.push(line(t('tagAdd'), 'add', `${x.name} · ${x.id}`)));
     changed.forEach((x) => out.push(line(t('tagChange'), 'chg', `${nm(byId(x.id))}: ${specDiff(byId(x.id), x).map((k) => t('specField')[k]).join(', ')}`)));
@@ -986,7 +1128,9 @@ ${p.form}`,
       if (spec.game) game = spec.game;
       if (spec.style) brief = spec.style;
       demo = false;
-      added.forEach((x) => { const a = { id: x.id, name: x.name, cat: x.category, music: false, loop: !!x.loop || x.id.startsWith('amb_'), layers: x.id.startsWith('amb_') ? [STUDIO_DATA.bed(x.name, x.length >= 16 ? 16 : 8, 0.1, 0.4, [[1, 0.25, 0], [3, 0.15, 1]])] : [{ kind: 'tone', from: 500, to: 700, len: Math.min(0.6, x.length || 0.3), wave: 'triangle', gain: 0.4, at: 0 }], status: 'draft', versions: [], current: 0, drafts: [], pick: -1, chat: [], progress: 0, length: x.length, when: x.when || '', description: x.description || '' }; assets.push(a); make(a, {}, { key: 'fromSpec' }); });
+      for (const c of specCats) { const have = catOf(c.id); if (have) { if (c.name) have.name = c.name; if (KINDS.includes(c.kind)) have.kind = c.kind; } else addCat(c.name || c.id, c.kind, c.id); }
+      for (const id of newCats) if (!catOf(id)) addCat(id, KIND_OF[id] || (spec.assets.find((x) => x.category === id)?.loop ? 'amb' : 'sfx'), id);
+      added.forEach((x) => { x.category ||= cats[0].id; const amb = kindOf(x.category) === 'amb'; const a = { id: x.id, name: x.name, cat: x.category, music: kindOf(x.category) === 'music', loop: !!x.loop || amb, layers: amb ? [STUDIO_DATA.bed(x.name, x.length >= 16 ? 16 : 8, 0.1, 0.4, [[1, 0.25, 0], [3, 0.15, 1]])] : [{ kind: 'tone', from: 500, to: 700, len: Math.min(0.6, x.length || 0.3), wave: 'triangle', gain: 0.4, at: 0 }], status: 'draft', versions: [], current: 0, drafts: [], pick: -1, chat: [], progress: 0, length: x.length, when: x.when || '', description: x.description || '' }; assets.push(a); make(a, {}, { key: 'fromSpec' }); });
       changed.forEach((x) => { const a = byId(x.id); for (const k of specDiff(a, x)) a[SPEC_KEYS[k]] = k === 'loop' ? !!x.loop : x[k] ?? ''; });
       if (remove) gone.forEach((a) => assets.splice(assets.indexOf(a), 1));
       dlg.close(); renderBoard(); toast(t('specApplied', added.length));
@@ -1001,14 +1145,27 @@ ${p.form}`,
     const left = going.filter((a) => issues(a).length);
     if (left.length) dlg.append(el('p', 'note err', t('exportIssues', left.length, left.map(nm).join(', '))));
     if (undone.length) dlg.append(el('p', 'note', t('exportUnapproved', undone.length)));
+    dlg.append(el('h3', '', t('exportFormat')));
+    const opt = (label, key, choices) => {
+      const s = el('select'); s.setAttribute('aria-label', label);
+      choices.forEach(([v, l]) => s.add(new Option(l, v))); s.value = String(exportOpts[key]);
+      s.onchange = () => { exportOpts[key] = /^\d+$/.test(s.value) ? +s.value : s.value; autosave(); exportDialog(); };
+      const r = el('label', 'lineItem'); r.append(el('span', 'grow', label), s); dlg.append(r);
+    };
+    opt(t('fmt'), 'format', [['wav', 'WAV'], ['ogg', 'OGG Vorbis'], ['mp3', 'MP3']]);
+    opt(t('rate'), 'rate', [[44100, '44.1 kHz'], [48000, '48 kHz'], [22050, '22.05 kHz']]);
+    if (exportOpts.format === 'wav') opt(t('bits'), 'bits', [[16, '16 bit'], [24, '24 bit']]);
+    else opt(t('quality'), 'quality', [['high', t('qualities').high], ['mid', t('qualities').mid], ['low', t('qualities').low]]);
+    opt(t('folders'), 'folders', [['flat', t('foldersFlat')], ['cat', t('foldersCat')]]);
+    opt(t('engine'), 'engine', [['none', t('engineNone')], ['godot', 'Godot 4']]);
     dlg.append(el('h3', '', t('inBundle')));
-    for (const item of t('bundleItems')) dlg.append(Object.assign(el('div', 'lineItem'), { textContent: item }));
+    for (const item of [t('bundleAudio', exportPath({ id: '<id>', cat: '<group>' })), ...t('bundleItems').slice(1), ...(exportOpts.engine === 'godot' ? [t('bundleGodot')] : [])]) dlg.append(Object.assign(el('div', 'lineItem'), { textContent: item }));
     dlg.append(el('h3', '', t('licenses')));
     dlg.append(...licenseRows());
     const row = el('div', 'dlgRow'), go = el('button', 'primary', t('exportBundle')), lic = el('button', '', t('copyLicenses'));
-    go.id = 'exportGo'; go.onclick = () => { dlg.close(); stage = 'export'; renderHeader(); exportBundle(); };
+    go.id = 'exportGo'; go.onclick = () => { dlg.close(); stage = 'export'; renderHeader(); exportBundle().catch((e) => toast(t('exportFailed', e.message || e), 6000)); };
     lic.onclick = copyLicenses; row.append(lic, go); dlg.append(row);
-    dlg.showModal();
+    if (!dlg.open) dlg.showModal();
   }
   function gameDialog() {
     openDialog(tx(game)); reopen = gameDialog;
@@ -1027,7 +1184,26 @@ ${p.form}`,
     const hover = el('input'); hover.type = 'checkbox'; hover.checked = $('hoverPlay').checked;
     hover.onchange = () => { $('hoverPlay').checked = hover.checked; };
     const row2 = el('label', 'lineItem'); row2.append(el('span', 'grow', t('hoverPlay')), hover);
-    dlg.append(row, row2); if (!dlg.open) dlg.showModal();
+    dlg.append(row, row2, el('h3', '', t('idRule')), el('p', 'note', t('idHelp')));
+    const field = (label, value, set, width) => { const i = el('input'); i.value = value; i.setAttribute('aria-label', label); if (width) i.style.width = width; i.oninput = () => { set(i.value); example(); }; const r = el('label', 'lineItem'); r.append(el('span', 'grow', label), i); dlg.append(r); return i; };
+    const pat = field(t('idPattern'), idRule.pattern, (v) => { idRule.pattern = v.trim() || '{name}'; }, '200px');
+    const sep = el('select'); sep.setAttribute('aria-label', t('idSep')); [['_', 'snake_case'], ['-', 'kebab-case'], ['.', 'dot.case']].forEach(([v, l]) => sep.add(new Option(l, v))); sep.value = idRule.sep;
+    sep.onchange = () => { idRule.sep = sep.value; idRule.pattern = idRule.pattern.replace(/\}[_.-]/g, '}' + sep.value).replace(/[_.-]\{/g, sep.value + '{'); pat.value = idRule.pattern; example(); };
+    const sepRow = el('label', 'lineItem'); sepRow.append(el('span', 'grow', t('idSep')), sep); dlg.append(sepRow);
+    for (const k of KINDS) field(`${t('idPrefix')} · ${t('kinds')[k]}`, idRule.prefix[k] ?? '', (v) => { idRule.prefix[k] = slugOf(v).join('') || k; }, '120px');
+    const check = el('input'); check.type = 'checkbox'; check.checked = idRule.check; check.onchange = () => { idRule.check = check.checked; renderBoard(); };
+    const checkRow = el('label', 'lineItem'); checkRow.append(el('span', 'grow', t('idCheck')), check); dlg.append(checkRow);
+    const ex = el('p', 'note'); dlg.append(ex);
+    function example() { ex.textContent = t('idExample', makeId('Sword swing', cats.find((c) => c.kind === 'sfx')?.id || cats[0]?.id || 'ui', new Set()), assets.filter((a) => !idOk(a.id)).length); }
+    example();
+    const redo = el('button', '', t('idRenameAll'));
+    redo.onclick = () => {
+      const taken = new Set(); let n = 0;
+      for (const a of assets) { const old = a.id; a.id = makeId(nm(a), a.cat, taken); if (a.id !== old) { n++; selected.delete(old); dynamics.forEach((d) => d.layers.forEach((l) => { if (l.asset === old) l.asset = a.id; })); } }
+      renderBoard(); example(); toast(t('idRenamed', n));
+    };
+    const foot = el('div', 'dlgRow'); foot.append(redo); dlg.append(foot);
+    if (!dlg.open) dlg.showModal();
   }
 
   /* ---------- header menu ---------- */
@@ -1100,7 +1276,7 @@ ${p.form}`,
     let total = 0;
     for (const e of entries.filter((x) => !importer.junk(x.path))) {
       const zipped = /\.zip$/i.test(e.path), size = e.size || 0;
-      if (!zipped && !AUDIO.test(e.path) && !/\.json$/i.test(e.path)) { if (!/\.(md|txt)$/i.test(e.path)) sk.type++; continue; }
+      if (!zipped && !AUDIO.test(e.path) && !/\.json$/i.test(e.path)) { if (!/\.(md|txt|gd|tscn|tres|cfg)$/i.test(e.path)) sk.type++; continue; }
       if (size > (zipped ? LIMITS.total : LIMITS.file) || total + size > LIMITS.total) { sk.big++; continue; }
       total += size;
       if (!zipped) { found.push(e); continue; }
@@ -1110,7 +1286,7 @@ ${p.form}`,
         for (const z of inside) {
           if (importer.junk(z.path)) continue;
           if (AUDIO.test(z.path) || /\.json$/i.test(z.path)) found.push({ path: z.path, size: z.size, bytes: async () => z.bytes });
-          else if (!/\.(md|txt)$/i.test(z.path)) sk.type++;
+          else if (!/\.(md|txt|gd|tscn|tres|cfg)$/i.test(z.path)) sk.type++;
         }
       } catch { sk.bad++; }
     }
@@ -1138,9 +1314,9 @@ ${p.form}`,
         const data = await decode(await f.bytes()), path = root ? f.path.slice(root.length + 1) : f.path, secs = data.length / 22050;
         if (!data.length) throw new Error('empty');
         if (!left) { leaveDemo(root); left = true; taken = takenIds(); }
-        const { cat, sure } = importer.guessCategory(path, secs), name = importer.guessName(path);
-        const loopy = cat === 'env' || cat === 'bgm' || /loop/i.test(path);
-        const a = blank({ id: importer.makeId(name, cat, taken), name, cat, music: cat === 'bgm', loop: loopy, imported: true, file: f.path, license: '', holder: '', guessed: !sure, status: 'approved' });
+        const guess = importer.guessCategory(path, secs), cat = fitCat(guess.cat), sure = guess.sure, name = importer.guessName(path);
+        const loopy = kindOf(cat) !== 'sfx' || /loop/i.test(path);
+        const a = blank({ id: makeId(name, cat, taken), name, cat, music: kindOf(cat) === 'music', loop: loopy, imported: true, file: f.path, license: '', holder: '', guessed: !sure, status: 'approved' });
         fromAudio(a, data, 'importedNote');
         assets.push(a); added.push(a);
       } catch { sk.bad++; }
@@ -1157,13 +1333,17 @@ ${p.form}`,
     game = spec.game || game; brief = spec.style || '';
     const target = PROFILES.find((f) => f.id === spec.platform);
     if (target) { platform = target.id; rule('loud').range = [...target.loud]; }
+    if (Array.isArray(spec.categories) && spec.categories.length) cats = spec.categories.filter((c) => c && c.id).map((c, i) => ({ id: c.id, name: c.name || c.id, kind: KINDS.includes(c.kind) ? c.kind : 'sfx', hue: c.color || CATEGORIES.find((d) => d.id === c.id)?.hue || HUES[i % HUES.length] }));
+    if (spec.id_rule?.pattern) idRule = { ...idRule, ...spec.id_rule, prefix: { ...idRule.prefix, ...spec.id_rule.prefix } };
+    if (spec.export) exportOpts = { ...exportOpts, ...spec.export };
+    dynamics = Array.isArray(spec.dynamics) ? spec.dynamics.map(dynFromSpec) : [];
     let done = 0;
     for (const x of spec.assets) {
       if (spec.assets.length > 1) { toast(t('importing', ++done, spec.assets.length), 0); await breathe(); }
       if (!x || !x.id) continue;
       const audio = files.find((f) => AUDIO.test(f.path) && ((x.file && f.path.endsWith(x.file)) || stem(f.path) === x.id));
-      const a = blank({ id: x.id, name: x.name || x.id, cat: CATEGORIES.some((c) => c.id === x.category) ? x.category : importer.guessCategory(x.id, x.length || 0).cat,
-        loop: !!x.loop, music: x.category === 'bgm', when: x.when || '', description: x.description || '', length: x.length ?? null,
+      const a = blank({ id: x.id, name: x.name || x.id, cat: catOf(x.category) ? x.category : fitCat(importer.guessCategory(x.id, x.length || 0).cat),
+        loop: !!x.loop, music: kindOf(x.category) === 'music', when: x.when || '', description: x.description || '', length: x.length ?? null,
         imported: x.origin === 'imported', file: x.source_file || '', license: x.license || '', holder: x.holder || '', prompt: x.prompt || '' });
       if (audio) {
         try { fromAudio(a, await decode(await audio.bytes()), a.imported ? 'importedNote' : 'fromBundle'); a.status = x.status === 'approved' || !x.status ? 'approved' : 'draft'; }
@@ -1179,8 +1359,8 @@ ${p.form}`,
     leaveDemo();
     const taken = takenIds();
     for (const x of list) {
-      const id = x.id && !taken.has(x.id) ? (taken.add(x.id), x.id) : importer.makeId(x.name, x.cat, taken);
-      assets.push(blank({ id, name: x.name, cat: x.cat, loop: x.loop, music: x.cat === 'bgm', when: x.when, description: x.description, length: x.length }));
+      const cat = fitCat(x.cat), id = x.id && !taken.has(x.id) ? (taken.add(x.id), x.id) : makeId(x.name, cat, taken);
+      assets.push(blank({ id, name: x.name, cat, loop: x.loop, music: kindOf(cat) === 'music', when: x.when, description: x.description, length: x.length }));
     }
     if (stage === 'sample') stage = 'expand';
     renderOpen(); toast(t('slotsAdded', list.length));
@@ -1195,12 +1375,12 @@ ${p.form}`,
       const m = heard(ref).measure, r1 = (v) => Math.round(v * 10) / 10;
       refText = t('refPrompt', { name: nm(ref), file: ref.file || `${ref.id}.wav`, seconds: r1(m.seconds), loop: !!ref.loop, peak: r1(m.peak), loud: r1(m.loud), low: m.low, mid: m.mid, high: m.high, bright: m.bright, lead: Math.round(m.lead), tail: Math.round(m.tail) });
     }
-    const cat = CATEGORIES.find((c) => c.id === a.cat);
+    const cat = catOf(a.cat);
     return t('fillPrompt', { name: nm(a), id: a.id, cat: cat ? tx(cat.name) : a.cat, game: tx(game), when: a.when, description: a.description, loop: !!a.loop, length: a.length, style: tx(brief), ref: refText });
   }
   // Stands in for the model that reads the prompt; it at least follows the reference's length and band balance.
   function layersFor(a, m) {
-    if (a.cat === 'bgm') { a.music = true; return STUDIO_DATA.music(a.id, a.name, 100, 57, 'bright').layers; }
+    if (kindOf(a.cat) === 'music') { a.music = true; return STUDIO_DATA.music(a.id, a.name, 100, 57, 'bright').layers; }
     if (a.loop) return [STUDIO_DATA.bed('main', (a.length || m?.seconds || 8) >= 12 ? 16 : 8, m ? clamp(m.bright / 6000, 0.03, 0.6) : 0.1, 0.4, [[1, 0.25, 0], [3, 0.15, 1]])];
     const len = clamp(m ? m.seconds : a.length || 0.3, 0.05, 2), f = m ? clamp(m.bright, 150, 3000) : 600, airy = m ? m.high / 100 : 0.3;
     return [{ kind: 'tone', from: f * 1.2, to: f * 0.8, len, wave: 'triangle', gain: 0.45 * (1 - airy / 2), at: 0 }, { kind: 'noise', len: len * 0.8, cutoff: clamp(airy + 0.2, 0.1, 0.95), gain: 0.35 * (0.3 + airy), attack: 0.002, at: 0 }];
@@ -1221,7 +1401,7 @@ ${p.form}`,
   function likeThis(ref) {
     let list = assets.filter((a) => a.status === 'pending' && a.cat === ref.cat);
     if (!list.length) {
-      const a = blank({ id: importer.makeId(`${nm(ref)} like`, ref.cat, takenIds()), name: t('likeName', nm(ref)), cat: ref.cat, loop: !!ref.loop, music: !!ref.music });
+      const a = blank({ id: makeId(`${nm(ref)} like`, ref.cat), name: t('likeName', nm(ref)), cat: ref.cat, loop: !!ref.loop, music: !!ref.music });
       assets.push(a); list = [a];
     }
     closeDetail(); fill(list, ref); toast(t('likeMade', list.length));
@@ -1230,10 +1410,10 @@ ${p.form}`,
   /* ---------- import dialog ---------- */
   function catPicker(a, done) {
     const pick = el('select', 'catPick' + (a.guessed ? ' unsure' : ''));
-    for (const c of CATEGORIES) pick.append(Object.assign(el('option', '', tx(c.name)), { value: c.id }));
+    for (const c of cats) pick.append(Object.assign(el('option', '', tx(c.name)), { value: c.id }));
     pick.value = a.cat; pick.setAttribute('aria-label', t('category'));
     if (a.guessed) pick.title = t('guessed');
-    pick.onchange = () => { a.cat = pick.value; a.guessed = false; pick.classList.remove('unsure'); if (a.cat === 'bgm') a.music = true; done?.(); };
+    pick.onchange = () => { a.cat = pick.value; a.guessed = false; pick.classList.remove('unsure'); a.music = kindOf(a.cat) === 'music'; done?.(); };
     return pick;
   }
   function licenseFields(a) {
@@ -1294,27 +1474,199 @@ ${p.form}`,
   });
 
   /* ---------- export ---------- */
-  function exportBundle() {
+  let exportOpts = { format: 'wav', rate: 48000, bits: 16, quality: 'high', folders: 'flat', engine: 'none' };
+  const exportPath = (a) => `audio/${exportOpts.folders === 'cat' ? `${a.cat}/` : ''}${a.id}.${exportOpts.format}`;
+  // Sounds are made at the synth's rate; the chosen rate comes from the browser's own resampler.
+  async function resample(data, from, to) {
+    if (from === to) return data;
+    const off = new OfflineAudioContext(1, Math.max(1, Math.ceil(data.length * to / from)), to), buf = off.createBuffer(1, data.length, from);
+    buf.copyToChannel(data, 0);
+    const src = off.createBufferSource(); src.buffer = buf; src.connect(off.destination); src.start();
+    return (await off.startRendering()).getChannelData(0);
+  }
+  // OGG and MP3 come from wasm-media-encoders (LAME and libvorbis built to WebAssembly), loaded the first time they are asked for.
+  let encLib = null;
+  const loadEncoders = () => (encLib ||= new Promise((ok, no) => {
+    const s = document.createElement('script'); s.src = 'vendor/WasmMediaEncoder.min.js';
+    s.onload = () => ok(window.WasmMediaEncoder); s.onerror = () => { encLib = null; no(new Error('encoder script')); }; document.head.append(s);
+  }));
+  const wasmBytes = {};
+  async function encode(data, rate) {
+    const fmt = exportOpts.format;
+    if (fmt === 'wav') return importer.encodeWav(data, rate, exportOpts.bits);
+    const lib = await loadEncoders(), mime = fmt === 'mp3' ? 'audio/mpeg' : 'audio/ogg';
+    wasmBytes[fmt] ||= await (await fetch(`vendor/${fmt}.wasm`)).arrayBuffer();
+    const enc = await lib.createEncoder(mime, wasmBytes[fmt].slice(0));
+    const q = { high: [2, 6], mid: [4, 4], low: [6, 2] }[exportOpts.quality] || [2, 6];
+    enc.configure({ channels: 1, sampleRate: rate, vbrQuality: fmt === 'mp3' ? q[0] : q[1] });
+    const parts = [], take = (u) => { if (u.length) parts.push(u.slice()); };
+    take(enc.encode([data])); take(enc.finalize());
+    const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let at = 0;
+    for (const p of parts) { out.set(p, at); at += p.length; }
+    return out;
+  }
+  async function exportBundle() {
     const going = assets.filter((a) => a.status === 'approved' && a.versions.length), utf8 = (s) => new TextEncoder().encode(s);
     const spec = {
       game: tx(game), platform, style: tx(brief) || '',
+      categories: cats.map((c) => ({ id: c.id, name: tx(c.name), kind: c.kind, color: c.hue.startsWith('#') ? c.hue : undefined })),
+      id_rule: idRule, export: exportOpts,
+      dynamics: dynamics.map(dynToSpec),
       assets: assets.map((a) => {
         const v = a.versions.length ? heard(a) : null;
         return { id: a.id, name: nm(a), category: a.cat, length: v ? Math.round(v.measure.seconds * 100) / 100 : a.length ?? null, loop: !!a.loop, when: a.when || '', description: a.description || '',
-          file: going.includes(a) ? `audio/${a.id}.wav` : null, status: a.status === 'approved' ? 'approved' : a.versions.length ? 'draft' : 'pending',
+          file: going.includes(a) ? exportPath(a) : null, status: a.status === 'approved' ? 'approved' : a.versions.length ? 'draft' : 'pending',
           origin: a.imported ? 'imported' : 'made', ...(a.imported ? { source_file: a.file || '', license: a.license || '', holder: a.holder || '' } : {}), ...(a.prompt ? { prompt: a.prompt } : {}) };
       }),
       questions: [],
     };
     const credits = `# ${tx(game)}\n\n${licenseText().split('\n').slice(2).join('\n')}`;
     const lint = going.map((a) => ({ id: a.id, issues: issues(a).map((r) => r.id) }));
-    const files = [{ path: SPEC, bytes: utf8(JSON.stringify(spec, null, 2)) }, { path: 'CREDITS.md', bytes: utf8(credits) }, { path: 'lint-report.json', bytes: utf8(JSON.stringify(lint, null, 2)) },
-      ...going.map((a) => ({ path: `audio/${a.id}.wav`, bytes: importer.encodeWav(heard(a).sound.mix, heard(a).sound.rate) }))];
+    const files = [{ path: SPEC, bytes: utf8(JSON.stringify(spec, null, 2)) }, { path: 'CREDITS.md', bytes: utf8(credits) }, { path: 'lint-report.json', bytes: utf8(JSON.stringify(lint, null, 2)) }];
+    let n = 0;
+    for (const a of going) {
+      if (going.length > 1) { toast(t('encoding', ++n, going.length), 0); await breathe(); }
+      const s = heard(a).sound;
+      files.push({ path: exportPath(a), bytes: await encode(await resample(s.mix, s.rate, exportOpts.rate), exportOpts.rate) });
+    }
+    if (exportOpts.engine === 'godot') {
+      if (!window.godotExport) throw new Error('godot.js');
+      const project = { game: tx(game), assets: going.map((a) => ({ id: a.id, name: nm(a), category: a.cat, loop: !!a.loop, file: exportPath(a), seconds: heard(a).measure.seconds })), dynamics: dynamics.map(dynToSpec) };
+      for (const f of window.godotExport.build(project)) files.push({ path: f.path, bytes: utf8(f.text) });
+    }
     const link = el('a'); link.href = URL.createObjectURL(importer.zip(files));
     link.download = `${(tx(game) || 'game').replace(/[\\/:*?"<>|\s]+/g, '-')}-audio.zip`;
     document.body.append(link); link.click(); link.remove();
     setTimeout(() => URL.revokeObjectURL(link.href), 10000);
     toast(t('exported', going.length));
+  }
+
+  /* ---------- dynamic sounds: layers of existing sounds driven by game parameters ---------- */
+  let dynamics = [];
+  const DB_FLOOR = -80;
+  const dynId = () => { const taken = new Set(dynamics.map((d) => d.id)); let k = dynamics.length + 1; while (taken.has(`dyn_${k}`)) k++; return `dyn_${k}`; };
+  // A layer is silent below on[0] and full from on[1] (reversed when on[0] > on[1]); its curve in dB is what engines get.
+  const layerLevel = (l, d) => {
+    const p = d.params.find((x) => x.id === l.param);
+    if (!p) return 1;
+    const [a, b] = l.on || [0, 1], v = p.value ?? p.default ?? 0;
+    if (a === b) return v >= a ? 1 : 0;
+    return Math.max(0, Math.min(1, (v - a) / (b - a)));
+  };
+  const curveOf = (l) => {
+    const [a, b] = l.on || [0, 1];
+    return [0, 0.25, 0.5, 0.75, 1].map((k) => [Math.round((a + (b - a) * k) * 1000) / 1000, k ? Math.round(20 * Math.log10(k) * 10) / 10 : DB_FLOOR]).sort((x, y) => x[0] - y[0]);
+  };
+  const dynToSpec = (d) => ({
+    id: d.id, name: d.name, type: d.type, params: d.params.map(({ id, name, min, max, default: def }) => ({ id, name, min, max, default: def })),
+    ...(d.type === 'music' ? { bpm: d.bpm, beats_per_bar: d.beats || 4 } : {}),
+    layers: d.layers.filter((l) => byId(l.asset)).map((l) => ({ asset: l.asset, role: l.role, param: l.param || null, on: l.on, curve: l.param ? curveOf(l) : [[0, 0], [1, 0]], ...(l.role === 'scatter' ? { scatter: l.scatter } : {}) })),
+  });
+  const dynFromSpec = (x) => ({
+    id: x.id, name: x.name || x.id, type: x.type === 'music' ? 'music' : 'ambience', bpm: x.bpm || 100, beats: x.beats_per_bar || 4,
+    params: (x.params || []).map((p) => ({ ...p, value: p.default ?? 0 })),
+    layers: (x.layers || []).map((l) => ({ asset: l.asset, role: l.role || 'bed', param: l.param || '', on: l.on || [0, 1], scatter: l.scatter || { min_gap: 2, max_gap: 8, pitch: [0.9, 1.1], pan: [-0.8, 0.8] } })),
+  });
+  function dynSection() {
+    const box = el('div', 'group dynGroup'), h = el('h2');
+    h.append(el('i'), t('dynHead'), el('span', '', String(dynamics.length)));
+    const add = el('button', 'ghost addSound', '+ ' + t('addDyn')); add.onclick = newDynamic; h.append(add);
+    const grid = el('div', 'grid');
+    for (const d of dynamics) {
+      const card = el('button', 'dynCard'); card.onclick = () => dynDialog(d);
+      card.append(el('span', 'name', d.name), el('span', 'sub', `${t('dynTypes')[d.type]} · ${t('dynLayers', d.layers.length)}`));
+      if (dynPlayer?.d === d) card.classList.add('playing');
+      grid.append(card);
+    }
+    box.append(h); if (dynamics.length) box.append(grid);
+    return box;
+  }
+  function newDynamic() {
+    const d = { id: dynId(), name: t('newDyn'), type: 'ambience', bpm: 100, beats: 4, params: [{ id: 'intensity', name: t('intensity'), min: 0, max: 1, default: 0.5, value: 0.5 }], layers: [] };
+    const beds = assets.filter((a) => a.versions.length && a.loop && kindOf(a.cat) === 'amb').slice(0, 2);
+    beds.forEach((a, i) => d.layers.push({ asset: a.id, role: 'bed', param: i ? 'intensity' : '', on: [0.3, 0.8], scatter: { min_gap: 2, max_gap: 8, pitch: [0.9, 1.1], pan: [-0.8, 0.8] } }));
+    dynamics.push(d); renderBoard(); dynDialog(d);
+  }
+  let dynPlayer = null;
+  function dynStop() {
+    if (!dynPlayer) return;
+    clearTimeout(dynPlayer.timer); dynPlayer.timers.forEach(clearTimeout);
+    dynPlayer.nodes.forEach((n) => { try { n.stop(); } catch { /* over */ } });
+    dynPlayer = null;
+  }
+  const bufferOf = (a) => { const s = heard(a).sound, b = ctx.createBuffer(1, s.mix.length, s.rate); b.copyToChannel(s.mix, 0); return b; };
+  function dynStart(d) {
+    audio(); stopSound(); dynStop();
+    const at = ctx.currentTime + 0.05, p = { d, nodes: [], gains: [], timers: [] };
+    for (const l of d.layers) {
+      const a = byId(l.asset); if (!a?.versions.length) continue;
+      const g = ctx.createGain(); g.gain.value = layerLevel(l, d); g.connect(master); p.gains.push([l, g]);
+      if (l.role === 'scatter') {
+        const fire = () => {
+          if (dynPlayer !== p) return;
+          const src = ctx.createBufferSource(), pan = ctx.createStereoPanner(), s = l.scatter, r = (lo, hi) => lo + Math.random() * (hi - lo);
+          src.buffer = bufferOf(a); src.playbackRate.value = r(...(s.pitch || [1, 1])); pan.pan.value = r(...(s.pan || [0, 0]));
+          src.connect(pan); pan.connect(g); src.start(); p.nodes.push(src);
+          p.timers.push(setTimeout(fire, r(s.min_gap, s.max_gap) * 1000));
+        };
+        p.timers.push(setTimeout(fire, Math.random() * 1000 * (l.scatter.min_gap || 1)));
+      } else {
+        const src = ctx.createBufferSource(); src.buffer = bufferOf(a); src.loop = true; src.connect(g); src.start(at); p.nodes.push(src);
+      }
+    }
+    dynPlayer = p;
+  }
+  const dynLevels = () => dynPlayer?.gains.forEach(([l, g]) => g.gain.setTargetAtTime(layerLevel(l, dynPlayer.d), ctx.currentTime, 0.15));
+  function dynDialog(d) {
+    openDialog(t('dynHead')); reopen = () => dynDialog(d);
+    dlg.onclose = () => { dynStop(); dlg.onclose = null; renderBoard(); };
+    // The board card follows every change, so nothing waits on the dialog's close event.
+    const redraw = () => { const top = dlg.scrollTop; dlg.textContent = ''; build(); dlg.scrollTop = top; renderBoard(); };
+    const row = (label, ...kids) => { const r = el('label', 'lineItem'); r.append(el('span', 'grow', label), ...kids); dlg.append(r); return r; };
+    const input = (value, set, type = 'text', width) => { const i = el('input'); i.type = type; i.value = value; if (type === 'number') i.step = 'any'; if (width) i.style.width = width; i.oninput = () => { set(type === 'number' ? +i.value : i.value); dynLevels(); autosave(); }; return i; };
+    const select = (value, choices, set) => { const s = el('select'); choices.forEach(([v, l]) => s.add(new Option(l, v))); s.value = value; s.onchange = () => { set(s.value); dynLevels(); autosave(); }; return s; };
+    function build() {
+      dlg.append(iconButton('close', t('close'), () => { dynStop(); dlg.close(); renderBoard(); }, 'ghost iconBtn dlgClose'), el('h2', '', t('dynHead')));
+      const playing = dynPlayer?.d === d, play = el('button', 'primary', playing ? t('stop') : t('play'));
+      play.onclick = () => { if (dynPlayer?.d === d) dynStop(); else dynStart(d); redraw(); };
+      const top = el('div', 'dlgRow'); top.style.justifyContent = 'flex-start'; top.append(play); dlg.append(top);
+      row(t('nameLabel'), input(d.name, (v) => { d.name = v; renderBoard(); }));
+      row('id', input(d.id, (v) => { d.id = slugOf(v).join('_') || d.id; }, 'text', '160px'));
+      row(t('dynType'), select(d.type, Object.entries(t('dynTypes')), (v) => { d.type = v; d.layers.forEach((l) => { if (v === 'music') l.role = 'stem'; else if (l.role === 'stem') l.role = 'bed'; }); redraw(); }));
+      if (d.type === 'music') { row('BPM', input(d.bpm, (v) => { d.bpm = v; }, 'number', '90px')); row(t('beatsPerBar'), input(d.beats || 4, (v) => { d.beats = v; }, 'number', '90px')); }
+      dlg.append(el('h3', '', t('params')));
+      for (const p of d.params) {
+        const slider = el('input'); slider.type = 'range'; slider.min = p.min; slider.max = p.max; slider.step = (p.max - p.min) / 100; slider.value = p.value ?? p.default;
+        slider.setAttribute('aria-label', p.name); slider.oninput = () => { p.value = +slider.value; dynLevels(); };
+        const name = input(p.name, (v) => { p.name = v; }, 'text', '120px'), def = input(p.default, (v) => { p.default = v; }, 'number', '70px'); def.title = t('paramDefault');
+        const del = iconButton('close', t('deleteSound'), () => { d.params.splice(d.params.indexOf(p), 1); d.layers.forEach((l) => { if (l.param === p.id) l.param = ''; }); redraw(); }, 'ghost iconBtn');
+        const r = el('div', 'lineItem'); r.append(el('code', '', p.id), name, slider, def, del); dlg.append(r);
+      }
+      const addP = el('button', 'ghost', '+ ' + t('addParam'));
+      addP.onclick = () => { const taken = new Set(d.params.map((p) => p.id)); let k = d.params.length + 1; while (taken.has(`param_${k}`)) k++; d.params.push({ id: `param_${k}`, name: `${t('param')} ${k}`, min: 0, max: 1, default: 0, value: 0 }); redraw(); };
+      dlg.append(addP, el('h3', '', t('layersHead')));
+      const usable = assets.filter((a) => a.versions.length);
+      if (!usable.length) dlg.append(el('p', 'note', t('dynNoSounds')));
+      const roles = Object.entries(t('roles')).filter(([r]) => (d.type === 'music' ? r === 'stem' : r !== 'stem'));
+      for (const l of d.layers) {
+        const r = el('div', 'lineItem dynLayer');
+        const pick = select(l.asset, usable.map((a) => [a.id, nm(a)]), (v) => { l.asset = v; if (dynPlayer?.d === d) dynStart(d); });
+        const role = select(l.role, roles, (v) => { l.role = v; if (dynPlayer?.d === d) dynStart(d); redraw(); });
+        const param = select(l.param || '', [['', t('always')], ...d.params.map((p) => [p.id, p.name])], (v) => { l.param = v; redraw(); });
+        const del = iconButton('close', t('deleteSound'), () => { d.layers.splice(d.layers.indexOf(l), 1); if (dynPlayer?.d === d) dynStart(d); redraw(); }, 'ghost iconBtn');
+        r.append(pick, role, param);
+        if (l.param) { const a = input(l.on[0], (v) => { l.on[0] = v; }, 'number', '64px'), b = input(l.on[1], (v) => { l.on[1] = v; }, 'number', '64px'); a.title = t('fadeFrom'); b.title = t('fadeTo'); r.append(el('span', 'tag', t('onRange')), a, b); }
+        if (l.role === 'scatter') { const a = input(l.scatter.min_gap, (v) => { l.scatter.min_gap = v; }, 'number', '56px'), b = input(l.scatter.max_gap, (v) => { l.scatter.max_gap = v; }, 'number', '56px'); r.append(el('span', 'tag', t('gap')), a, b); }
+        r.append(del); dlg.append(r);
+      }
+      const addL = el('button', 'ghost', '+ ' + t('addLayer')); addL.disabled = !usable.length;
+      addL.onclick = () => { const a = usable[0]; d.layers.push({ asset: a.id, role: d.type === 'music' ? 'stem' : a.loop ? 'bed' : 'scatter', param: d.params[0]?.id || '', on: [0, 1], scatter: { min_gap: 2, max_gap: 8, pitch: [0.9, 1.1], pan: [-0.8, 0.8] } }); redraw(); };
+      const foot = el('div', 'dlgRow'), del = el('button', 'ghost', t('deleteSound'));
+      del.onclick = () => { if (!confirm(t('confirmDelete', 1))) return; dynStop(); dynamics.splice(dynamics.indexOf(d), 1); dlg.close(); renderBoard(); };
+      foot.append(del); dlg.append(addL, el('p', 'note', t('dynHelp')), foot);
+    }
+    build();
+    if (!dlg.open) dlg.showModal();
   }
 
   /* ---------- autosave: the board survives a reload, a closed tab and a trip to the game ---------- */
@@ -1334,7 +1686,8 @@ ${p.form}`,
   const recipe = (v) => ({ change: v.change, note: v.note, at: v.at });
   function snapshot() {
     return {
-      v: 1, game, brief, platform, demo, stage, loud: [...rule('loud').range],
+      v: 1, game, brief, platform, demo, stage, loud: [...rule('loud').range], cats, idRule, exportOpts,
+      dynamics: dynamics.map((d) => ({ ...d, params: d.params.map((p) => ({ ...p })) })),
       assets: assets.map((a) => {
         const { versions, drafts: options, source, progress, ...rest } = a;
         // Work that was still running comes back as it was before the request; it can be asked again.
@@ -1394,6 +1747,10 @@ ${p.form}`,
     if (!data || !Array.isArray(data.assets)) return false;
     ({ game, brief, platform, demo, stage } = data);
     if (Array.isArray(data.loud)) rule('loud').range = data.loud;
+    if (Array.isArray(data.cats) && data.cats.length) cats = data.cats;
+    if (data.idRule) idRule = data.idRule;
+    if (data.exportOpts) exportOpts = { ...exportOpts, ...data.exportOpts };
+    if (Array.isArray(data.dynamics)) dynamics = data.dynamics;
     assets.length = 0;
     for (const x of data.assets) {
       const { hasSource, ...a } = x;
@@ -1423,7 +1780,7 @@ ${p.form}`,
       const tiles = [...document.querySelectorAll('.tile')].slice(0, 40).map((t) => { const q = t.getBoundingClientRect(); return { x: q.left, y: q.top, w: q.width, h: q.height, c: resolved(color(byId(t.dataset.id).cat)) }; });
       e.source?.postMessage({ type: 'asset:tiles', tiles }, '*');
     }
-    if (e.data?.type === 'asset:hide') { queue = null; stopSound(); saveNow(); }
+    if (e.data?.type === 'asset:hide') { queue = null; stopSound(); dynStop(); saveNow(); }
   });
   function setLang(next) {
     if (!LANGS.includes(next)) return;

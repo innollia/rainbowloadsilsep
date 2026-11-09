@@ -45,6 +45,21 @@ button.primary:disabled { background:var(--raised); color:var(--disabled); }
 #tileMenu .grow { flex:1; }
 #tileMenu kbd { font:inherit; font-size:.75rem; color:var(--text3); }
 .tile .renameIn { width:100%; height:24px; font-size:.9rem; background:var(--raised); border:1px solid var(--text3); border-radius:6px; padding:0 6px; }
+.group h2 .catGear { width:32px; min-height:28px; color:var(--text3); }
+.group h2 .catGear .ico { width:16px; height:16px; }
+.addCat { margin-top:16px; color:var(--text3); }
+#side .addCat { margin-top:6px; justify-content:flex-start; font-size:.85rem; }
+#tileMenu .ctxHead { font-size:.72rem; color:var(--text3); padding:8px 12px 2px; }
+#tileMenu .ctxSep { height:1px; background:var(--divider); margin:6px 4px; }
+.dynGroup h2 i { background:var(--text2); }
+.dynCard { display:flex; flex-direction:column; align-items:flex-start; justify-content:flex-end; gap:2px; height:72px; padding:10px; background:var(--surface); border-radius:14px; border:0; text-align:left; cursor:pointer; }
+.dynCard:hover { background:var(--raised); }
+.dynCard .sub { color:var(--text3); font-size:.75rem; }
+.dynCard.playing { box-shadow:inset 0 0 0 2px var(--text); }
+.dynLayer { flex-wrap:wrap; gap:6px; }
+.dynLayer select, .lineItem input, .lineItem select { height:36px; background:var(--raised); border:0; border-radius:8px; padding:0 8px; }
+.lineItem input[type="range"] { flex:1; min-width:120px; padding:0; background:none; }
+.lineItem input[type="checkbox"] { height:auto; }
 #langPick { height:40px; background:var(--raised); border:0; border-radius:10px; padding:0 8px; }
 
 #app { height:100vh; display:grid; grid-template-rows:auto minmax(0,1fr) auto; }

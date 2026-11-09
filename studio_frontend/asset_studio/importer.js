@@ -82,7 +82,7 @@
       if (head) head.forEach((k, i) => { if (k && cells[i]) row[k] = cells[i]; });
       else {
         const [lead, ...rest] = cells;
-        if (/^(sfx|amb|bgm)_[a-z0-9_]+$/.test(lead)) row.id = lead; else row.name = lead;
+        if (/^[a-z][a-z0-9]*([_.-][a-z0-9]+)+$/.test(lead)) row.id = lead; else row.name = lead;
         const cat = rest.find((c) => catOf(c));
         if (cat) { row.category = cat; rest.splice(rest.indexOf(cat), 1); }
         if (rest.length) row.description = rest.join(' · ');
@@ -90,7 +90,7 @@
       const name = row.name || guessName(row.id || ''), cat = catOf(row.category || '') || (row.id && PREFIX[row.id.split('_')[0]]) || guessCategory(`${row.id || ''} ${name}`.trim(), 0).cat;
       const length = parseFloat(row.length);
       return {
-        id: row.id && /^(sfx|amb|bgm)_[a-z0-9_]+$/.test(row.id) ? row.id : null, name, cat,
+        id: row.id && /^[a-z0-9]+([_.-][a-z0-9]+)*$/i.test(row.id) ? row.id : null, name, cat,
         when: row.when || '', description: row.description || '', length: Number.isFinite(length) ? length : null,
         loop: row.loop ? /^(1|true|yes|y|o|네|예|반복)$/i.test(row.loop) : cat === 'env' || cat === 'bgm',
       };
@@ -98,12 +98,17 @@
   }
 
   /* ---------- WAV ---------- */
-  function encodeWav(data, rate) {
-    const out = new DataView(new ArrayBuffer(44 + data.length * 2)), text = (at, s) => [...s].forEach((c, i) => out.setUint8(at + i, c.charCodeAt(0)));
-    text(0, 'RIFF'); out.setUint32(4, 36 + data.length * 2, true); text(8, 'WAVE'); text(12, 'fmt ');
+  function encodeWav(data, rate, bits = 16) {
+    const size = bits === 24 ? 3 : 2, len = data.length * size;
+    const out = new DataView(new ArrayBuffer(44 + len)), text = (at, s) => [...s].forEach((c, i) => out.setUint8(at + i, c.charCodeAt(0)));
+    text(0, 'RIFF'); out.setUint32(4, 36 + len, true); text(8, 'WAVE'); text(12, 'fmt ');
     out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 1, true); out.setUint32(24, rate, true);
-    out.setUint32(28, rate * 2, true); out.setUint16(32, 2, true); out.setUint16(34, 16, true); text(36, 'data'); out.setUint32(40, data.length * 2, true);
-    for (let i = 0; i < data.length; i++) out.setInt16(44 + i * 2, Math.max(-1, Math.min(1, data[i])) * 0x7fff, true);
+    out.setUint32(28, rate * size, true); out.setUint16(32, size, true); out.setUint16(34, size * 8, true); text(36, 'data'); out.setUint32(40, len, true);
+    for (let i = 0; i < data.length; i++) {
+      const v = Math.max(-1, Math.min(1, data[i]));
+      if (size === 2) out.setInt16(44 + i * 2, v * 0x7fff, true);
+      else { const n = Math.round(v * 0x7fffff), at = 44 + i * 3; out.setUint8(at, n & 255); out.setUint8(at + 1, (n >> 8) & 255); out.setUint8(at + 2, (n >> 16) & 255); }
+    }
     return new Uint8Array(out.buffer);
   }
 

@@ -94,6 +94,9 @@
     { name: 'nkido (Akkado, Cedar)', license: 'MIT', holder: 'Moritz Laass', use: L('Sound synthesis engine', '소리 합성 엔진') },
     { name: 'VCSL', license: 'CC0-1.0', holder: 'Versilian Studios', use: L('Instrument samples', '악기 샘플') },
     { name: 'Kenney Audio', license: 'CC0-1.0', holder: 'Kenney.nl', use: L('SFX source material', '효과음 재료') },
+    { name: 'wasm-media-encoders', license: 'MIT', holder: 'arseneyr', use: L('OGG and MP3 export', 'OGG·MP3 내보내기') },
+    { name: 'LAME', license: 'LGPL-2.0', holder: 'The LAME Project', use: L('MP3 encoder', 'MP3 인코더') },
+    { name: 'libvorbis', license: 'BSD-3-Clause', holder: 'Xiph.Org Foundation', use: L('OGG Vorbis encoder', 'OGG Vorbis 인코더') },
   ];
 
   window.STUDIO_DATA = { bed, music: bgm, GAME: L('Starlight Garden', '별빛 정원'), BRIEF: L('A calm fantasy collecting game. Cute and warm.', '잔잔한 판타지 수집 게임. 귀엽고 따뜻하게.'), CATEGORIES, ASSETS, PROFILES, RULES, LICENSES };
