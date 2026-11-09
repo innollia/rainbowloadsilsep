@@ -37,9 +37,9 @@ button.primary:disabled { background:var(--raised); color:var(--disabled); }
 #menu button { display:flex; align-items:center; gap:10px; min-height:44px; padding:0 12px; background:none; border:0; border-radius:10px; text-align:left; cursor:pointer; }
 #menu button:hover, #menu button:focus-visible { background:var(--raised); }
 #menu .icoSlot { display:inline-grid; }
-#tileMenu { position:fixed; z-index:30; min-width:200px; display:flex; flex-direction:column; padding:6px; background:var(--surface); border:1px solid var(--divider); border-radius:14px; box-shadow:0 12px 32px rgba(0,0,0,.45); }
+#tileMenu { position:fixed; z-index:30; min-width:0; width:max-content; display:flex; flex-direction:column; padding:6px; background:var(--surface); border:1px solid var(--divider); border-radius:14px; box-shadow:0 12px 32px rgba(0,0,0,.45); }
 #tileMenu[hidden] { display:none; }
-#tileMenu button { display:flex; align-items:center; gap:16px; min-height:40px; padding:0 12px; background:none; border:0; border-radius:10px; text-align:left; cursor:pointer; }
+#tileMenu button { display:flex; align-items:center; gap:10px; min-height:40px; padding:0 12px; background:none; border:0; border-radius:10px; text-align:left; cursor:pointer; }
 #tileMenu button:hover:not(:disabled), #tileMenu button:focus-visible { background:var(--raised); }
 #tileMenu button:disabled { color:var(--text3); cursor:default; }
 #tileMenu .grow { flex:1; }

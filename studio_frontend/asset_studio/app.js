@@ -748,10 +748,15 @@ ${p.form}`,
   // Right-click on a tile: the common actions in one place.
   const tileCtx = el('div'); tileCtx.id = 'tileMenu'; tileCtx.setAttribute('role', 'menu'); tileCtx.hidden = true; document.body.append(tileCtx);
   const tileSub = el('div'); tileSub.id = 'tileSub'; tileSub.setAttribute('role', 'menu'); tileSub.hidden = true; document.body.append(tileSub);
-  function closeSub() { tileSub.hidden = true; tileCtx.querySelector('.hasSub')?.setAttribute('aria-expanded', 'false'); }
+  // Passing over another row on the way to the list does not close it at once.
+  let subTimer = 0;
+  const laterCloseSub = () => { clearTimeout(subTimer); subTimer = setTimeout(closeSub, 300); };
+  tileSub.addEventListener('pointerenter', () => clearTimeout(subTimer));
+  function closeSub() { clearTimeout(subTimer); tileSub.hidden = true; tileCtx.querySelector('.hasSub')?.setAttribute('aria-expanded', 'false'); }
   const closeTileMenu = () => { tileCtx.hidden = true; closeSub(); };
   // The group list opens beside the menu like a folder: hover or click on "Move to".
   function openSub(anchor, many, focus) {
+    clearTimeout(subTimer);
     tileSub.textContent = '';
     for (const c of catTree()) {
       const b = el('button'), d = el('i', 'dot'); b.setAttribute('role', 'menuitem');
@@ -777,7 +782,7 @@ ${p.form}`,
     const item = (label, key, fn, off = false) => {
       const b = el('button'); b.setAttribute('role', 'menuitem'); b.disabled = off;
       b.append(el('span', 'grow', label)); if (key) b.append(el('kbd', '', key));
-      b.onclick = () => { closeTileMenu(); fn(); }; b.onpointerenter = closeSub; tileCtx.append(b);
+      b.onclick = () => { closeTileMenu(); fn(); }; b.onpointerenter = laterCloseSub; tileCtx.append(b);
     };
     const canApprove = a.status === 'draft' || a.status === 'flagged';
     const many = targetsOf(a);
