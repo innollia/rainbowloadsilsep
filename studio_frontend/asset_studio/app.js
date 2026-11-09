@@ -76,6 +76,9 @@
     upload: '<path d="M12 15V4M7 8l5-5 5 5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/>',
     menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
     folderPlus: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v6M9 14h6"/>',
+    ref: '<path d="M7 3h10v18l-5-4-5 4z"/>',
+    agent: '<path d="M12 3a7 7 0 0 1 7 7v3a7 7 0 0 1-14 0v-3a7 7 0 0 1 7-7z"/><path d="M9 11h.01M15 11h.01M9.5 15c1.5 1 3.5 1 5 0"/>',
+    undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
     gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/>',
   };
   const setIcon = (el, name) => { el.innerHTML = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`; };
@@ -93,6 +96,21 @@
       tagTrash: 'To trash', specAppliedTrash: (n, g) => `Spec applied: ${n} added, ${g} not in the spec moved to the trash`,
       addSound: 'Add', newSound: 'New sound', addCat: 'Add group', newCat: 'New group', catSettings: 'Group settings', kindLabel: 'Kind',
       kinds: { sfx: 'Effect', amb: 'Ambience', music: 'Music' }, catIdHelp: 'Lowercase English. Sounds in the group follow it.', deleteCat: 'Delete group',
+      refs: 'References', refsN: (n) => `References ${n}`, refsProject: 'Project references', refsOf: (x) => `References · ${x}`,
+      refsHelp: { project: 'Everything here reaches every sound in the project.', cat: 'Everything here reaches every sound in this group and the groups inside it.', asset: 'References for this sound only. Project and group references are listed below.' },
+      refEmpty: 'No references yet.', refAdd: 'Add', refAddFile: 'Add files', refFileKinds: 'Sound, MIDI, ABC, MusicXML. Files can also be dropped here.', refAddLink: 'Add link', refAddNote: 'Add note',
+      refNotePh: 'What it should sound like, what to avoid…', refTakePh: 'What to take from this reference', refRemove: 'Remove reference', refInherited: 'Also applies here',
+      refFromProject: 'Project', refKinds: { audio: 'Sound', midi: 'MIDI', score: 'Score', text: 'Note', link: 'Link' },
+      refBadType: 'not a sound, MIDI or score file', refTooBig: 'file too large', refBadLink: 'Enter a link starting with http:// or https://', refAdded: (n) => `Added ${n} reference${n > 1 ? 's' : ''}`,
+      refGone: 'This file was not kept in the browser.', refCannotPlay: 'The browser cannot play this file.',
+      agentPh: 'Tell the assistant (references, groups, names, how sounds should change)…', agentTitle: 'Assistant', agentThinking: 'Thinking…', agentUndo: 'Undo', agentUndone: 'Undone',
+      agentDid: (n) => `${n} change${n === 1 ? '' : 's'} made`, agentFailed: (x) => `Could not answer: ${x}`, agentClose: 'Hide assistant', agentOpen: 'Assistant',
+      agentLocal: 'AI is not connected here, so I only understand links, notes ("note: …") and remakes of the picked sounds.', agentNoted: 'Saved it as a reference.', agentRemake: (n) => `Remaking ${n} sound${n === 1 ? '' : 's'}.`,
+      handoffTitle: 'A few questions before work starts', handoffIntro: 'Answers are saved as project references and reach every sound. Pick one or write your own.', handoffRec: 'Recommended', handoffOwn: 'Or write your own',
+      handoffLocal: [['What mood should the sounds have overall?', ['Warm and soft', 'Bright and lively', 'Dark and tense', 'Grand and epic'], 'Warm and soft'],
+        ['How realistic should they be?', ['Realistic', 'Lightly stylised', 'Cartoon-like', 'Retro / chiptune'], 'Lightly stylised'],
+        ['What must never be heard?', ['Harsh highs', 'Long tails', 'Loud bass', 'Nothing in particular'], 'Harsh highs'],
+        ['What comes first in the mix?', ['Effects', 'Music', 'Voice', 'Even'], 'Effects']],
       parentCat: 'Inside', noParent: 'Top level', addSubCat: 'Add a group inside', foldersKind: 'A folder per kind (sfx, amb, music)', rootFolder: 'Audio folder',
       rulesHead: 'Use the file rules your agent knows', rulesHelp: 'If an AI agent worked on this game, copy this prompt to it and paste its answer below. It sets the id rule, folders and groups from the names the game already uses.',
       copyRules: 'Copy prompt', pasteRules: "Paste the agent's answer (JSON)", rulesId: 'ID rule', rulesFilesTag: 'Files', rulesFiles: (n) => `${n} files get their group and name`, applyRules: 'Apply the rules',
@@ -219,6 +237,21 @@ ${p.form}`,
       tagTrash: '휴지통으로', specAppliedTrash: (n, g) => `명세를 반영했어요. ${n}개 추가, 명세에 없는 ${g}개는 휴지통으로 옮겼어요`,
       addSound: '추가', newSound: '새 소리', addCat: '분류 추가', newCat: '새 분류', catSettings: '분류 설정', kindLabel: '종류',
       kinds: { sfx: '효과음', amb: '환경음', music: '음악' }, catIdHelp: '소문자 영문. 분류 안 소리도 따라 바뀝니다.', deleteCat: '분류 지우기',
+      refs: '레퍼런스', refsN: (n) => `레퍼런스 ${n}`, refsProject: '프로젝트 레퍼런스', refsOf: (x) => `레퍼런스 · ${x}`,
+      refsHelp: { project: '여기 넣은 것은 프로젝트의 모든 소리에 적용돼요.', cat: '여기 넣은 것은 이 분류와 안쪽 분류의 모든 소리에 적용돼요.', asset: '이 소리만의 레퍼런스예요. 프로젝트와 분류의 레퍼런스는 아래에 있어요.' },
+      refEmpty: '아직 레퍼런스가 없어요.', refAdd: '추가', refAddFile: '파일 추가', refFileKinds: '소리, MIDI, ABC, MusicXML. 여기로 끌어다 놓아도 돼요.', refAddLink: '링크 추가', refAddNote: '메모 추가',
+      refNotePh: '이런 느낌으로, 이건 피해서…', refTakePh: '이 레퍼런스에서 가져올 점', refRemove: '레퍼런스 빼기', refInherited: '여기에도 적용되는 것',
+      refFromProject: '프로젝트', refKinds: { audio: '소리', midi: 'MIDI', score: '악보', text: '메모', link: '링크' },
+      refBadType: '소리, MIDI, 악보 파일이 아니에요', refTooBig: '파일이 너무 커요', refBadLink: 'http:// 또는 https://로 시작하는 링크를 넣어 주세요', refAdded: (n) => `레퍼런스 ${n}개를 넣었어요`,
+      refGone: '이 파일은 브라우저에 남아 있지 않아요.', refCannotPlay: '브라우저가 이 파일을 재생하지 못해요.',
+      agentPh: '도우미에게 말하기 (레퍼런스, 분류, 이름, 소리 고치기)…', agentTitle: '도우미', agentThinking: '생각하는 중…', agentUndo: '되돌리기', agentUndone: '되돌렸어요',
+      agentDid: (n) => `${n}가지를 바꿨어요`, agentFailed: (x) => `답하지 못했어요: ${x}`, agentClose: '도우미 숨기기', agentOpen: '도우미',
+      agentLocal: '여기서는 AI가 연결되지 않아 링크, 메모("메모: …"), 고른 소리 다시 만들기만 알아들어요.', agentNoted: '레퍼런스로 저장했어요.', agentRemake: (n) => `소리 ${n}개를 다시 만들어요.`,
+      handoffTitle: '작업 전에 몇 가지만 물어볼게요', handoffIntro: '답은 프로젝트 레퍼런스로 저장되어 모든 소리에 적용돼요. 하나를 고르거나 직접 써 주세요.', handoffRec: '추천', handoffOwn: '직접 쓰기',
+      handoffLocal: [['전체 소리의 분위기는 어떤가요?', ['따뜻하고 부드럽게', '밝고 경쾌하게', '어둡고 긴장감 있게', '웅장하게'], '따뜻하고 부드럽게'],
+        ['얼마나 사실적이어야 하나요?', ['사실적으로', '살짝 과장되게', '만화처럼', '레트로·칩튠'], '살짝 과장되게'],
+        ['절대 들리면 안 되는 소리는요?', ['귀를 찌르는 고음', '긴 잔향', '큰 저음', '특별히 없음'], '귀를 찌르는 고음'],
+        ['믹스에서 무엇이 먼저인가요?', ['효과음', '음악', '목소리', '고르게'], '효과음']],
       parentCat: '상위 분류', noParent: '맨 위', addSubCat: '안에 분류 추가', foldersKind: '종류별 폴더(sfx, amb, music)', rootFolder: '소리 폴더',
       rulesHead: '에이전트가 아는 파일 규칙 쓰기', rulesHelp: '이 게임을 작업한 AI 에이전트가 있으면 이 프롬프트를 보내고 답을 아래에 붙여 넣으세요. 게임이 이미 쓰는 이름에 맞춰 id 규칙, 폴더, 분류를 바꿉니다.',
       copyRules: '프롬프트 복사', pasteRules: '에이전트의 답(JSON)을 붙여 넣으세요', rulesId: 'ID 규칙', rulesFilesTag: '파일', rulesFiles: (n) => `파일 ${n}개의 분류와 이름을 맞춥니다`, applyRules: '규칙 적용',
@@ -530,6 +563,7 @@ ${p.form}`,
   const drawTile = (a) => { const c = tileOf(a)?.querySelector('canvas'); if (c) drawPeaks(c, heard(a).peaks, resolved(color(a.cat))); };
 
   function renderBoard() {
+    syncRefs();
     const box = $('board'), top = box.scrollTop; box.textContent = '';
     box.append(...banner());
     box.append(dynSection());
@@ -543,6 +577,9 @@ ${p.form}`,
       h.append(tx(c.name), el('span', '', String(list.length)));
       const add = el('button', 'ghost', '+ ' + t('addSound')); add.className = 'ghost addSound'; add.onclick = () => addSound(c.id);
       const more = iconButton('gear', t('catSettings'), () => catDialog(c), 'ghost iconBtn catGear');
+      const refB = iconButton('ref', t('refsOf', tx(c.name)), () => refDialog({ type: 'cat', c }), 'ghost iconBtn catRef');
+      if (refCount({ type: 'cat', c })) { refB.append(el('span', 'refN', String(refCount({ type: 'cat', c })))); refB.classList.add('has'); }
+      h.append(refB);
       h.append(add, more);
       h.addEventListener('contextmenu', (e) => { e.preventDefault(); catDialog(c); });
       const pickable = ready(list);
@@ -633,8 +670,8 @@ ${p.form}`,
     $('selCount').hidden = !count; $('selCount').textContent = t('selected', count);
     $('selAll').hidden = $('selApprove').hidden = $('selClear').hidden = !count;
     document.body.classList.toggle('selecting', !!count);
-    $('ask').placeholder = count ? t('askSelected', count) : target?.versions.length ? t('askOne', nm(target)) : t('askNone');
-    $('send').disabled = !count && !target?.versions.length;
+    $('ask').placeholder = count ? t('askSelected', count) : target?.versions.length ? t('askOne', nm(target)) : t('agentPh');
+    $('send').disabled = agentBusy;
   }
 
   /* ---------- pointer ---------- */
@@ -783,6 +820,7 @@ ${p.form}`,
     const many = targetsOf(a);
     item(t('openAsset'), 'Enter', () => openDetail(a), !a.versions.length);
     item(t('rename'), 'F2', () => renameTile(a));
+    item(ownRefs(a).length ? t('refsN', ownRefs(a).length) : t('refs'), '', () => refDialog({ type: 'asset', a }));
     if (a.status === 'approved') item(t('unapprove'), 'A', () => { a.status = 'draft'; renderBoard(); });
     else item(t('approve'), 'A', () => { approve(a); renderBoard(); }, !canApprove);
     const mv = el('button', 'hasSub'), ico = el('span', 'subIco');
@@ -972,14 +1010,158 @@ ${p.form}`,
     };
     next();
   };
+  // The assistant: whatever is typed below goes to it. It answers with changes the board applies at once,
+  // and every answer that changed something can be undone. Without AI it understands links, notes and remakes.
+  let agentLog = [], agentBusy = false, agentOn = false, handoffDone = false, agentN = 0;
+  const agentWaits = new Map();
+  const pickedSounds = () => (selected.size ? [...selected].map(byId) : focused ? [byId(focused)] : []).filter(Boolean);
+  function boardState() {
+    const brief1 = (r) => ({ kind: r.kind, name: r.name, ...(r.url ? { url: r.url } : {}), ...(r.note ? { note: r.note } : {}), ...(r.summary ? { facts: r.summary } : {}) });
+    return {
+      game: tx(game), brief: tx(brief) || '', platform,
+      references: projectRefs.map(brief1),
+      cats: catTree().map((c) => ({ id: c.id, name: tx(c.name), kind: c.kind, ...(c.parent ? { parent: c.parent } : {}), ...(c.refs?.length ? { references: c.refs.map(brief1) } : {}) })),
+      assets: assets.map((a) => ({ id: a.id, name: nm(a), cat: a.cat, status: a.status, ...(a.description ? { description: a.description } : {}), ...(a.when ? { when: a.when } : {}),
+        ...(a.versions.length ? { seconds: Math.round(heard(a).measure.seconds * 10) / 10 } : {}), ...(ownRefs(a).length ? { references: ownRefs(a).map(brief1) } : {}) })),
+      selected: pickedSounds().map((a) => a.id),
+    };
+  }
+  // Without AI: a link or a "note:" line becomes a reference for the picked sounds (or the project); anything else
+  // remakes the picked sounds the way the old box did.
+  function localAgent(text, mode) {
+    if (mode === 'handoff') return { reply: '', actions: [], questions: t('handoffLocal').map(([question, options, recommended]) => ({ question, options, recommended })) };
+    const picked = pickedSounds(), url = text.match(/https?:\/\/\S+/i)?.[0], note = text.match(/^\s*(?:메모|참고|레퍼런스|note|reference)\s*[:：]\s*(.+)$/is)?.[1];
+    const targets = picked.length ? picked.map((a) => 'asset:' + a.id) : ['project'];
+    if (url || note) return { reply: t('agentNoted'), questions: [], actions: targets.map((target) => ({ op: 'add_ref', target, kind: url ? 'link' : 'text', url: url || '', text: url ? text.replace(url, '').trim() : note.trim(), name: '', assets: [] })) };
+    const usable = picked.filter((a) => a.versions.length && a.status !== 'working');
+    if (usable.length) return { reply: t('agentRemake', usable.length), questions: [], actions: [{ op: 'revise', assets: usable.map((a) => a.id), text }] };
+    return { reply: t('agentLocal'), actions: [], questions: [] };
+  }
+  function askAgent(text, mode = '') {
+    if (!agentOn || window.parent === window) return Promise.resolve(localAgent(text, mode));
+    const n = `${Date.now()}:${++agentN}`;
+    return new Promise((ok, no) => {
+      const timer = setTimeout(() => { agentWaits.delete(n); no(new Error('timeout')); }, 240000);
+      agentWaits.set(n, { ok: (v) => { clearTimeout(timer); ok(v); }, no: (e) => { clearTimeout(timer); no(e); } });
+      parent.postMessage({ type: 'asset:agent', payload: { n, text, mode, state: boardState() } }, '*');
+    });
+  }
+  addEventListener('message', (e) => {
+    if (e.source !== window.parent) return;
+    if (e.data?.type === 'asset:ai') agentOn = !!e.data.on;
+    if (e.data?.type === 'asset:agent_reply') {
+      const w = agentWaits.get(e.data.n);
+      if (!w || e.data.status === 'working') return;
+      agentWaits.delete(e.data.n);
+      if (e.data.status === 'failed') w.no(new Error(e.data.error || 'failed')); else w.ok(e.data);
+    }
+  });
+  if (window.parent !== window) parent.postMessage({ type: 'asset:ready' }, '*');
+  // Applies the answer's changes and returns how to put things back (remakes have their own keep/discard).
+  function applyActions(actions) {
+    const before = { cats: JSON.stringify(cats), projectRefs: JSON.stringify(projectRefs), brief, sel: new Set(selected),
+      assets: assets.map((a) => [a, { name: a.name, cat: a.cat, description: a.description, when: a.when, music: a.music, loop: a.loop, refs: JSON.stringify(ownRefs(a)) }]) };
+    let n = 0;
+    const remakes = [];
+    for (const x of actions || []) {
+      const list = (x.assets || []).map(byId).filter(Boolean);
+      const target = String(x.target || ''), scope = target === 'project' ? { type: 'project' } : target.startsWith('cat:') && catOf(target.slice(4)) ? { type: 'cat', c: catOf(target.slice(4)) } : target.startsWith('asset:') && byId(target.slice(6)) ? { type: 'asset', a: byId(target.slice(6)) } : null;
+      if (x.op === 'add_ref' && scope) { addRef(scope, { id: newRefId(), kind: x.kind === 'link' && x.url ? 'link' : 'text', name: x.name || (x.url ? x.url.replace(/^https?:\/\/(www\.)?/i, '').slice(0, 60) : String(x.text || '').slice(0, 40)), note: x.text || '', url: x.url || '', at: Date.now(), by: 'agent' }); n++; }
+      else if (x.op === 'remove_ref' && scope) { const r = refList(scope).find((y) => (y.name || '').toLowerCase() === String(x.name || '').toLowerCase()); if (r) { dropRef(scope, r); n++; } }
+      else if (x.op === 'move' && catOf(x.cat)) { list.forEach((a) => { a.cat = x.cat; a.music = kindOf(x.cat) === 'music'; if (kindOf(x.cat) !== 'sfx') a.loop = true; a.guessed = false; delete a.autoCat; }); n += list.length; }
+      else if (x.op === 'rename' && list[0] && x.name) { list[0].name = x.name; n++; }
+      else if (x.op === 'describe') { list.forEach((a) => { a.description = x.text || ''; }); n += list.length; }
+      else if (x.op === 'set_when') { list.forEach((a) => { a.when = x.text || ''; }); n += list.length; }
+      else if (x.op === 'add_cat' && x.cat && !catOf(slugOf(x.cat).join('_'))) { addCat(x.name || x.cat, x.kind, slugOf(x.cat).join('_'), catOf(x.parent) ? x.parent : undefined); n++; }
+      else if (x.op === 'set_brief') { brief = x.text || ''; n++; }
+      else if (x.op === 'select') { selected.clear(); list.forEach((a) => selected.add(a.id)); }
+      else if (x.op === 'revise') remakes.push([list.filter((a) => a.versions.length && a.status !== 'working'), x.text || '']);
+    }
+    syncRefs(); renderBoard();
+    for (const [list, text] of remakes) if (list.length) request(list, text);
+    if (!n) return null;
+    return () => {
+      cats = JSON.parse(before.cats); projectRefs = JSON.parse(before.projectRefs); brief = before.brief;
+      for (const [a, f] of before.assets) { const { refs, ...rest } = f; Object.assign(a, rest); a.refs = [...(a.refs || []).filter((r) => r.from !== 'asset'), ...JSON.parse(refs)]; }
+      selected.clear(); before.sel.forEach((id) => selected.add(id));
+      syncRefs(); renderBoard();
+    };
+  }
+  const agentBox = el('aside'); agentBox.id = 'agentPanel'; agentBox.hidden = true; agentBox.setAttribute('aria-live', 'polite'); document.body.append(agentBox);
+  const undos = new Map();
+  function renderAgent() {
+    agentBox.textContent = '';
+    const head = el('div', 'agentHead'), ico = el('span', 'agentIco'); setIcon(ico, 'agent');
+    head.append(ico, el('b', 'grow', t('agentTitle')), iconButton('close', t('agentClose'), () => { agentBox.hidden = true; }, 'ghost iconBtn'));
+    const list = el('div', 'agentList');
+    for (const m of agentLog.slice(-8)) {
+      const b = el('div', 'msg ' + (m.me ? 'me' : 'ai'));
+      b.append(el('span', '', m.text));
+      if (m.did) b.append(el('div', 'agentDid', t('agentDid', m.did)));
+      if (undos.has(m.id)) { const u = el('button', 'ghost', t('agentUndo')); u.onclick = () => { undos.get(m.id)(); undos.delete(m.id); m.undone = true; m.text += ` (${t('agentUndone')})`; renderAgent(); autosave(); }; b.append(u); }
+      if (m.questions?.length) for (const q of m.questions) {
+        const qb = el('div', 'agentQ'); qb.append(el('div', '', q.question));
+        for (const o of q.options) { const c = el('button', o === q.recommended ? 'chip rec' : 'chip', o); c.onclick = () => sendAgent(`${q.question} → ${o}`); qb.append(c); }
+        b.append(qb);
+      }
+      list.append(b);
+    }
+    if (agentBusy) list.append(el('div', 'msg ai thinking', t('agentThinking')));
+    agentBox.append(head, list);
+    requestAnimationFrame(() => { list.scrollTop = list.scrollHeight; });
+  }
+  async function sendAgent(text, mode = '') {
+    if (agentBusy) return;
+    if (text) agentLog.push({ id: newRefId(), me: true, text });
+    agentBusy = true; agentBox.hidden = false; renderAgent(); syncDock();
+    try {
+      const answer = await askAgent(text, mode);
+      if (mode === 'handoff') { handoffDialog(answer.questions || []); if (answer.reply) agentLog.push({ id: newRefId(), text: answer.reply }); }
+      else {
+        const undo = applyActions(answer.actions), id = newRefId();
+        agentLog.push({ id, text: answer.reply || '', did: undo ? (answer.actions || []).filter((x) => !['select', 'revise'].includes(x.op)).length : 0, questions: answer.questions || [] });
+        if (undo) undos.set(id, undo);
+      }
+    } catch (e) { agentLog.push({ id: newRefId(), text: t('agentFailed', e.message || e) }); }
+    agentBusy = false; renderAgent(); syncDock(); autosave();
+  }
   $('askForm').onsubmit = (e) => {
     e.preventDefault();
-    const text = $('ask').value.trim(); if (!text) return;
-    const list = selected.size ? [...selected].map(byId) : focused ? [byId(focused)] : [];
-    const usable = list.filter((a) => a?.versions.length && a.status !== 'working');
-    if (!usable.length) return;
-    $('ask').value = ''; request(usable, text);
+    const text = $('ask').value.trim(); if (!text || agentBusy) return;
+    $('ask').value = ''; sendAgent(text);
   };
+  // After the first spec: the hand-over questions. A pick is saved at once as a project note.
+  function handoffDialog(questions) {
+    if (!questions.length) return;
+    openDialog(t('handoffTitle')); reopen = () => handoffDialog(questions);
+    dlg.append(el('p', 'note', t('handoffIntro')));
+    questions.forEach((q, i) => {
+      const id = `handoff${i}`, box = el('section', 'handoffQ'), row = el('div', 'chips');
+      const saved = () => projectRefs.find((r) => r.id === id);
+      const save = (answer) => {
+        const r = saved();
+        if (!answer) { if (r) projectRefs.splice(projectRefs.indexOf(r), 1); }
+        else if (r) r.note = `${q.question} → ${answer}`;
+        else projectRefs.push({ id, kind: 'text', name: q.question.slice(0, 60), note: `${q.question} → ${answer}`, url: '', at: Date.now(), by: 'handoff' });
+        syncRefs(); autosave(); renderBoard(); paint();
+      };
+      const now = () => saved()?.note.split(' → ').slice(1).join(' → ') || '';
+      const own = el('input'); own.placeholder = t('handoffOwn'); own.setAttribute('aria-label', t('handoffOwn'));
+      own.onchange = () => save(own.value.trim());
+      const paint = () => {
+        row.textContent = '';
+        for (const o of q.options) {
+          const c = el('button', 'chip' + (o === q.recommended ? ' rec' : ''), o); c.setAttribute('aria-pressed', String(now() === o));
+          if (o === q.recommended) c.title = t('handoffRec');
+          c.onclick = () => save(now() === o ? '' : o); row.append(c);
+        }
+        if (now() && !q.options.includes(now())) own.value = now();
+      };
+      paint();
+      box.append(el('h3', '', q.question), row, own); dlg.append(box);
+    });
+    if (!dlg.open) dlg.showModal();
+  }
   $('selAll').onclick = () => { ready(visible()).forEach((x) => selected.add(x.id)); renderBoard(); };
   $('selClear').onclick = () => { selected.clear(); renderBoard(); };
   $('selApprove').onclick = () => { [...selected].map(byId).filter((a) => a.status === 'draft' || a.status === 'flagged').forEach(approve); selected.clear(); renderBoard(); };
@@ -1043,6 +1225,7 @@ ${p.form}`,
     const facts = el('p', 'dFacts');
     facts.append(catPicker(a, () => renderDetail()));
     if (a.imported) facts.append(el('span', 'originTag', t('imported')));
+    { const n = (a.refs || []).length, b = el('button', '', n ? t('refsN', n) : t('refs')); b.id = 'dRefs'; b.onclick = () => refDialog({ type: 'asset', a }); facts.append(b); }
     for (const f of [seconds(m.seconds), t('peak', m.peak.toFixed(1)), t('loud', m.loud.toFixed(1)), a.loop ? t('loop') : t('oneShot'), statusText(a.status)]) facts.append(el('span', '', f));
     if (a.imported) { const like = el('button', '', t('likeThis')); like.id = 'likeThis'; like.onclick = () => likeThis(a); facts.append(like); }
     const wave = el('div', 'dWave'), canvas = el('canvas'); wave.append(canvas);
@@ -1259,6 +1442,7 @@ ${p.form}`,
       added.forEach((x) => { x.category ||= cats[0].id; const amb = kindOf(x.category) === 'amb'; const a = { id: x.id, name: x.name, cat: x.category, music: kindOf(x.category) === 'music', loop: !!x.loop || amb, layers: amb ? [STUDIO_DATA.bed(x.name, x.length >= 16 ? 16 : 8, 0.1, 0.4, [[1, 0.25, 0], [3, 0.15, 1]])] : [{ kind: 'tone', from: 500, to: 700, len: Math.min(0.6, x.length || 0.3), wave: 'triangle', gain: 0.4, at: 0 }], status: 'draft', versions: [], current: 0, drafts: [], pick: -1, chat: [], progress: 0, length: x.length, when: x.when || '', description: x.description || '' }; assets.push(a); make(a, {}, { key: 'fromSpec' }); });
       changed.forEach((x) => { const a = byId(x.id); for (const k of specDiff(a, x)) a[SPEC_KEYS[k]] = k === 'loop' ? !!x.loop : x[k] ?? ''; });
       if (remove) toTrash(gone);
+      if (!handoffDone && added.length) { handoffDone = true; setTimeout(() => sendAgent('', 'handoff'), 0); }
       dlg.close(); renderBoard(); toast(remove && gone.length ? t('specAppliedTrash', added.length, gone.length) : t('specApplied', added.length), 5000);
     };
     run.onclick = () => apply(true); keep.onclick = () => apply(false);
@@ -1345,7 +1529,7 @@ ${p.form}`,
   menu.onclick = (e) => {
     const b = e.target.closest('[data-act]'); if (!b) return;
     toggleMenu(false);
-    ({ settings: settingsDialog, spec: () => specDialog(), game: gameDialog, help: tutorial })[b.dataset.act]();
+    ({ settings: settingsDialog, spec: () => specDialog(), game: gameDialog, help: tutorial, refs: () => refDialog({ type: 'project' }) })[b.dataset.act]();
   };
   addEventListener('click', (e) => { if (!menu.hidden && !e.target.closest('.menuWrap')) toggleMenu(false); });
   menu.addEventListener('keydown', (e) => {
@@ -1466,6 +1650,9 @@ ${p.form}`,
     if (spec.id_rule?.pattern) idRule = { ...idRule, ...spec.id_rule, prefix: { ...idRule.prefix, ...spec.id_rule.prefix } };
     if (spec.export) exportOpts = { ...exportOpts, ...spec.export };
     dynamics = Array.isArray(spec.dynamics) ? spec.dynamics.map(dynFromSpec) : [];
+    const backRefs = (list) => (Array.isArray(list) ? list : []).filter((r) => r && (r.kind === 'text' || r.kind === 'link')).map((r) => ({ id: newRefId(), kind: r.kind, name: String(r.name || ''), note: String(r.note || ''), url: String(r.url || ''), at: Date.now() }));
+    projectRefs = backRefs(spec.references);
+    for (const c of spec.categories || []) if (c?.references && catOf(c.id)) catOf(c.id).refs = backRefs(c.references);
     let done = 0;
     for (const x of spec.assets) {
       if (spec.assets.length > 1) { toast(t('importing', ++done, spec.assets.length), 0); await breathe(); }
@@ -1474,6 +1661,7 @@ ${p.form}`,
       const a = blank({ id: x.id, name: x.name || x.id, cat: catOf(x.category) ? x.category : fitCat(importer.guessCategory(x.id, x.length || 0).cat),
         loop: !!x.loop, music: kindOf(x.category) === 'music', when: x.when || '', description: x.description || '', length: x.length ?? null,
         imported: x.origin === 'imported', file: x.source_file || '', license: x.license || '', holder: x.holder || '', prompt: x.prompt || '' });
+      a.refs = backRefs(x.references).map((r) => ({ ...r, from: 'asset' }));
       if (audio) {
         try { fromAudio(a, await decode(await audio.bytes()), a.imported ? 'importedNote' : 'fromBundle'); a.status = x.status === 'approved' || !x.status ? 'approved' : 'draft'; }
         catch { sk.bad++; }
@@ -1535,6 +1723,105 @@ ${p.form}`,
     }
     closeDetail(); fill(list, ref); toast(t('likeMade', list.length));
   }
+
+  /* ---------- references ---------- */
+  // A reference belongs to the project, a group or one sound. Project and group references are copied into every
+  // sound they cover (from says where each copy came from), so each sound carries its own complete list.
+  let projectRefs = [];
+  const refBlobs = new Map(), savedRefs = new Set();
+  const newRefId = () => `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+  const ownRefs = (a) => (a.refs || []).filter((r) => r.from === 'asset');
+  const tagged = (list, from) => (list || []).map((r) => ({ ...r, from }));
+  const scopeRefs = (a) => [...tagged(projectRefs, 'project'), ...chainOf(catOf(a.cat)).flatMap((c) => tagged(c.refs, 'cat:' + c.id))];
+  function syncRefs(list = assets) { for (const a of list) a.refs = [...scopeRefs(a), ...ownRefs(a)]; }
+  const refList = (scope) => (scope.type === 'project' ? projectRefs : scope.type === 'cat' ? (scope.c.refs ||= []) : ownRefs(scope.a));
+  function addRef(scope, r) {
+    if (scope.type === 'asset') (scope.a.refs ||= []).push({ ...r, from: 'asset' });
+    else refList(scope).push(r);
+    syncRefs(); autosave();
+  }
+  function dropRef(scope, r) {
+    if (scope.type === 'asset') scope.a.refs = (scope.a.refs || []).filter((x) => !(x.id === r.id && x.from === 'asset'));
+    else { const list = refList(scope), i = list.findIndex((x) => x.id === r.id); if (i >= 0) list.splice(i, 1); }
+    syncRefs(); autosave();
+  }
+  const refKeys = () => new Set([...projectRefs, ...cats.flatMap((c) => c.refs || []), ...[...assets, ...trash].flatMap(ownRefs)].map((r) => r.key).filter(Boolean));
+  const unzipFor = async (bytes) => (await importer.unzip(bytes, LIMITS.file)).map((z) => ({ path: z.path, bytes: async () => z.bytes }));
+  async function refFromFile(name, bytes) {
+    const kind = refKit.kindOf(name);
+    if (!kind) throw new Error(t('refBadType'));
+    if (bytes.length > LIMITS.file) throw new Error(t('refTooBig'));
+    const facts = kind === 'audio' ? refKit.audioFacts(await decode(bytes), 22050) : kind === 'midi' ? refKit.midiFacts(bytes) : await refKit.scoreFacts(name, bytes, unzipFor);
+    const id = newRefId(), key = 'ref:' + id;
+    refBlobs.set(key, bytes);
+    return { id, kind, name, note: '', url: '', key, facts, summary: refKit.summary(kind, facts), at: Date.now() };
+  }
+  async function addRefFiles(scope, files) {
+    let bad = 0;
+    for (const f of files) {
+      try { addRef(scope, await refFromFile(base(f.path), await f.bytes())); } catch (e) { bad++; toast(`${base(f.path)}: ${e.message || e}`, 4000); }
+    }
+    if (files.length - bad) toast(t('refAdded', files.length - bad));
+    renderBoard(); refDialog(scope);
+  }
+  let refAudio = null;
+  function playRef(r, button) {
+    if (refAudio) { refAudio.pause(); URL.revokeObjectURL(refAudio.src); const was = refAudio.ref; refAudio = null; if (was === r.id) { setIcon(button, 'play'); return; } }
+    const bytes = refBlobs.get(r.key); if (!bytes) { toast(t('refGone'), 3000); return; }
+    stopSound();
+    refAudio = new Audio(URL.createObjectURL(new Blob([bytes]))); refAudio.ref = r.id;
+    refAudio.onended = () => { setIcon(button, 'play'); refAudio = null; };
+    refAudio.play().catch(() => toast(t('refCannotPlay'), 3000));
+    setIcon(button, 'stop');
+  }
+  const fromLabel = (from) => (from === 'project' ? t('refFromProject') : from?.startsWith('cat:') ? tx(catOf(from.slice(4))?.name ?? from.slice(4)) : '');
+  function refRow(r, scope) {
+    const row = el('div', 'refRow'), head = el('div', 'refHead');
+    head.append(el('span', 'tag ref-' + r.kind, t('refKinds')[r.kind] || r.kind));
+    if (r.kind === 'link' && /^https?:\/\//i.test(r.url)) { const a = el('a', 'grow', r.name || r.url); a.href = r.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; head.append(a); }
+    else head.append(el('span', 'grow refName', r.name || t('refKinds').text));
+    if (!scope) head.append(el('span', 'tag', fromLabel(r.from)));
+    if (r.kind === 'audio' && r.key) { const b = iconButton('play', t('listen'), () => playRef(r, b), 'ghost iconBtn'); head.append(b); }
+    if (scope) head.append(iconButton('close', t('refRemove'), () => { dropRef(scope, r); renderBoard(); refDialog(scope); }, 'ghost iconBtn'));
+    row.append(head);
+    if (r.summary) row.append(el('div', 'refFacts', r.summary));
+    if (scope) {
+      // The note says what to take from this reference; it is kept as it is typed.
+      const note = el('textarea', 'refNote'); note.value = r.note || ''; note.placeholder = r.kind === 'text' ? t('refNotePh') : t('refTakePh'); note.setAttribute('aria-label', t('refTakePh'));
+      note.oninput = () => { r.note = note.value; syncRefs(); autosave(); };
+      row.append(note);
+    } else if (r.note) row.append(el('div', 'refFacts', r.note));
+    return row;
+  }
+  let refScope = null; // the open reference panel takes dropped files instead of the import
+  function refDialog(scope) {
+    const title = scope.type === 'project' ? t('refsProject') : t('refsOf', scope.type === 'cat' ? tx(scope.c.name) : nm(scope.a));
+    openDialog(title); reopen = () => refDialog(scope); refScope = scope;
+    dlg.addEventListener('close', () => { if (refScope === scope) refScope = null; if (refAudio) { refAudio.pause(); refAudio = null; } }, { once: true });
+    dlg.append(el('p', 'note', t('refsHelp')[scope.type]));
+    const own = refList(scope);
+    if (!own.length) dlg.append(el('p', 'note', t('refEmpty')));
+    own.forEach((r) => dlg.append(refRow(r, scope)));
+    const add = el('div', 'refAdd'), pick = el('input'); pick.type = 'file'; pick.multiple = true; pick.accept = refKit.ACCEPT; pick.hidden = true; pick.id = 'refFile';
+    pick.onchange = () => { const files = [...pick.files].map((f) => fileEntry(f, f.name)); pick.value = ''; addRefFiles(scope, files); };
+    const fileBtn = el('button', '', t('refAddFile')); fileBtn.id = 'refAddFile'; fileBtn.onclick = () => pick.click();
+    const link = el('input'); link.type = 'url'; link.placeholder = 'https://'; link.id = 'refLink'; link.setAttribute('aria-label', t('refAddLink'));
+    const linkBtn = el('button', '', t('refAddLink'));
+    linkBtn.onclick = () => { const url = link.value.trim(); if (!/^https?:\/\/\S+$/i.test(url)) { toast(t('refBadLink'), 3000); return; } addRef(scope, { id: newRefId(), kind: 'link', name: url.replace(/^https?:\/\/(www\.)?/i, '').slice(0, 60), url, note: '', at: Date.now() }); renderBoard(); refDialog(scope); };
+    const memo = el('textarea'); memo.id = 'refMemo'; memo.placeholder = t('refNotePh'); memo.setAttribute('aria-label', t('refAddNote'));
+    const memoBtn = el('button', '', t('refAddNote'));
+    memoBtn.onclick = () => { const text = memo.value.trim(); if (!text) return; addRef(scope, { id: newRefId(), kind: 'text', name: text.split('\n')[0].slice(0, 40), note: text, url: '', at: Date.now() }); renderBoard(); refDialog(scope); };
+    const r1 = el('div', 'dlgRow'), r2 = el('div', 'dlgRow'), r3 = el('div', 'dlgRow');
+    for (const r of [r1, r2, r3]) r.style.justifyContent = 'flex-start';
+    r1.append(fileBtn, el('span', 'note', t('refFileKinds')), pick); r2.append(link, linkBtn); r3.append(memo, memoBtn);
+    add.append(el('h3', '', t('refAdd')), r1, r2, r3);
+    dlg.append(add);
+    const inherited = scope.type === 'asset' ? scopeRefs(scope.a) : scope.type === 'cat' ? [...tagged(projectRefs, 'project'), ...chainOf(scope.c).slice(0, -1).flatMap((c) => tagged(c.refs, 'cat:' + c.id))] : [];
+    if (inherited.length) { dlg.append(el('h3', '', t('refInherited'))); inherited.forEach((r) => dlg.append(refRow(r, null))); }
+    if (!dlg.open) dlg.showModal();
+  }
+  const refCount = (scope) => refList(scope).length;
+  const refSpec = (r) => ({ kind: r.kind, name: r.name, ...(r.url ? { url: r.url } : {}), ...(r.note ? { note: r.note } : {}), ...(r.summary ? { facts: r.facts } : {}), ...(r.from && r.from !== 'asset' ? { from: r.from } : {}) });
 
   /* ---------- import dialog ---------- */
   function catPicker(a, done) {
@@ -1690,6 +1977,7 @@ ${p.form}`,
     const entries = [...e.dataTransfer.items].map((i) => i.webkitGetAsEntry?.()).filter(Boolean), out = [];
     if (entries.length) for (const x of entries) await walkEntry(x, out);
     else out.push(...[...e.dataTransfer.files].map((f) => fileEntry(f, f.name)));
+    if (refScope && dlg.open) { addRefFiles(refScope, out); return; }
     if (dlg.open) dlg.close();
     intake(out);
   });
@@ -1733,13 +2021,15 @@ ${p.form}`,
     const going = assets.filter((a) => a.status === 'approved' && a.versions.length), utf8 = (s) => new TextEncoder().encode(s);
     const spec = {
       game: tx(game), platform, style: tx(brief) || '',
-      categories: cats.map((c) => ({ id: c.id, name: tx(c.name), kind: c.kind, parent: c.parent, folder: folderOf(c), color: c.hue.startsWith('#') ? c.hue : undefined })),
+      references: projectRefs.map(refSpec),
+      categories: cats.map((c) => ({ id: c.id, name: tx(c.name), kind: c.kind, parent: c.parent, folder: folderOf(c), color: c.hue.startsWith('#') ? c.hue : undefined, ...(c.refs?.length ? { references: c.refs.map(refSpec) } : {}) })),
       id_rule: idRule, export: exportOpts,
       dynamics: dynamics.map(dynToSpec),
       assets: assets.map((a) => {
         const v = a.versions.length ? heard(a) : null;
         return { id: a.id, name: nm(a), category: a.cat, length: v ? Math.round(v.measure.seconds * 100) / 100 : a.length ?? null, loop: !!a.loop, when: a.when || '', description: a.description || '',
           file: going.includes(a) ? exportPath(a) : null, status: a.status === 'approved' ? 'approved' : a.versions.length ? 'draft' : 'pending',
+          ...(ownRefs(a).length ? { references: ownRefs(a).map(refSpec) } : {}),
           origin: a.imported ? 'imported' : 'made', ...(a.imported ? { source_file: a.file || '', license: a.license || '', holder: a.holder || '' } : {}), ...(a.prompt ? { prompt: a.prompt } : {}) };
       }),
       questions: [],
@@ -1910,7 +2200,7 @@ ${p.form}`,
   const recipe = (v) => ({ change: v.change, note: v.note, at: v.at });
   function snapshot() {
     return {
-      v: 1, game, brief, platform, demo, stage, loud: [...rule('loud').range], cats, idRule, exportOpts,
+      v: 1, game, brief, platform, demo, stage, loud: [...rule('loud').range], cats, idRule, exportOpts, projectRefs, handoffDone, agentLog: agentLog.slice(-30),
       trash: trash.map((a) => { const { versions, drafts: options, source, progress, ...rest } = a; return { ...rest, key: source ? keyOf(a) : a.key, status: a.status === 'working' || a.status === 'review' ? (versions.length ? 'draft' : 'pending') : a.status, versions: versions.map(recipe), drafts: [], pick: -1, hasSource: !!source }; }),
       dynamics: dynamics.map((d) => ({ ...d, params: d.params.map((p) => ({ ...p })) })),
       assets: assets.map((a) => {
@@ -1922,13 +2212,20 @@ ${p.form}`,
     };
   }
   async function write() {
+    syncRefs();
     const data = snapshot(), d = await idb(), keep = new Set([...assets, ...trash].filter((a) => a.source).map(keyOf));
     const q = d.transaction(['board', 'audio'], 'readwrite');
     q.objectStore('board').put(data, 'board');
     for (const a of [...assets, ...trash]) if (a.source && !savedAudio.has(a.key)) q.objectStore('audio').put(new Blob([a.source]), a.key);
     for (const k of savedAudio) if (!keep.has(k)) q.objectStore('audio').delete(k);
+    // Reference files share the store under ref: keys; one dropped from every list is deleted with the next save.
+    const refsKept = refKeys();
+    for (const k of refsKept) if (!savedRefs.has(k) && refBlobs.has(k)) q.objectStore('audio').put(new Blob([refBlobs.get(k)]), k);
+    for (const k of savedRefs) if (!refsKept.has(k)) q.objectStore('audio').delete(k);
     await done(q);
     savedAudio.clear(); keep.forEach((k) => savedAudio.add(k));
+    savedRefs.clear(); refsKept.forEach((k) => savedRefs.add(k));
+    for (const k of [...refBlobs.keys()]) if (!refsKept.has(k)) refBlobs.delete(k);
   }
   // Oldest versions that are not the one in use go first: drafts that lost a comparison stay in the history.
   function prune() {
@@ -1975,6 +2272,9 @@ ${p.form}`,
     if (Array.isArray(data.cats) && data.cats.length) cats = data.cats;
     if (data.idRule) idRule = data.idRule;
     if (data.exportOpts) exportOpts = { ...exportOpts, ...data.exportOpts };
+    projectRefs = Array.isArray(data.projectRefs) ? data.projectRefs : [];
+    handoffDone = !!data.handoffDone; agentLog = Array.isArray(data.agentLog) ? data.agentLog : [];
+    for (const [k, blob] of blobs) if (String(k).startsWith('ref:')) { try { refBlobs.set(k, new Uint8Array(await blob.arrayBuffer())); savedRefs.add(k); } catch { /* unreadable blob */ } }
     if (Array.isArray(data.dynamics)) dynamics = data.dynamics;
     assets.length = 0; trash = [];
     for (const x of [...data.assets, ...(data.trash || []).map((y) => ({ ...y, inTrash: true }))]) {
