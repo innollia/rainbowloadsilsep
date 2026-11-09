@@ -12,6 +12,8 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from studio_backend import AgyCli, Jobs, Router, in_app_browser, validate_request
+from asset_classify import classify as classify_files
+from skill_router import ask_jev, read_key
 from credits import FREE_CREDITS, LedgerError, LocalLedger, RemoteLedger, price_table
 
 st.set_page_config(page_title="olmuse", page_icon="◉", layout="wide", initial_sidebar_state="collapsed")
@@ -319,6 +321,19 @@ def handle(action, payload, manager, choices):
         manager.cancel(owner)
     elif action == "feedback":
         manager.feedback(owner, payload)
+    elif action == "classify":
+        # The asset studio's imported files, sorted into groups by Jev; the page falls back to its own guess on ok=False.
+        p = payload if isinstance(payload, dict) else {}
+        files = [{"path": str(f.get("path") or "")[:300], "secs": f.get("secs") if isinstance(f.get("secs"), (int, float)) else 0}
+                 for f in (p.get("files") or [])[:300] if isinstance(f, dict) and f.get("path")]
+        answer = {"n": p.get("n"), "ok": False, "groups": {}}
+        key = read_key() if ai_ready else ""
+        if key and files:
+            try:
+                answer.update(ok=True, groups=classify_files(files, lambda q: ask_jev(key, {"task": "sort game sound files"}, q, timeout=15.0)))
+            except (RuntimeError, OSError, ValueError):
+                pass
+        st.session_state.studio_classify = answer
     elif action == "lang":
         chosen = (payload or {}).get("lang")
         if chosen in TEXT and chosen != lang:
@@ -337,7 +352,7 @@ def render():
     if snap and "credits" in snap and "studio_account" in st.session_state:
         st.session_state.studio_account["credits"] = snap["credits"]
     result = studio(lang=lang, ai_enabled=ai_ready, engine=manager.model.name if manager.model else "", choices=choices, job=snap,
-                    account=account_view(), signed_in=bool(email),
+                    account=account_view(), signed_in=bool(email), classify=st.session_state.get("studio_classify"),
                     server_error=st.session_state.get("studio_error", ""), key="studio", default=None)
     if not isinstance(result, dict):
         return

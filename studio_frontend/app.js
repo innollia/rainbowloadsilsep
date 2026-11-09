@@ -417,6 +417,7 @@
     if (first) guardStorage();
   }
 
+  let classifySeen;
   function onRender(args) {
     fit();
     if (args.lang === pendingLang) pendingLang = '';
@@ -427,6 +428,7 @@
     account = args.account || null; showCredits();
     if (args.server_error && args.server_error !== lastServerError) { say('error', args.server_error); if (findWaiting != null) findAnswer(args.server_error); }
     lastServerError = args.server_error || '';
+    if (args.classify && args.classify.n !== classifySeen) { classifySeen = args.classify.n; frame.contentWindow?.postMessage({ type: 'asset:classified', ...args.classify }, '*'); }
     const j = args.job;
     job = j;
     if (j) {
@@ -1153,6 +1155,8 @@
   $('assetBtn').onclick = () => showAssets(true);
   addEventListener('message', (e) => {
     if (e.data?.type === 'asset:back') showAssets(false);
+    // Imported files sorted by Jev on the server; the answer comes back through the render args (args.classify).
+    if (e.data?.type === 'asset:classify' && e.source === frame.contentWindow) send('classify', e.data.payload);
     // The asset studio's own language picker: switch here too and tell Streamlit, as the header picker does.
     if (e.data?.type === 'asset:setlang' && i18n.pick(e.data.lang) && e.data.lang !== i18n.lang) { pendingLang = e.data.lang; setLang(e.data.lang); send('lang', { lang: e.data.lang }); }
   });

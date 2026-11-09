@@ -49,7 +49,6 @@ button.primary:disabled { background:var(--raised); color:var(--disabled); }
 .group h2 .catGear .ico { width:16px; height:16px; }
 .addCat { margin-top:16px; color:var(--text3); }
 #side .addCat { margin-top:6px; width:40px; min-height:36px; justify-content:center; color:var(--text3); }
-#tileMenu .ctxHead { font-size:.72rem; color:var(--text3); padding:8px 12px 2px; }
 #tileMenu .ctxSep { height:1px; background:var(--divider); margin:6px 4px; }
 .dynGroup h2 i { background:var(--text2); }
 .dynCard { display:flex; flex-direction:column; align-items:flex-start; justify-content:flex-end; gap:2px; height:72px; padding:10px; background:var(--surface); border-radius:14px; border:0; text-align:left; cursor:pointer; }
@@ -67,11 +66,11 @@ header { display:flex; align-items:center; gap:8px; padding:12px; border-bottom:
 header button { min-height:48px; }
 header .iconBtn { width:48px; position:relative; }
 #gameTitle { font-size:.89rem; color:var(--text2); white-space:nowrap; }
-#stages { list-style:none; display:flex; gap:2px; margin:0 0 0 12px; padding:0; }
-#stages li { display:flex; align-items:center; gap:6px; color:var(--text3); font-size:.85rem; padding:4px 10px; }
-#stages li + li::before { content:""; width:14px; height:1px; background:var(--divider); margin-right:8px; }
-#stages li[aria-current="step"] { color:var(--text); font-weight:600; }
-#stages li.done { color:var(--ok); }
+#progress { display:flex; gap:2px; width:clamp(72px, 14vw, 180px); height:8px; margin-left:14px; border-radius:4px; overflow:hidden; background:var(--raised); }
+#progress .seg { flex-basis:0; min-width:4px; min-height:0; height:100%; padding:0; border:0; border-radius:0; cursor:pointer; }
+#progress .seg[aria-pressed="true"] { outline:2px solid var(--text); outline-offset:-2px; }
+#progress .s-approved { background:var(--ok); } #progress .s-draft { background:var(--warn); } #progress .s-review, #progress .s-working { background:var(--work); }
+#progress .s-flagged { background:var(--err); } #progress .s-pending { background:var(--text3); opacity:.45; }
 
 #boardView { display:flex; min-height:0; }
 #side { width:190px; flex:none; padding:14px 10px; border-right:1px solid var(--divider); overflow:auto; display:flex; flex-direction:column; gap:2px; }
@@ -195,7 +194,7 @@ dialog textarea { width:100%; min-height:190px; background:var(--raised); border
 ::view-transition-group(zoom) { animation-duration:.34s; animation-timing-function:cubic-bezier(.2,.8,.2,1); }
 
 @media (max-width:900px) {
-  #stages { display:none; }
+  #progress { width:56px; margin-left:8px; }
   #side { display:none; }
   #detailView { grid-template-columns:1fr; grid-template-rows:minmax(0,1fr) 40%; }
   .stem { grid-template-columns:90px minmax(40px,1fr) 44px 44px; }
@@ -238,3 +237,15 @@ dialog textarea { width:100%; min-height:190px; background:var(--raised); border
 .tabHead { font-size:.82rem; color:var(--text3); margin:0; font-weight:600; }
 .licIn { width:100%; }
 @media (max-width:900px) { .importBtn span[data-i18n] { display:none; } .justRow .licIn { width:110px; } }
+#tileSub { position:fixed; z-index:31; min-width:180px; max-height:min(420px, calc(100vh - 16px)); overflow:auto; display:flex; flex-direction:column; padding:6px; background:var(--surface); border:1px solid var(--divider); border-radius:14px; box-shadow:0 12px 32px rgba(0,0,0,.45); }
+#tileSub[hidden] { display:none; }
+#tileSub button { display:flex; align-items:center; gap:10px; min-height:38px; padding:0 12px; background:none; border:0; border-radius:10px; text-align:left; cursor:pointer; }
+#tileSub button:hover:not(:disabled), #tileSub button:focus-visible { background:var(--raised); }
+#tileSub button:disabled { color:var(--text3); cursor:default; }
+#tileSub .grow { flex:1; }
+#tileSub .dot { width:10px; height:10px; border-radius:50%; background:var(--c,var(--text3)); flex:none; }
+#tileMenu .hasSub[aria-expanded="true"] { background:var(--raised); }
+#tileMenu .subIco .ico { width:16px; height:16px; color:var(--text3); }
+#tileMenu .chev { color:var(--text3); }
+.group.sub { margin-left:calc(var(--depth, 1) * 20px); }
+.group h2 .catPath { font-size:.75rem; font-weight:400; color:var(--text3); margin-right:2px; }

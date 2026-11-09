@@ -10,13 +10,26 @@
   const catOf = (id) => cats.find((c) => c.id === id);
   const kindOf = (id) => catOf(id)?.kind || KIND_OF[id] || 'sfx';
   const slugOf = (text) => String(text ?? '').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-  function addCat(name, kind = 'sfx', id) {
-    const taken = new Set(cats.map((c) => c.id)), base = id || slugOf(name).join('_') || 'group';
+  function addCat(name, kind = 'sfx', id, parent) {
+    const taken = new Set(cats.map((c) => c.id)), own = id || slugOf(tx(name)).join('_') || 'group', base = parent && !id ? `${parent}_${own}` : own;
     let cid = base, k = 2;
     while (taken.has(cid)) cid = `${base}_${k++}`;
     const c = { id: cid, name, kind: KINDS.includes(kind) ? kind : 'sfx', hue: HUES[cats.length % HUES.length] };
+    if (parent && catOf(parent)) c.parent = parent;
     cats.push(c);
     return c;
+  }
+  // A group can sit inside another (music > forest); its export folder is the parent's folder plus its own name.
+  const parentOf = (c) => (c?.parent && c.parent !== c.id ? catOf(c.parent) : null);
+  function chainOf(c) { const out = []; for (let x = c; x && out.length < 12 && !out.includes(x); x = parentOf(x)) out.unshift(x); return out; }
+  const depthOf = (c) => chainOf(c).length - 1;
+  const under = (id, top) => chainOf(catOf(id)).some((x) => x.id === top);
+  const folderOf = (c) => chainOf(c).map((x, i, all) => { const up = all[i - 1]; return up && x.id.startsWith(up.id + '_') ? x.id.slice(up.id.length + 1) : x.id; }).join('/');
+  // Parents first, each followed by its own children.
+  function catTree() {
+    const out = [], walk = (pid) => cats.filter((c) => (parentOf(c)?.id || null) === pid && !out.includes(c)).forEach((c) => { out.push(c); walk(c.id); });
+    walk(null);
+    return out.concat(cats.filter((c) => !out.includes(c)));
   }
   // The importer guesses one of the starting group ids; land it on a group of the same kind this project has.
   const fitCat = (id) => catOf(id)?.id || cats.find((c) => c.kind === (KIND_OF[id] || 'sfx'))?.id || cats[0]?.id || addCat(id || 'sounds', KIND_OF[id]).id;
@@ -80,6 +93,23 @@
       tagTrash: 'To trash', specAppliedTrash: (n, g) => `Spec applied: ${n} added, ${g} not in the spec moved to the trash`,
       addSound: 'Add', newSound: 'New sound', addCat: 'Add group', newCat: 'New group', catSettings: 'Group settings', kindLabel: 'Kind',
       kinds: { sfx: 'Effect', amb: 'Ambience', music: 'Music' }, catIdHelp: 'Lowercase English. Sounds in the group follow it.', deleteCat: 'Delete group',
+      parentCat: 'Inside', noParent: 'Top level', addSubCat: 'Add a group inside', foldersKind: 'A folder per kind (sfx, amb, music)', rootFolder: 'Audio folder',
+      rulesHead: 'Use the file rules your agent knows', rulesHelp: 'If an AI agent worked on this game, copy this prompt to it and paste its answer below. It sets the id rule, folders and groups from the names the game already uses.',
+      copyRules: 'Copy prompt', pasteRules: "Paste the agent's answer (JSON)", rulesId: 'ID rule', rulesFilesTag: 'Files', rulesFiles: (n) => `${n} files get their group and name`, applyRules: 'Apply the rules',
+      rulesEmpty: 'The answer has no rules, groups or files this screen can use.', rulesApplied: 'Applied the file rules',
+      jevSorting: (n) => `Sorting ${n} sounds into groups…`, jevSorted: (n, m) => `Sorted ${n} sounds (${m} moved)`, jevOff: 'Automatic sorting is not available here; the groups are guessed from the names.',
+      rulesPrompt: (p) => `Some of this game's sounds were just brought into a sound tool. You worked on this game, so tell the tool how its audio files are named and stored. Reply with only this JSON:
+${p.form}
+
+- id_rule.pattern: how a file name (without extension) is built from {kind}, {cat} and {name}, e.g. "{kind}_{cat}_{name}". It must contain {name}.
+- id_rule.sep: the character between words. id_rule.prefix: the word {kind} becomes for sfx, amb (looping ambience) and music.
+- folders.root: the folder that holds the game's audio. folders.by: "category" (a folder per group), "kind" (sfx/amb/music folders) or "none".
+- categories: the groups the game uses. id in lowercase english; kind is sfx, amb or music; parent is the id of the group it sits in (e.g. a region's music inside bgm), or leave it empty.
+- files: each file below with its group id, and the id the game knows it by if that differs from the file name.
+
+Groups the tool has now: ${p.cats}
+Files:
+${p.files}`,
       catNotEmpty: 'Move or delete the sounds in it first.', moveTo: 'Move to', deleteSound: 'Move to trash', deleteMany: (n) => `Move ${n} to trash`, confirmDelete: (n) => `Delete ${n}? This cannot be undone.`,
       idRule: 'ID rule', idHelp: 'Pattern can use {kind} (prefix of the kind), {cat} (group id) and {name} (the name in English words).', idPattern: 'Pattern', idSep: 'Separator', idPrefix: 'Prefix',
       idCheck: 'Flag ids that break the rule', idExample: (s, n) => `Example: ${s} · ${n} ids break it now`, idRenameAll: 'Rename every id by the rule', idRenamed: (n) => `Renamed ${n} ids`,
@@ -102,7 +132,6 @@
       samplesDone: (n, rest) => `All ${n} samples approved. The other ${rest} will be made in this style.`,
       samplesProgress: (n, done, rest) => `${done} of ${n} samples approved. Listen and approve them, and the other ${rest} will be made in the same style.`,
       makeRest: 'Make the rest', all: 'All', statusHead: 'Status',
-      stages: { brief: 'Brief', sample: 'Samples', expand: 'Expand', export: 'Export' },
       counts: (n, ok) => `${n} total · ${ok} approved`, reviewCount: (n) => `${n} to review`, selected: (n) => `${n} selected`,
       askSelected: (n) => `Request for the ${n} selected`, askOne: (name) => `Request for ${name}`, askNone: 'Pick an asset to send a request',
       drafts: 'Drafts', draftCount: (i) => `${i}`, draftCountLabel: 'Number of drafts', draftNote: (text, k) => `${text} · draft ${k}`,
@@ -190,6 +219,23 @@ ${p.form}`,
       tagTrash: '휴지통으로', specAppliedTrash: (n, g) => `명세를 반영했어요. ${n}개 추가, 명세에 없는 ${g}개는 휴지통으로 옮겼어요`,
       addSound: '추가', newSound: '새 소리', addCat: '분류 추가', newCat: '새 분류', catSettings: '분류 설정', kindLabel: '종류',
       kinds: { sfx: '효과음', amb: '환경음', music: '음악' }, catIdHelp: '소문자 영문. 분류 안 소리도 따라 바뀝니다.', deleteCat: '분류 지우기',
+      parentCat: '상위 분류', noParent: '맨 위', addSubCat: '안에 분류 추가', foldersKind: '종류별 폴더(sfx, amb, music)', rootFolder: '소리 폴더',
+      rulesHead: '에이전트가 아는 파일 규칙 쓰기', rulesHelp: '이 게임을 작업한 AI 에이전트가 있으면 이 프롬프트를 보내고 답을 아래에 붙여 넣으세요. 게임이 이미 쓰는 이름에 맞춰 id 규칙, 폴더, 분류를 바꿉니다.',
+      copyRules: '프롬프트 복사', pasteRules: '에이전트의 답(JSON)을 붙여 넣으세요', rulesId: 'ID 규칙', rulesFilesTag: '파일', rulesFiles: (n) => `파일 ${n}개의 분류와 이름을 맞춥니다`, applyRules: '규칙 적용',
+      rulesEmpty: '답에 이 화면이 쓸 규칙, 분류, 파일이 없어요.', rulesApplied: '파일 규칙을 적용했어요',
+      jevSorting: (n) => `소리 ${n}개를 분류하는 중…`, jevSorted: (n, m) => `소리 ${n}개를 분류했어요(${m}개 옮김)`, jevOff: '여기서는 자동 분류를 쓸 수 없어 이름으로 분류를 짐작했어요.',
+      rulesPrompt: (p) => `이 게임의 소리 일부를 방금 소리 도구로 가져왔습니다. 이 게임을 작업했으니 소리 파일의 이름과 저장 규칙을 도구에 알려 주세요. 아래 JSON만 답해 주세요.
+${p.form}
+
+- id_rule.pattern: 확장자를 뺀 파일 이름이 {kind}, {cat}, {name}으로 어떻게 만들어지는지. 예: "{kind}_{cat}_{name}". {name}이 꼭 들어가야 합니다.
+- id_rule.sep: 단어 사이 문자. id_rule.prefix: sfx, amb(반복 환경음), music일 때 {kind} 자리에 들어가는 말.
+- folders.root: 게임 소리를 담는 폴더. folders.by: "category"(분류마다 폴더), "kind"(sfx/amb/music 폴더), "none"(한 폴더).
+- categories: 게임이 쓰는 분류. id는 영어 소문자, kind는 sfx, amb, music 중 하나, parent는 이 분류가 들어가는 상위 분류 id(예: 지역별 음악은 bgm 안), 없으면 비웁니다.
+- files: 아래 파일마다 분류 id, 그리고 게임 안에서 부르는 id가 파일 이름과 다르면 그 id.
+
+도구에 지금 있는 분류: ${p.cats}
+파일:
+${p.files}`,
       catNotEmpty: '먼저 안의 소리를 옮기거나 지우세요.', moveTo: '분류 옮기기', deleteSound: '휴지통으로', deleteMany: (n) => `${n}개 휴지통으로`, confirmDelete: (n) => `${n}개를 지울까요? 되돌릴 수 없어요.`,
       idRule: 'id 규칙', idHelp: '모양에는 {kind}(종류 앞말), {cat}(분류 id), {name}(이름을 영어 단어로)을 쓸 수 있어요.', idPattern: '모양', idSep: '구분자', idPrefix: '앞말',
       idCheck: '규칙에 안 맞는 id 표시', idExample: (s, n) => `예: ${s} · 지금 규칙에 안 맞는 id ${n}개`, idRenameAll: '모든 id를 규칙대로 다시 짓기', idRenamed: (n) => `id ${n}개를 바꿨어요`,
@@ -201,7 +247,7 @@ ${p.form}`,
       params: '게임 값', addParam: '값 추가', param: '값', paramDefault: '처음 값', intensity: '세기', layersHead: '층', addLayer: '층 추가', always: '항상',
       roles: { bed: '반복', scatter: '가끔', stem: '음악 층' }, onRange: '커지는 구간', fadeFrom: '이 값에서 무음', fadeTo: '이 값에서 최대', gap: '간격 초', beatsPerBar: '마디당 박',
       dynNoSounds: '먼저 소리를 만들거나 가져오세요. 층은 그 소리로 만듭니다.', dynHelp: '값을 움직이면 층이 바뀌는 걸 들을 수 있어요. 게임도 같은 값을 넣습니다. 예: Godot에서 set_param("intensity", 0.8).',
-      specField: { name: '이름', category: '분류', length: '길이', loop: '반복', when: '쓰이는 때', description: '설명' }, openAsset: '들어가기', rename: '이름 바꾸기', unapprove: '승인 취소', menu: '메뉴', settings: '설정', language: '언어', gameInfo: '게임 정보', stagesLabel: '진행 단계', help: '사용법', spec: '명세', export: '내보내기',
+      specField: { name: '이름', category: '분류', length: '길이', loop: '반복', when: '쓰이는 때', description: '설명' }, openAsset: '들어가기', rename: '이름 바꾸기', unapprove: '승인 취소', menu: '메뉴', settings: '설정', language: '언어', gameInfo: '게임 정보', stagesLabel: '진행 상황', help: '사용법', spec: '명세', export: '내보내기',
       backToMusic: '음악 작업실로', category: '분류', board: '에셋 보드', playAll: '전체 듣기', stopAll: '전체 듣기 멈춤', hoverPlay: '올리면 듣기',
       acceptAll: '모두 채택', rejectAll: '모두 버림', selectAll: '전체 선택', deselect: '선택 해제', approve: '승인', approved: '승인됨', clear: '해제',
       ask: '수정 요청', send: '보내기',
@@ -212,7 +258,6 @@ ${p.form}`,
       samplesDone: (n, rest) => `샘플 ${n}개를 모두 승인했어요. 이 스타일로 나머지 ${rest}개를 만듭니다.`,
       samplesProgress: (n, done, rest) => `샘플 ${n}개 중 ${done}개 승인. 들어 보고 승인하면 나머지 ${rest}개를 같은 스타일로 만듭니다.`,
       makeRest: '나머지 만들기', all: '전체', statusHead: '상태',
-      stages: { brief: '설명', sample: '샘플 확인', expand: '확장', export: '내보내기' },
       counts: (n, ok) => `전체 ${n} · 승인 ${ok}`, reviewCount: (n) => `검토 ${n}개`, selected: (n) => `${n}개 선택`,
       askSelected: (n) => `선택한 ${n}개에 보낼 요청`, askOne: (name) => `${name}에 보낼 요청`, askNone: '에셋을 골라 요청을 보내세요',
       drafts: '시안', draftCount: (i) => `${i}개`, draftCountLabel: '시안 개수', draftNote: (text, k) => `${text} · 시안 ${k}`,
@@ -488,12 +533,14 @@ ${p.form}`,
     const box = $('board'), top = box.scrollTop; box.textContent = '';
     box.append(...banner());
     box.append(dynSection());
-    for (const c of cats) {
+    for (const c of catTree()) {
       const list = visible().filter((a) => a.cat === c.id);
-      if (!list.length && (filter.status || filter.imported || (filter.cat && filter.cat !== c.id))) continue;
-      const group = el('div', 'group'), h = el('h2'), dot = el('i');
-      group.style.setProperty('--c', c.hue); group.dataset.cat = c.id;
-      h.append(dot, tx(c.name), el('span', '', String(list.length)));
+      if (!list.length && (filter.status || filter.imported || (filter.cat && !under(c.id, filter.cat)))) continue;
+      const group = el('div', depthOf(c) ? 'group sub' : 'group'), h = el('h2'), dot = el('i');
+      group.style.setProperty('--c', c.hue); group.style.setProperty('--depth', depthOf(c)); group.dataset.cat = c.id;
+      h.append(dot);
+      if (parentOf(c)) h.append(el('small', 'catPath', chainOf(c).slice(0, -1).map((x) => tx(x.name)).join(' › ') + ' ›'));
+      h.append(tx(c.name), el('span', '', String(list.length)));
       const add = el('button', 'ghost', '+ ' + t('addSound')); add.className = 'ghost addSound'; add.onclick = () => addSound(c.id);
       const more = iconButton('gear', t('catSettings'), () => catDialog(c), 'ghost iconBtn catGear');
       h.append(add, more);
@@ -554,7 +601,7 @@ ${p.form}`,
       return b;
     };
     side.append(el('h2', '', t('category')), item(t('all'), assets.length, !filter.cat, () => { filter.cat = null; renderBoard(); }));
-    for (const c of cats) side.append(item(tx(c.name), assets.filter((a) => a.cat === c.id).length, filter.cat === c.id, () => { filter.cat = filter.cat === c.id ? null : c.id; renderBoard(); }, c.hue));
+    for (const c of catTree()) { const b = item(tx(c.name), assets.filter((a) => under(a.cat, c.id)).length, filter.cat === c.id, () => { filter.cat = filter.cat === c.id ? null : c.id; renderBoard(); }, c.hue); b.style.paddingLeft = `${12 + depthOf(c) * 14}px`; side.append(b); }
     side.append(iconButton('folderPlus', t('addCat'), newCat, 'iconBtn addCat'));
     side.append(el('h2', '', t('statusHead')));
     for (const [id, label] of Object.entries(t('status'))) {
@@ -567,9 +614,16 @@ ${p.form}`,
   }
   function renderHeader() {
     $('gameTitle').textContent = tx(game);
-    const order = Object.entries(t('stages')), at = order.findIndex(([id]) => id === stage);
-    $('stages').textContent = '';
-    order.forEach(([, label], i) => { const li = el('li', i < at ? 'done' : '', label); if (i === at) li.setAttribute('aria-current', 'step'); $('stages').append(li); });
+    // One thin bar: how much of the board is approved, waiting for a check, or still empty. A part filters the board.
+    const bar = $('progress'), parts = ['approved', 'draft', 'review', 'working', 'flagged', 'pending'].map((s) => [s, assets.filter((a) => a.status === s).length]).filter(([, n]) => n);
+    bar.textContent = '';
+    for (const [s, n] of parts) {
+      const seg = el('button', `seg s-${s}`); seg.style.flexGrow = n; seg.title = `${statusText(s)} ${n}`; seg.setAttribute('aria-label', seg.title);
+      seg.setAttribute('aria-pressed', String(filter.status === s));
+      seg.onclick = () => { filter.status = filter.status === s ? null : s; renderBoard(); };
+      bar.append(seg);
+    }
+    bar.setAttribute('aria-label', `${t('stagesLabel')}: ${parts.map(([s, n]) => `${statusText(s)} ${n}`).join(', ')}`);
     const waiting = assets.filter((a) => a.status === 'review').length;
     $('review').hidden = !waiting || !!openAsset; $('reviewText').textContent = t('reviewCount', waiting);
     autosave();
@@ -627,24 +681,32 @@ ${p.form}`,
       const next = slugOf(id.value).join('_');
       if (!next || catOf(next)) { id.value = c.id; return; }
       assets.filter((a) => a.cat === c.id).forEach((a) => { a.cat = next; });
+      cats.filter((x) => x.parent === c.id).forEach((x) => { x.parent = next; });
       if (filter.cat === c.id) filter.cat = next;
       c.id = next; id.value = next; renderBoard();
     };
     const row = (label, input) => { const r = el('label', 'lineItem'); r.append(el('span', 'grow', label), input); return r; };
+    const up = el('select'); up.setAttribute('aria-label', t('parentCat'));
+    up.add(new Option(t('noParent'), ''));
+    catTree().filter((x) => x !== c && !under(x.id, c.id)).forEach((x) => up.add(new Option('\u00a0\u00a0'.repeat(depthOf(x)) + tx(x.name), x.id)));
+    up.value = c.parent || '';
+    up.onchange = () => { if (up.value) c.parent = up.value; else delete c.parent; renderBoard(); };
+    const child = el('button', '', t('addSubCat'));
+    child.onclick = () => { const n = addCat(t('newCat'), c.kind, undefined, c.id); renderBoard(); catDialog(n, true); };
     const del = el('button', 'ghost', t('deleteCat'));
     del.onclick = () => {
-      if (assets.some((a) => a.cat === c.id)) { toast(t('catNotEmpty'), 3000); return; }
+      if (assets.some((a) => a.cat === c.id) || cats.some((x) => x.parent === c.id)) { toast(t('catNotEmpty'), 3000); return; }
       cats.splice(cats.indexOf(c), 1); if (filter.cat === c.id) filter.cat = null; dlg.close(); renderBoard();
     };
-    const foot = el('div', 'dlgRow'); foot.append(del);
-    dlg.append(row(t('nameLabel'), name), row(t('kindLabel'), kind), row('id', id), foot);
+    const foot = el('div', 'dlgRow'); foot.append(del, child);
+    dlg.append(row(t('nameLabel'), name), row(t('kindLabel'), kind), row(t('parentCat'), up), row('id', id), foot);
     if (!dlg.open) dlg.showModal();
     if (fresh) { name.focus(); name.select(); }
   }
   // Right-click actions on several tiles act on the whole selection when the clicked tile is part of it.
   const targetsOf = (a) => (selected.has(a.id) && selected.size > 1 ? [...selected].map(byId).filter(Boolean) : [a]);
   function moveTo(list, cat) {
-    list.forEach((a) => { a.cat = cat; a.music = kindOf(cat) === 'music'; if (kindOf(cat) !== 'sfx') a.loop = true; a.guessed = false; });
+    list.forEach((a) => { a.cat = cat; a.music = kindOf(cat) === 'music'; if (kindOf(cat) !== 'sfx') a.loop = true; a.guessed = false; delete a.autoCat; });
     renderBoard();
   }
   // Nothing is deleted straight away: removed sounds go to the trash and can be put back.
@@ -685,13 +747,37 @@ ${p.form}`,
 
   // Right-click on a tile: the common actions in one place.
   const tileCtx = el('div'); tileCtx.id = 'tileMenu'; tileCtx.setAttribute('role', 'menu'); tileCtx.hidden = true; document.body.append(tileCtx);
-  const closeTileMenu = () => { tileCtx.hidden = true; };
+  const tileSub = el('div'); tileSub.id = 'tileSub'; tileSub.setAttribute('role', 'menu'); tileSub.hidden = true; document.body.append(tileSub);
+  function closeSub() { tileSub.hidden = true; tileCtx.querySelector('.hasSub')?.setAttribute('aria-expanded', 'false'); }
+  const closeTileMenu = () => { tileCtx.hidden = true; closeSub(); };
+  // The group list opens beside the menu like a folder: hover or click on "Move to".
+  function openSub(anchor, many, focus) {
+    tileSub.textContent = '';
+    for (const c of catTree()) {
+      const b = el('button'), d = el('i', 'dot'); b.setAttribute('role', 'menuitem');
+      b.disabled = many.every((x) => x.cat === c.id);
+      d.style.setProperty('--c', c.hue); b.append(d, el('span', 'grow', tx(c.name)));
+      b.style.paddingLeft = `${12 + depthOf(c) * 16}px`;
+      b.onclick = () => { closeTileMenu(); moveTo(many, c.id); };
+      tileSub.append(b);
+    }
+    anchor.setAttribute('aria-expanded', 'true'); tileSub.hidden = false;
+    const r = anchor.getBoundingClientRect(), m = tileCtx.getBoundingClientRect(), q = tileSub.getBoundingClientRect();
+    tileSub.style.left = (m.right + q.width + 4 <= innerWidth ? m.right - 4 : Math.max(8, m.left - q.width + 4)) + 'px';
+    tileSub.style.top = Math.max(8, Math.min(r.top - 6, innerHeight - q.height - 8)) + 'px';
+    if (focus) tileSub.querySelector('button:not(:disabled)')?.focus();
+  }
+  tileSub.addEventListener('keydown', (e) => {
+    const items = [...tileSub.querySelectorAll('button:not(:disabled)')], i = items.indexOf(document.activeElement);
+    if (e.key === 'Escape' || e.key === 'ArrowLeft') { e.preventDefault(); e.stopPropagation(); closeSub(); tileCtx.querySelector('.hasSub')?.focus(); }
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus(); }
+  });
   function tileMenu(a, x, y) {
     tileCtx.textContent = '';
     const item = (label, key, fn, off = false) => {
       const b = el('button'); b.setAttribute('role', 'menuitem'); b.disabled = off;
       b.append(el('span', 'grow', label)); if (key) b.append(el('kbd', '', key));
-      b.onclick = () => { closeTileMenu(); fn(); }; tileCtx.append(b);
+      b.onclick = () => { closeTileMenu(); fn(); }; b.onpointerenter = closeSub; tileCtx.append(b);
     };
     const canApprove = a.status === 'draft' || a.status === 'flagged';
     const many = targetsOf(a);
@@ -699,8 +785,12 @@ ${p.form}`,
     item(t('rename'), 'F2', () => renameTile(a));
     if (a.status === 'approved') item(t('unapprove'), 'A', () => { a.status = 'draft'; renderBoard(); });
     else item(t('approve'), 'A', () => { approve(a); renderBoard(); }, !canApprove);
-    tileCtx.append(el('div', 'ctxHead', t('moveTo')));
-    for (const c of cats) if (c.id !== a.cat) item(tx(c.name), '', () => moveTo(many, c.id));
+    const mv = el('button', 'hasSub'), ico = el('span', 'subIco');
+    mv.setAttribute('role', 'menuitem'); mv.setAttribute('aria-haspopup', 'menu'); mv.setAttribute('aria-expanded', 'false');
+    setIcon(ico, 'folder'); mv.append(ico, el('span', 'grow', t('moveTo')), el('span', 'chev', '›'));
+    mv.openSub = (focus) => openSub(mv, many, focus);
+    mv.onclick = () => mv.openSub(true); mv.onpointerenter = () => mv.openSub(false);
+    tileCtx.append(mv);
     tileCtx.append(el('div', 'ctxSep'));
     item(many.length > 1 ? t('deleteMany', many.length) : t('deleteSound'), 'Del', () => removeAssets(many));
     tileCtx.hidden = false;
@@ -708,12 +798,13 @@ ${p.form}`,
     tileCtx.style.left = Math.min(x, innerWidth - q.width - 8) + 'px'; tileCtx.style.top = Math.min(y, innerHeight - q.height - 8) + 'px';
     focused = a.id; tileCtx.querySelector('button:not(:disabled)')?.focus();
   }
-  addEventListener('pointerdown', (e) => { if (!tileCtx.hidden && !e.target.closest('#tileMenu')) closeTileMenu(); }, true);
+  addEventListener('pointerdown', (e) => { if (!tileCtx.hidden && !e.target.closest('#tileMenu, #tileSub')) closeTileMenu(); }, true);
   addEventListener('scroll', closeTileMenu, true);
   tileCtx.addEventListener('keydown', (e) => {
     const items = [...tileCtx.querySelectorAll('button:not(:disabled)')], i = items.indexOf(document.activeElement);
     if (e.key === 'Escape') { e.stopPropagation(); closeTileMenu(); tileOf(byId(focused))?.focus(); }
-    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus(); }
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); closeSub(); items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus(); }
+    else if (e.key === 'ArrowRight' && document.activeElement?.openSub) { e.preventDefault(); document.activeElement.openSub(true); }
   });
   // Edits the name in place on the tile: Enter or leaving keeps it, Escape puts the old one back.
   function renameTile(a, renamingNew = false) {
@@ -1091,7 +1182,7 @@ ${p.form}`,
     const ex = t('example'), ids = [['sfx_ui_click', 'ui', 0.1, false], ['sfx_combat_parry', 'combat', 0.3, false], ['bgm_garden', 'bgm', 60, true]];
     return JSON.stringify({ game: tx(game), platform: 'mobile', style: ex.style, assets: ids.map(([id, category, length, loop], k) => ({ id, name: ex.assets[k].name, category, length, loop, when: ex.assets[k].when, description: ex.assets[k].description })), questions: [] }, null, 2);
   };
-  const specForm = () => JSON.stringify({ game: '', platform: '', style: '', categories: [{ id: '', name: '', kind: '' }], assets: [{ id: '', name: '', category: '', length: 0, loop: false, when: '', description: '' }], questions: [] }, null, 2);
+  const specForm = () => JSON.stringify({ game: '', platform: '', style: '', categories: [{ id: '', name: '', kind: '', parent: '' }], assets: [{ id: '', name: '', category: '', length: 0, loop: false, when: '', description: '' }], questions: [] }, null, 2);
   // Only what this tool knows goes in. The game itself is the other agent's to fill in.
   const specPrompt = () => t('specPrompt', {
     platforms: PROFILES.map((f) => f.id).filter((id) => id !== 'wide').join(', '),
@@ -1163,6 +1254,7 @@ ${p.form}`,
       if (spec.style) brief = spec.style;
       demo = false;
       for (const c of specCats) { const have = catOf(c.id); if (have) { if (c.name) have.name = c.name; if (KINDS.includes(c.kind)) have.kind = c.kind; } else addCat(c.name || c.id, c.kind, c.id); }
+      for (const c of specCats) if (c.parent && catOf(c.parent) && !under(c.parent, c.id)) catOf(c.id).parent = c.parent;
       for (const id of newCats) if (!catOf(id)) addCat(id, KIND_OF[id] || (spec.assets.find((x) => x.category === id)?.loop ? 'amb' : 'sfx'), id);
       added.forEach((x) => { x.category ||= cats[0].id; const amb = kindOf(x.category) === 'amb'; const a = { id: x.id, name: x.name, cat: x.category, music: kindOf(x.category) === 'music', loop: !!x.loop || amb, layers: amb ? [STUDIO_DATA.bed(x.name, x.length >= 16 ? 16 : 8, 0.1, 0.4, [[1, 0.25, 0], [3, 0.15, 1]])] : [{ kind: 'tone', from: 500, to: 700, len: Math.min(0.6, x.length || 0.3), wave: 'triangle', gain: 0.4, at: 0 }], status: 'draft', versions: [], current: 0, drafts: [], pick: -1, chat: [], progress: 0, length: x.length, when: x.when || '', description: x.description || '' }; assets.push(a); make(a, {}, { key: 'fromSpec' }); });
       changed.forEach((x) => { const a = byId(x.id); for (const k of specDiff(a, x)) a[SPEC_KEYS[k]] = k === 'loop' ? !!x.loop : x[k] ?? ''; });
@@ -1190,7 +1282,10 @@ ${p.form}`,
     opt(t('rate'), 'rate', [[44100, '44.1 kHz'], [48000, '48 kHz'], [22050, '22.05 kHz']]);
     if (exportOpts.format === 'wav') opt(t('bits'), 'bits', [[16, '16 bit'], [24, '24 bit']]);
     else opt(t('quality'), 'quality', [['high', t('qualities').high], ['mid', t('qualities').mid], ['low', t('qualities').low]]);
-    opt(t('folders'), 'folders', [['flat', t('foldersFlat')], ['cat', t('foldersCat')]]);
+    opt(t('folders'), 'folders', [['flat', t('foldersFlat')], ['cat', t('foldersCat')], ['kind', t('foldersKind')]]);
+    const root = el('input'); root.value = exportOpts.root || 'audio'; root.setAttribute('aria-label', t('rootFolder'));
+    root.onchange = () => { exportOpts.root = root.value.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') || 'audio'; autosave(); exportDialog(); };
+    { const r = el('label', 'lineItem'); r.append(el('span', 'grow', t('rootFolder')), root); dlg.append(r); }
     opt(t('engine'), 'engine', [['none', t('engineNone')], ['godot', 'Godot 4']]);
     dlg.append(el('h3', '', t('inBundle')));
     for (const item of [t('bundleAudio', exportPath({ id: '<id>', cat: '<group>' })), ...t('bundleItems').slice(1), ...(exportOpts.engine === 'godot' ? [t('bundleGodot')] : [])]) dlg.append(Object.assign(el('div', 'lineItem'), { textContent: item }));
@@ -1358,7 +1453,7 @@ ${p.form}`,
     if (added.length && stage === 'sample') stage = 'expand';
     renderOpen();
     report(added.length ? t('importedN', added.length) : t('nothingToImport'), sk);
-    if (added.length) importDialog(added);
+    if (added.length) { importDialog(added); askJev(added); }
   }
   // A bundle this screen exported: the spec says what each sound is, the audio files are the sounds.
   async function openBundle(spec, files, sk = tally()) {
@@ -1367,7 +1462,7 @@ ${p.form}`,
     game = spec.game || game; brief = spec.style || '';
     const target = PROFILES.find((f) => f.id === spec.platform);
     if (target) { platform = target.id; rule('loud').range = [...target.loud]; }
-    if (Array.isArray(spec.categories) && spec.categories.length) cats = spec.categories.filter((c) => c && c.id).map((c, i) => ({ id: c.id, name: c.name || c.id, kind: KINDS.includes(c.kind) ? c.kind : 'sfx', hue: c.color || CATEGORIES.find((d) => d.id === c.id)?.hue || HUES[i % HUES.length] }));
+    if (Array.isArray(spec.categories) && spec.categories.length) cats = spec.categories.filter((c) => c && c.id).map((c, i) => ({ id: c.id, name: c.name || c.id, kind: KINDS.includes(c.kind) ? c.kind : 'sfx', hue: c.color || CATEGORIES.find((d) => d.id === c.id)?.hue || HUES[i % HUES.length], ...(c.parent ? { parent: c.parent } : {}) }));
     if (spec.id_rule?.pattern) idRule = { ...idRule, ...spec.id_rule, prefix: { ...idRule.prefix, ...spec.id_rule.prefix } };
     if (spec.export) exportOpts = { ...exportOpts, ...spec.export };
     dynamics = Array.isArray(spec.dynamics) ? spec.dynamics.map(dynFromSpec) : [];
@@ -1444,10 +1539,10 @@ ${p.form}`,
   /* ---------- import dialog ---------- */
   function catPicker(a, done) {
     const pick = el('select', 'catPick' + (a.guessed ? ' unsure' : ''));
-    for (const c of cats) pick.append(Object.assign(el('option', '', tx(c.name)), { value: c.id }));
+    for (const c of catTree()) pick.append(Object.assign(el('option', '', '\u00a0\u00a0'.repeat(depthOf(c)) + tx(c.name)), { value: c.id }));
     pick.value = a.cat; pick.setAttribute('aria-label', t('category'));
     if (a.guessed) pick.title = t('guessed');
-    pick.onchange = () => { a.cat = pick.value; a.guessed = false; pick.classList.remove('unsure'); a.music = kindOf(a.cat) === 'music'; done?.(); };
+    pick.onchange = () => { a.cat = pick.value; a.guessed = false; delete a.autoCat; pick.classList.remove('unsure'); a.music = kindOf(a.cat) === 'music'; done?.(); };
     return pick;
   }
   function licenseFields(a) {
@@ -1474,6 +1569,7 @@ ${p.form}`,
     const pickFolder = el('button', '', t('pickFolder')); pickFolder.id = 'pickFolder'; pickFolder.onclick = () => $('importFolder').click();
     const pickBundle = el('button', '', t('pickBundle')); pickBundle.id = 'pickBundle'; pickBundle.onclick = () => $('importFiles').click();
     dlg.append(section(t('importFilesHead'), t('importFilesHelp'), pickFiles, pickFolder), section(t('importBundleHead'), t('importBundleHelp'), pickBundle));
+    dlg.append(rulesPart());
     const area = el('textarea'); area.id = 'listIn'; area.placeholder = t('listPlaceholder'); area.setAttribute('aria-label', t('importListHead')); area.style.minHeight = '110px';
     const add = el('button', 'primary', t('addSlots', 0)); add.id = 'addSlots'; add.disabled = true;
     const count = el('span', 'listCount');
@@ -1483,6 +1579,97 @@ ${p.form}`,
     dlg.append(list);
     if (!dlg.open) dlg.showModal();
   }
+  // An agent that worked on the game knows its file names and folders; its answer sets the id rule, folders and groups.
+  const rulesForm = () => JSON.stringify({ id_rule: { pattern: '{kind}_{name}', sep: '_', prefix: { sfx: 'sfx', amb: 'amb', music: 'bgm' } }, folders: { root: 'audio', by: 'category' }, categories: [{ id: '', name: '', kind: 'sfx', parent: '' }], files: [{ path: '', category: '', id: '' }] }, null, 2);
+  const rulesPrompt = () => t('rulesPrompt', { form: rulesForm(), cats: catTree().map((c) => `${folderOf(c)}(${c.kind})`).join(', '), files: assets.filter((a) => a.imported && a.file).map((a) => a.file).slice(0, 200).join('\n') || '-' });
+  const fileMatch = (path) => assets.find((a) => a.file && (a.file === path || a.file.endsWith('/' + path) || path.endsWith('/' + a.file))) || assets.find((a) => a.file && base(a.file) === base(String(path)));
+  function renameAsset(a, id) { for (const d of dynamics) for (const l of d.layers) if (l.asset === a.id) l.asset = id; selected.delete(a.id); a.id = id; }
+  function planRules(text) {
+    let r;
+    try { r = JSON.parse(text.replace(/^\s*```(?:json)?|```\s*$/g, '')); } catch (e) { return [el('p', 'note err', t('notJson', e.message))]; }
+    if (!r || typeof r !== 'object' || Array.isArray(r)) return [el('p', 'note err', t('rulesEmpty'))];
+    const rule0 = r.id_rule && typeof r.id_rule.pattern === 'string' && /\{name\}/.test(r.id_rule.pattern) ? r.id_rule : null;
+    const by = { category: 'cat', kind: 'kind', none: 'flat' }[r.folders?.by];
+    const groups = (Array.isArray(r.categories) ? r.categories : []).filter((c) => c && typeof c.id === 'string' && slugOf(c.id).length).map((c) => ({ ...c, id: slugOf(c.id).join('_') }));
+    const files = (Array.isArray(r.files) ? r.files : []).filter((f) => f && typeof f.path === 'string').map((f) => ({ ...f, a: fileMatch(f.path) })).filter((f) => f.a);
+    if (!rule0 && !by && !r.folders?.root && !groups.length && !files.length) return [el('p', 'note err', t('rulesEmpty'))];
+    const out = [], line = (tag, text) => { const x = el('div', 'lineItem'); x.append(el('span', 'tag chg', tag), el('span', 'grow', text)); return x; };
+    if (rule0) out.push(line(t('rulesId'), r.id_rule.pattern));
+    if (by || r.folders?.root) out.push(line(t('folders'), `${r.folders.root || exportOpts.root || 'audio'}/${by === 'cat' ? '<group>/' : by === 'kind' ? '<sfx|amb|music>/' : ''}<id>`));
+    const fresh = groups.filter((c) => !catOf(c.id));
+    if (fresh.length) out.push(line(t('tagAdd'), fresh.map((c) => (c.parent ? `${c.parent}/${c.id}` : c.id)).join(', ')));
+    if (files.length) out.push(line(t('rulesFilesTag'), t('rulesFiles', files.length)));
+    const row = el('div', 'dlgRow'), go = el('button', 'primary', t('applyRules'));
+    go.onclick = () => {
+      if (rule0) idRule = { ...idRule, pattern: rule0.pattern.trim(), sep: typeof rule0.sep === 'string' && rule0.sep.length <= 3 ? rule0.sep : idRule.sep, prefix: { ...idRule.prefix, ...(rule0.prefix && typeof rule0.prefix === 'object' ? rule0.prefix : {}) } };
+      if (by) exportOpts.folders = by;
+      if (typeof r.folders?.root === 'string' && r.folders.root.trim()) exportOpts.root = r.folders.root.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+      for (const c of groups) { const have = catOf(c.id); if (have) { if (c.name) have.name = c.name; if (KINDS.includes(c.kind)) have.kind = c.kind; } else addCat(c.name || c.id, c.kind, c.id); }
+      for (const c of groups) { const p = c.parent && slugOf(c.parent).join('_'); if (p && catOf(p) && !under(p, c.id)) catOf(c.id).parent = p; }
+      const taken = new Set(assets.map((a) => a.id));
+      for (const f of files) {
+        const cat = f.category && slugOf(f.category).join('_');
+        if (cat && catOf(cat)) moveTo([f.a], cat);
+        const id = typeof f.id === 'string' ? f.id.trim() : '';
+        if (id && id !== f.a.id && !taken.has(id)) { taken.delete(f.a.id); taken.add(id); renameAsset(f.a, id); }
+      }
+      // A file the agent named no id for keeps the game's own name when that name already fits the rule.
+      for (const a of assets.filter((x) => x.imported && x.file && !files.some((f) => f.a === x && f.id))) {
+        const own = stem(a.file);
+        if (own !== a.id && idOk(own) && !taken.has(own)) { taken.delete(a.id); taken.add(own); renameAsset(a, own); }
+      }
+      rulesDraft = ''; dlg.close(); renderBoard(); toast(t('rulesApplied'), 4000);
+    };
+    row.append(go); out.push(row);
+    return out;
+  }
+  let rulesDraft = '';
+  function rulesPart() {
+    const s = el('section', 'importPart'), row = el('div', 'dlgRow'), area = el('textarea'), out = el('div');
+    row.style.justifyContent = 'flex-start';
+    const cp = el('button', '', t('copyRules')); cp.id = 'copyRules'; cp.onclick = () => copy(rulesPrompt(), t('copiedPrompt'));
+    area.id = 'rulesIn'; area.placeholder = t('pasteRules'); area.setAttribute('aria-label', t('pasteRules')); area.style.minHeight = '90px'; area.value = rulesDraft;
+    const check = () => { rulesDraft = area.value; out.textContent = ''; if (area.value.trim()) out.append(...planRules(area.value)); };
+    area.oninput = check;
+    row.append(cp); s.append(el('h3', '', t('rulesHead')), el('p', '', t('rulesHelp')), row, area, out); check();
+    return s;
+  }
+  // Without an agent, Jev sorts the imported files on the server: each file picks one of the five usual groups,
+  // a special group already in use, or "other" (then a special group or unsorted). The answer replaces the guess
+  // unless the user picked a group for that sound first.
+  const SPECIAL = { voice: ['Voice', '목소리', 'sfx'], vehicle: ['Vehicles', '탈것', 'sfx'], machine: ['Machines', '장치', 'sfx'], magic: ['Magic', '마법', 'sfx'], item: ['Items', '아이템', 'sfx'], creature: ['Creatures', '생물', 'sfx'], weather: ['Weather', '날씨', 'amb'], cinematic: ['Cinematic', '연출', 'sfx'], horror: ['Horror', '공포', 'sfx'], sport: ['Sports', '스포츠', 'sfx'], unsorted: ['Unsorted', '미분류', 'sfx'] };
+  const asking = new Map();
+  function askJev(list) {
+    if (window.parent === window || !list.length) return;
+    const n = `${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+    list.forEach((a) => { a.autoCat = true; });
+    asking.set(n, list); setTimeout(() => asking.delete(n), 180000);
+    window.parent.postMessage({ type: 'asset:classify', payload: { n, files: list.map((a) => ({ path: a.file, secs: Math.round(heard(a).measure.seconds * 10) / 10 })) } }, '*');
+    toast(t('jevSorting', list.length), 0);
+  }
+  function classified(m) {
+    const list = asking.get(m.n);
+    if (!list) return;
+    asking.delete(m.n);
+    if (!m.ok) { list.forEach((a) => { delete a.autoCat; }); toast(t('jevOff'), 3000); return; }
+    let moved = 0;
+    for (const a of list) {
+      const g = m.groups?.[a.file];
+      if (!a.autoCat || !g || !assets.includes(a)) continue;
+      const cat = catOf(g) ? g : SPECIAL[g] ? addCat({ en: SPECIAL[g][0], ko: SPECIAL[g][1] }, SPECIAL[g][2], g).id : KIND_OF[g] ? fitCat(g) : null;
+      delete a.autoCat;
+      if (!cat) continue;
+      a.guessed = false;
+      if (cat === a.cat) continue;
+      moved++;
+      a.cat = cat; a.music = kindOf(cat) === 'music'; if (kindOf(cat) !== 'sfx') a.loop = true;
+      renameAsset(a, makeId(nm(a), cat, new Set(assets.filter((x) => x !== a).map((x) => x.id))));
+    }
+    renderBoard();
+    if (dlg.open && $('rulesIn')) reopen?.();
+    toast(t('jevSorted', list.length, moved), 4000);
+  }
+  addEventListener('message', (e) => { if (e.source === window.parent && e.data?.type === 'asset:classified') classified(e.data); });
   const fileEntry = (f, path) => ({ path, size: f.size, bytes: async () => new Uint8Array(await f.arrayBuffer()) });
   const filesOf = (input) => [...input.files].map((f) => fileEntry(f, f.webkitRelativePath || f.name));
   for (const id of ['importFiles', 'importFolder']) $(id).onchange = (e) => { const list = filesOf(e.target); e.target.value = ''; if (dlg.open) dlg.close(); intake(list); };
@@ -1508,8 +1695,11 @@ ${p.form}`,
   });
 
   /* ---------- export ---------- */
-  let exportOpts = { format: 'wav', rate: 48000, bits: 16, quality: 'high', folders: 'flat', engine: 'none' };
-  const exportPath = (a) => `audio/${exportOpts.folders === 'cat' ? `${a.cat}/` : ''}${a.id}.${exportOpts.format}`;
+  let exportOpts = { format: 'wav', rate: 48000, bits: 16, quality: 'high', folders: 'flat', root: 'audio', engine: 'none' };
+  const exportPath = (a) => {
+    const c = catOf(a.cat), dir = exportOpts.folders === 'cat' ? (c ? folderOf(c) : a.cat) : exportOpts.folders === 'kind' ? kindOf(a.cat) : '';
+    return [exportOpts.root || 'audio', dir, `${a.id}.${exportOpts.format}`].filter(Boolean).join('/');
+  };
   // Sounds are made at the synth's rate; the chosen rate comes from the browser's own resampler.
   async function resample(data, from, to) {
     if (from === to) return data;
@@ -1543,7 +1733,7 @@ ${p.form}`,
     const going = assets.filter((a) => a.status === 'approved' && a.versions.length), utf8 = (s) => new TextEncoder().encode(s);
     const spec = {
       game: tx(game), platform, style: tx(brief) || '',
-      categories: cats.map((c) => ({ id: c.id, name: tx(c.name), kind: c.kind, color: c.hue.startsWith('#') ? c.hue : undefined })),
+      categories: cats.map((c) => ({ id: c.id, name: tx(c.name), kind: c.kind, parent: c.parent, folder: folderOf(c), color: c.hue.startsWith('#') ? c.hue : undefined })),
       id_rule: idRule, export: exportOpts,
       dynamics: dynamics.map(dynToSpec),
       assets: assets.map((a) => {
