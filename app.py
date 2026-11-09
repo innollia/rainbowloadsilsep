@@ -102,6 +102,9 @@ def ledger():
 st.markdown("""<style>
 [data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stDecoration"], [data-testid="stStatusWidget"],
 [data-testid="InputInstructions"], footer, #MainMenu {display:none !important}
+/* primaryColor is near-white, so primary buttons need dark text */
+[data-testid="stBaseButton-primary"], [data-testid="stBaseLinkButton-primary"],
+[data-testid="stBaseButton-primary"] *, [data-testid="stBaseLinkButton-primary"] * {color:#111 !important}
 </style>""", unsafe_allow_html=True)
 
 TEXT = {
