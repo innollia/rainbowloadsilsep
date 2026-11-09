@@ -191,7 +191,7 @@ Do not reference tracks or samples with unclear licenses. Available materials: $
 
 When that is done, reply only with JSON in the format below, no explanation.
 ${p.form}`,
-      sendPrompt: 'Send prompt', receiveSpec: 'Receive spec', pasteToAgent: 'Paste this into the agent that worked on the music.', prompt: 'Prompt',
+      sendPrompt: 'Send prompt', receiveSpec: 'Receive spec', pasteToAgent: 'Paste this into the AI agent working on your game.', prompt: 'Prompt',
       copyPrompt: 'Copy prompt', copiedPrompt: 'Copied the prompt', pasteSpec: 'Paste the spec the agent gave you.', insertExample: 'Insert example',
       notJson: (m) => `Not JSON: ${m}`, noAssets: 'There is no assets list.', badItems: (n, list) => `${n} items break the rules: ${list}`, noName: 'no name',
       planSummary: (a, c, k, g) => `Add ${a} · Change ${c} · Keep ${k} · To trash ${g}`, tagAdd: 'Add', tagChange: 'Change', tagRemove: 'Remove',
@@ -222,7 +222,7 @@ ${p.form}`,
       tutorialTitle: 'How to make game sounds',
       steps: [
         ['Bring in what you have', 'Already have sounds, a list of the sounds the game needs, or a bundle exported here? Import puts them on the board.'],
-        ['Get a spec', 'From Spec in the top-right menu, copy the prompt, send it to the AI that has the game design doc, and paste back the spec it returns.'],
+        ['Get a spec', 'From Spec in the top-right menu, copy the prompt, send it to the AI agent working on your game, and paste back the spec it returns.'],
         ['Check samples', 'Key sounds come first. Hover over a tile to listen, then approve.'],
         ['Make the rest', 'The rest are made at once in the style of the approved samples.'],
         ['Revise', 'Clicking a tile selects it and plays it. Pick several and write what to change. Raise the draft count to compare several options. Press and hold to open it large.'],
@@ -330,7 +330,7 @@ ${p.files}`,
 
 정리가 끝나면 설명 없이 아래 형식의 JSON만 답해 주세요.
 ${p.form}`,
-      sendPrompt: '프롬프트 보내기', receiveSpec: '명세 받기', pasteToAgent: '음악 작업을 하던 에이전트에게 붙여 넣으세요.', prompt: '프롬프트',
+      sendPrompt: '프롬프트 보내기', receiveSpec: '명세 받기', pasteToAgent: '게임을 작업하는 AI 에이전트에게 붙여 넣으세요.', prompt: '프롬프트',
       copyPrompt: '프롬프트 복사', copiedPrompt: '프롬프트를 복사했어요', pasteSpec: '에이전트가 준 명세를 붙여 넣으세요.', insertExample: '예시 넣기',
       notJson: (m) => `JSON이 아니에요: ${m}`, noAssets: 'assets 목록이 없어요.', badItems: (n, list) => `규칙에 맞지 않는 항목 ${n}개: ${list}`, noName: '이름 없음',
       planSummary: (a, c, k, g) => `추가 ${a} · 변경 ${c} · 유지 ${k} · 휴지통 ${g}`, tagAdd: '추가', tagChange: '변경', tagRemove: '삭제',
@@ -361,7 +361,7 @@ ${p.form}`,
       tutorialTitle: '게임 소리 만드는 법',
       steps: [
         ['가진 것 가져오기', '만들어 둔 소리, 게임에 필요한 소리 목록, 여기서 내보낸 묶음이 있으면 가져오기로 보드에 올려요.'],
-        ['명세 받기', '오른쪽 위 메뉴의 명세에서 프롬프트를 복사해 게임 기획서를 가진 AI에게 보내고, 돌아온 명세를 붙여 넣어요.'],
+        ['명세 받기', '오른쪽 위 메뉴의 명세에서 프롬프트를 복사해 게임을 작업하는 AI 에이전트에게 보내고, 돌아온 명세를 붙여 넣어요.'],
         ['샘플 확인', '대표 소리가 먼저 나와요. 타일에 마우스를 올려 듣고 승인하세요.'],
         ['나머지 만들기', '승인한 샘플의 스타일로 나머지를 한 번에 만들어요.'],
         ['고치기', '타일을 누르면 선택되고 소리가 나요. 여러 개를 고르고 바꿀 내용을 적으세요. 시안 개수를 늘리면 여러 안을 비교해 고를 수 있어요. 길게 누르면 크게 열려요.'],
