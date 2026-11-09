@@ -51,8 +51,11 @@ Gemini는 최악이 1 크레딧(4.25센트)을 넘어 2 크레딧이다. DeepSee
 | 이름 | 위치 | 뜻 |
 |---|---|---|
 | `[auth]` | `.streamlit/secrets.toml` 또는 Cloud Secrets | 구글 로그인. 아래 예시 |
-| `STRUDEL_CREDITS_URL` | 환경 변수 또는 Secrets. `run_public.ps1`이 넣는다 | 장부 Lambda 주소. 없으면 이 PC의 `.studio-data/credits.sqlite`만 쓴다 |
-| `STRUDEL_CREDITS_TOKEN` | Secrets. 이 PC에서는 `~/.all-tomorrow/strudel-credits.token` | 장부 호출 토큰 |
+| `STRUDEL_CREDITS_URL` | 환경 변수 또는 Secrets. `run_public.ps1`이 넣는다 | 장부 Lambda 주소. 주소·토큰·pepper 중 하나라도 없으면 로그인 계정의 AI를 막고 화면에 "장부 연결 없음"을 띄운다 |
+| `STRUDEL_CREDITS_TOKEN` | Secrets. 이 PC에서는 `~/.all-tomorrow/strudel-credits.token` | 장부 호출 토큰(차감·환불·조회·쿠폰 쓰기). 쿠폰 발행은 못 한다 |
+| `STRUDEL_CREDITS_PEPPER` | 이 PC에서는 `~/.all-tomorrow/strudel-credits.pepper` | 장부와 같은 이메일 HMAC 키. `jobs.sqlite3`에 이메일 대신 계정 키를 쓰는 데 쓴다 |
+| `STRUDEL_LOCAL_LEDGER` | `run_local.ps1`만 `1`로 넣는다 | `1`일 때만 원격 장부 대신 `.studio-data/credits.sqlite`를 쓴다. 공개 실행은 이 값을 지운다 |
+| `STRUDEL_OPERATOR_DAILY_USD` | 선택, 기본 `0.60` | 비밀번호 세션(크레딧 없이 운영자 키)의 하루 최악 지출 상한(달러). 호출마다 모델의 최악 실측 원가로 센다 |
 | `STRUDEL_BUY_URL` | 선택 | 기본 `https://buymeacoffee.com/innollia` |
 | `STRUDEL_CREDITS_PER_USD` | 선택 | 화면에 보이는 값. Lambda의 `CREDITS_PER_USD`와 같아야 한다 |
 

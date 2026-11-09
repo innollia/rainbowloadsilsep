@@ -17,8 +17,9 @@
 | 호스팅 | 이 Windows PC에서 `streamlit run app.py`(127.0.0.1:8501). Cloudflare 이름 있는 터널 `olmuse`가 olmuse.app으로 연결. 터널이 죽으면 루프가 다시 띄우고, all-tomorrow DP7 감시가 사이트가 안 열리면 스크립트를 다시 돌린다. Dockerfile 없음. README의 Streamlit Cloud 안내는 예전 내용 | `run_public.ps1`, `~/.cloudflared/olmuse.yml` |
 | 화면 | `studio_frontend/`(app.js 1200줄 등)를 `components.declare_component`로 띄움. 브라우저→Python은 `streamlit:setComponentValue`(event_id, action, payload), Python→브라우저는 `streamlit:render` 인자 | `app.py` 290행, `studio_frontend/app.js` 239·293행 |
 | 진행 상황 전달 | `@st.fragment(run_every=1)`로 열린 탭마다 1초에 한 번 서버 코드가 돈다 | `app.py` 367행 |
-| 로그인 | `st.login("google")`(OIDC, `.streamlit/secrets.toml`)과 선생님 비밀번호(`STUDIO_PASSWORD`, 크레딧 안 씀) | `app.py` 194~238행 |
-| 작업 | `Jobs.jobs[owner]` 메모리 딕셔너리 + daemon 스레드. 에셋 에이전트(`Agents`)도 같은 방식. 하루 호출 수(`counts`)도 메모리 | `studio_backend.py` 960~1120행, `asset_agent.py` |
+| 로그인 | `st.login("google")`(OIDC, `.streamlit/secrets.toml`)과 선생님 비밀번호(`STUDIO_PASSWORD`, 크레딧 안 씀). 비밀번호는 세션당 5번, 전체 시간당 20번 틀리면 잠긴다(`server_ops.PasswordGate`). 비밀번호 세션의 운영자 키 지출은 하루 최악 0.60달러로 묶인다(`STRUDEL_OPERATOR_DAILY_USD`) | `app.py` `login_screen`, `server_ops.py` |
+| 작업 | `Jobs.jobs[owner]` 메모리 딕셔너리 + daemon 스레드. 에셋 에이전트(`Agents`)도 같은 방식. 작업 화면·진행 중 차감·하루 호출 수는 `JobStore`(SQLite `.studio-data/jobs.sqlite3`)에도 쓴다. 재시작하면 `running` 작업을 `failed`로 닫고 끝나지 않은 차감을 한 번 환불한다. 이메일은 장부와 같은 HMAC 키로만 저장하고, 끝난 결과는 30일 뒤 지운다 | `studio_backend.py` `JobStore`, `asset_agent.py` |
+| 운영 | 로그는 `.studio-data/logs/olmuse.log`(하루 단위, 7일 보관, 이메일·키 가림). SQLite는 매일 `.studio-data/backups/날짜/`로 백업 API 복사(14일). 장부 DynamoDB는 PITR, ALERT 경보·예산 알림 메일 | `server_ops.py`, `tools/backup_data.py`, `deploy/credits/deploy.ps1` |
 | 크레딧 | 진짜 장부는 Lambda Function URL + DynamoDB 1테이블(`strudel-credits`, 서울). 차감은 호출 전, 실패하면 환불, ref로 멱등, 이메일은 HMAC 키로만 저장. 개발·시험은 SQLite `LocalLedger` | `credits.py`, `deploy/credits/` |
 | 결제 | BMC 결제 → 블로그 `bmc-webhook` Lambda → 장부 `/webhooks/bmc`. 메시지의 단어 코드로 계정을 찾고, 못 찾으면 "결제 찾기". 1달러당 20크레딧 | `docs/CREDITS.md`, `deploy/credits/README.md` |
 | 곡·프로젝트 | 브라우저 localStorage/IndexedDB에만 있다. 다른 기기에서 이어 하기 없음(EDGE_CASES 12번) | `docs/EDGE_CASES.md` |
@@ -26,7 +27,7 @@
 
 ### 지금 구조의 위험
 
-- 서버가 재시작되면 진행 중 작업과 하루 호출 수가 사라진다. 환불은 작업 스레드 안에서만 불리므로, 호출 도중 프로세스가 죽으면 이미 차감된 크레딧을 돌려줄 주체가 없다.
+- (해결됨) 재시작 때 작업과 하루 호출 수가 사라지고 차감이 환불되지 않던 문제는 `JobStore`로 고쳤다. 남은 것: 생성 중 서버를 강제로 죽였다 살려 실제 장부에 환불 기록이 남는지 실측.
 - 탭마다 1초 재실행이라 사용자 수에 비례해 CPU가 늘어난다. Streamlit은 세션 상태가 프로세스 메모리에 있어 서버를 두 대로 늘리려면 고정 세션(sticky)과 외부 상태 저장소가 필요하다. 그래도 400~500명 규모에서 막혔다는 보고가 있다.
 - `st.login`은 범위(scope) 지정과 액세스 토큰을 못 주고, 1.57에서 로그인 쿠키가 30일 대신 브라우저 세션 쿠키가 되는 문제가 보고됐다. 로그인 동작을 우리가 고칠 수 없다.
 - 집 PC가 꺼지거나 재부팅·업데이트되면 유료 서비스가 멈춘다. 같은 PC에서 다른 작업도 돈다.
@@ -104,8 +105,8 @@
 
 각 단계는 앞 단계가 끝난 뒤 시작한다. 날짜는 적지 않는다.
 
-1. **작업 상태를 디스크에 쓰기 (Streamlit 그대로)**
-   바꾸는 것: `studio_backend.py`의 `Job`·`Jobs.counts`, `asset_agent.py`의 `Agents`를 SQLite 행으로 저장. 시작 시 `running` 작업을 "중단"으로 닫고 차감 ref를 환불.
+1. **작업 상태를 디스크에 쓰기 (Streamlit 그대로)** — 완료(`JobStore`, `tests/test_job_store.py` 통과). 남은 것: 강제 종료 후 환불 실측.
+   바꾼 것: `studio_backend.py`의 `Job`·`Jobs.counts`, `asset_agent.py`의 `Agents`를 SQLite 행으로 저장. 시작 시 `running` 작업을 "중단"으로 닫고 차감 ref를 환불.
    끝난 기준: 생성 중 서버를 강제로 죽이고 다시 띄우면 작업이 "중단됨"으로 보이고 장부에 환불 기록이 있다. 단위 시험 통과.
 
 2. **FastAPI 서버를 옆에 세우기**

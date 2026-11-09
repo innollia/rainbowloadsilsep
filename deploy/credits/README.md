@@ -4,7 +4,7 @@ Buy Me a Coffee 결제를 olmuse 크레딧으로 바꾸고, 앱이 크레딧을 
 AWS Lambda(Function URL, 인증 없음) + DynamoDB 테이블 1개, 리전 `ap-northeast-2`. 함수와 테이블 이름은 둘 다 `strudel-credits`이다.
 
 - 웹훅 URL: `https://6wasuz6jowaayhoedd4h3vmthe0alpoq.lambda-url.ap-northeast-2.on.aws/webhooks/bmc`
-- 앱 API: 같은 주소의 `/api/account`, `/api/charge`, `/api/refund`, `/api/history`, `/api/find`(결제 찾기), `/api/reviews`(운영자용 보류 목록), `/api/coupon_make`(운영자용 쿠폰 만들기), `/api/redeem`(쿠폰 쓰기)(POST, `Authorization: Bearer <APP_TOKEN>`). 요청과 응답 형식은 `lambda_function.py` 맨 위에 적어 두었다.
+- 앱 API: 같은 주소의 `/api/account`, `/api/charge`, `/api/refund`, `/api/history`, `/api/find`(결제 찾기), `/api/reviews`(운영자용 보류 목록), `/api/coupon_make`(운영자용 쿠폰 만들기), `/api/redeem`(쿠폰 쓰기)(POST, `Authorization: Bearer <APP_TOKEN>`). 단 `/api/coupon_make`와 `/api/reviews`는 `ADMIN_TOKEN`만 받는다(앱 토큰이면 401). 요청과 응답 형식은 `lambda_function.py` 맨 위에 적어 두었다.
 
 ## 구조
 - `lambda_function.py`: 표준 라이브러리와 boto3만 쓴다. 테이블 항목 종류는 파일 머리말에 정리했다.
@@ -21,13 +21,21 @@ AWS Lambda(Function URL, 인증 없음) + DynamoDB 테이블 1개, 리전 `ap-no
 ## 비밀값 (출력하거나 git에 넣지 않는다)
 | 이름 | 위치 |
 |---|---|
-| APP_TOKEN | `~/.all-tomorrow/strudel-credits.token` (없으면 deploy.ps1이 만든다) |
+| APP_TOKEN | `~/.all-tomorrow/strudel-credits.token` (없으면 deploy.ps1이 만든다). 웹 서버가 쓴다: 차감·환불·조회·결제 찾기·쿠폰 쓰기 |
+| ADMIN_TOKEN | `~/.all-tomorrow/strudel-credits-admin.token` (없으면 deploy.ps1이 만든다). 쿠폰 발행·보류 결제 조회 전용. `tools/coupon.py`만 읽고 웹 서버 환경에는 넣지 않는다 |
 | PEPPER | `~/.all-tomorrow/strudel-credits.pepper` (없으면 만든다. **바꾸면 기존 계정을 모두 잃는다**) |
 | BMC 웹훅 시크릿 | `~/.all-tomorrow/key-pool.env`의 `STRUDEL_BMC_WEBHOOK_SECRET`. 없으면 `BMC_WEBHOOK_SECRET`을 쓴다 |
 
 ## 배포
 `powershell -ExecutionPolicy Bypass -File deploy/credits/deploy.ps1`
 다시 돌려도 안전하다. 실행이 끝나면 `url: ...` 한 줄을 출력한다.
+
+같이 거는 안전장치(모두 무료 범위):
+- DynamoDB 시점 복구(PITR) 켜기. 출력의 `pitr: ENABLED`로 확인한다. 복원은 콘솔이나 `aws dynamodb restore-table-to-point-in-time`(새 테이블로 복원된다).
+- Lambda 동시 실행 한도 10. 계정 전체 한도가 20 미만이면 건너뛴다(2026-11-09 현재 계정 한도 10이라 건너뜀).
+- `ALERT` 로그 → 메트릭 `olmuse/CreditsAlert` → 경보 `strudel-credits-alert` → SNS `olmuse-alerts` 메일. 로그 보관 90일.
+- AWS Budgets `olmuse-monthly` 월 5달러(실제 80%, 예상 100%에서 메일).
+- 메일 주소는 `-AlertEmail`, 없으면 `git config user.email`. SNS 메일은 처음 받은 확인 메일의 링크를 눌러야 온다.
 
 ## BMC 웹훅은 블로그 Lambda를 거쳐 온다
 
@@ -41,6 +49,8 @@ BMC 대시보드에 웹훅을 따로 등록하지 않는다(관제 결정, 2026-
 
 ## 쿠폰
 - 만들기: `python tools/coupon.py OLMUSE-START-1 10000` (계정 하나가 한 번), `--uses 50`이면 서로 다른 50개 계정이 한 번씩. 코드는 영문·숫자만 남기고 대문자로 바꾼다(6자 이상).
+- 발행은 `ADMIN_TOKEN`으로만 된다(`~/.all-tomorrow/strudel-credits-admin.token` 또는 환경 변수 `STRUDEL_CREDITS_ADMIN_TOKEN`). 앱 토큰으로 부르면 401이다. 발행할 때마다 CloudWatch에 `ALERT {"kind": "coupon_made", ...}` 한 줄이 남아 경보 메일이 온다(코드는 앞 3글자만).
+- 토큰이나 주소가 없으면 `tools/coupon.py`는 멈춘다. 로컬 장부에 만들려면 `STRUDEL_LOCAL_LEDGER=1`.
 - 쓰기: 사용자가 크레딧 창의 "쿠폰이 있어?"에 코드를 넣는다. 계정당 한 번, 하루 10번 시도. 기록에는 `coupon`으로 남는다.
 - DynamoDB 예약어 때문에 남은 횟수 속성 이름은 `remain`이다(`left` 아님).
 - 배포 확인(2026-11-09): 시험 계정에 쿠폰 `SELFTESTCOUPON1`(1크레딧)을 써서 적용·중복 거절·없는 코드 거절을 확인했다.
@@ -51,6 +61,7 @@ BMC 대시보드에 웹훅을 따로 등록하지 않는다(관제 결정, 2026-
 
 ## 시험
 - 단위 시험: `python -m pytest tests/test_credits_lambda.py -q`. DynamoDB는 메모리 가짜로 바꿔 돌린다.
+- 배포 확인(2026-11-09, 토큰 분리): 시험 계정 `credits-selftest@example.invalid`로 앱 토큰의 쿠폰 발행·보류 조회가 401, 관리 토큰의 차감이 401, 관리 토큰 발행 200, 앱 토큰 쿠폰 쓰기 200(+1), 계정 키(`acct`)로 환불 200을 확인했다.
 - 배포 확인(2026-11-07): 시험 계정 `credits-selftest@example.invalid`로 다음을 확인했고 모두 통과했다. 이 시험 계정은 지우지 않고 남겨 두었다(잔액 40, 기록 4건, 시험 결제 1건).
   - 계정 생성
   - 차감, 같은 ref로 두 번 차감해도 한 번만 빠짐, 잔액이 모자라면 402

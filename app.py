@@ -1,9 +1,9 @@
 """olmuse (구 strudel 딸깍이) — Streamlit entry point."""
 from pathlib import Path
 import os
-import hmac
 import html
 import json
+import logging
 import secrets
 import runpy
 import urllib.parse
@@ -15,12 +15,26 @@ from studio_backend import AgyCli, Jobs, Router, in_app_browser, job_store, vali
 from asset_agent import Agents
 from asset_classify import classify as classify_files
 from skill_router import ask_jev, read_key
-from credits import FREE_CREDITS, LedgerError, LocalLedger, RemoteLedger, price_table
+from credits import FREE_CREDITS, LedgerError, open_ledger, price_table
+from server_ops import PasswordGate, setup_logging, start_daily_backup
 
 st.set_page_config(page_title="olmuse", page_icon="◉", layout="wide", initial_sidebar_state="collapsed")
 
 HERE = Path(__file__).parent
+DATA = HERE / ".studio-data"
 LOCAL_SECRETS = Path.home() / ".all-tomorrow"  # this PC only; Cloud uses Streamlit Secrets
+log = logging.getLogger("olmuse.app")
+
+
+@st.cache_resource
+def server_ops():
+    """Once per process: the rotating log file under .studio-data/logs and a daily copy of the SQLite files."""
+    setup_logging(DATA / "logs")
+    start_daily_backup(DATA, os.environ.get("OLMUSE_BACKUP_DIR") or DATA / "backups")
+    return True
+
+
+server_ops()
 
 
 # ---------- settings ----------
@@ -55,6 +69,8 @@ def secret(*names):
 
 # The public server never sets this, so it alone must not unlock anything that spends a key on a public URL.
 LOCAL_AI = setting("STRUDEL_LOCAL_AI") == "1"
+# Only run_local.ps1 sets this. Without it a missing remote ledger shuts paid AI instead of opening a local file.
+LOCAL_LEDGER = setting("STRUDEL_LOCAL_LEDGER") == "1"
 
 
 # ---------- AI engine and credit ledger ----------
@@ -83,11 +99,36 @@ def limit_setting(name, default):
 def jobs():
     # STRUDEL_DAILY_CALLS is the safety ceiling for all signed-in accounts together; each account also has its own.
     # Password (teacher) sessions are a separate pool with a per-session cap, so a leaked password cannot drain it in one go.
-    return Jobs(choose_model(), daily_limit=limit_setting("STRUDEL_DAILY_CALLS", "200"), ledger=ledger(),
+    # Password sessions spend the operator's key without credits: STRUDEL_OPERATOR_DAILY_USD caps their worst-case
+    # spend per day (0.60 USD: even 30 such days stay under the 30,000 KRW monthly budget). 0 or below means no cap.
+    operator_usd = float(setting("STRUDEL_OPERATOR_DAILY_USD", "0.60") or 0)
+    led = ledger()
+    return Jobs(choose_model(), daily_limit=limit_setting("STRUDEL_DAILY_CALLS", "200"), ledger=led,
                 account_limit=limit_setting("STRUDEL_ACCOUNT_DAILY_CALLS", "60"),
                 teacher_limit=limit_setting("STRUDEL_TEACHER_DAILY_CALLS", "200"),
                 session_limit=limit_setting("STRUDEL_TEACHER_SESSION_CALLS", "60"),
-                store=job_store(setting("OLMUSE_JOBS_DB")))
+                operator_usd=operator_usd if operator_usd > 0 else None,
+                store=job_store(setting("OLMUSE_JOBS_DB"), hasher=email_hasher(led)))
+
+
+def email_hasher(led):
+    """How jobs.sqlite3 stores an email: the ledger's own account key, or an HMAC with a pepper of this PC."""
+    if led is not None:
+        return led.key_of
+    from credits import email_key
+    return lambda email: email_key(ledger_pepper() or local_pepper(), email)
+
+
+def local_pepper():
+    path = DATA / "jobs.pepper"
+    if not path.exists():
+        DATA.mkdir(exist_ok=True)
+        path.write_text(secrets.token_hex(32), encoding="ascii")
+    return path.read_text(encoding="ascii").strip()
+
+
+def ledger_pepper():
+    return setting("STRUDEL_CREDITS_PEPPER") or local_file("strudel-credits.pepper", "ascii").strip()
 
 
 @st.cache_resource
@@ -96,15 +137,27 @@ def agents():
 
 
 @st.cache_resource
-def ledger():
-    """The Lambda ledger when configured; otherwise a local file that only this PC sees."""
+def ledger_state():
+    """(ledger, problem). The Lambda ledger when configured; the local file only when STRUDEL_LOCAL_LEDGER=1.
+    Otherwise None: paid AI stays shut and the page says why."""
     url = setting("STRUDEL_CREDITS_URL")
     token = setting("STRUDEL_CREDITS_TOKEN") or local_file("strudel-credits.token", "ascii").strip()
-    if url and token:
-        return RemoteLedger(url, token)
-    folder = HERE / ".studio-data"
-    folder.mkdir(exist_ok=True)
-    return LocalLedger(str(folder / "credits.sqlite"), pepper=setting("STRUDEL_CREDITS_PEPPER", "local-only"))
+    if LOCAL_LEDGER:
+        DATA.mkdir(exist_ok=True)
+    found, problem = open_ledger(url, token, ledger_pepper(), LOCAL_LEDGER, str(DATA / "credits.sqlite"))
+    if problem:
+        log.error("ALERT %s; signed-in AI is off", problem)
+    return found, problem
+
+
+def ledger():
+    return ledger_state()[0]
+
+
+@st.cache_resource
+def password_gate():
+    return PasswordGate(session_tries=int(setting("STUDIO_PASSWORD_SESSION_TRIES", "5")),
+                        hourly_tries=int(setting("STUDIO_PASSWORD_HOURLY_TRIES", "20")))
 
 
 # ---------- page text ----------
@@ -118,6 +171,9 @@ st.markdown("""<style>
 
 TEXT = {
     "en": {"google": "Continue with Google · {n} free credits", "password": "Password", "enter": "Enter", "wrong": "Wrong password.",
+           "locked": "Too many wrong passwords. Try again later.",
+           "no_ledger": "The credit ledger is not connected, so AI for signed-in accounts is off. Please try again later.",
+           "server_error": "Something went wrong on our side. Please try again in a moment.",
            "back": "← Back to the music studio", "switch": "Switch Arcade / BLACK BOX",
            "no_ai": "AI isn't connected. Check the connection in Settings.",
            "in_app": "Google sign-in is blocked inside in-app browsers ({app}). Please open this page in your default browser (Chrome, Safari).",
@@ -125,6 +181,9 @@ TEXT = {
            "open_browser": "Open in browser", "copy": "Copy address", "copied": "Copied",
            "moved": "olmuse's address is {url}. Songs are saved per address, so export them here first if you made any."},
     "ko": {"google": "구글 계정으로 시작하기 · 무료 {n} 크레딧", "password": "비밀번호", "enter": "입장하기", "wrong": "비밀번호가 맞지 않아요.",
+           "locked": "비밀번호를 너무 많이 틀렸어요. 잠시 뒤에 다시 해 주세요.",
+           "no_ledger": "크레딧 장부가 연결되지 않아 로그인 계정의 AI를 막았어요. 잠시 뒤에 다시 해 주세요.",
+           "server_error": "서버에서 문제가 생겼어요. 잠시 뒤에 다시 해 주세요.",
            "back": "← 음악 작업실로 돌아가기", "switch": "아케이드 / BLACK BOX 전환",
            "no_ai": "AI가 연결되지 않았어. 설정에서 연결 상태를 확인해 줘.",
            "in_app": "구글 로그인은 인앱 브라우저({app})에서 막혀요. 기본 브라우저(크롬, 사파리)로 열어 주세요.",
@@ -222,11 +281,12 @@ def login_screen(password, google):
             with st.form("login", border=False):
                 entered = st.text_input(T["password"], type="password")
                 if st.form_submit_button(T["enter"], icon=":material/arrow_forward:", use_container_width=True):
-                    if hmac.compare_digest(entered.encode(), password.encode()):
+                    tries = st.session_state.setdefault("studio_gate", secrets.token_urlsafe(12))
+                    answer = password_gate().check(tries, entered, password)
+                    if answer == "ok":
                         st.session_state.studio_authenticated = True
                         st.rerun()
-                    else:
-                        st.error(T["wrong"])
+                    st.error(T["locked" if answer == "locked" else "wrong"])
     st.stop()
 
 
@@ -243,7 +303,7 @@ if not email and not google and not teacher and LOCAL_AI:
 
 def account_view(refresh=False, history=False):
     """What the browser may know about the signed-in account. Never the ledger's keys."""
-    if not email:
+    if not email or ledger() is None:
         return None
     if refresh or "studio_account" not in st.session_state:
         try:
@@ -292,9 +352,11 @@ iframe {display:block}
 studio = components.declare_component("studio", path=str(HERE / "studio_frontend"))
 # A signed-in account owns its job, so a reload or another device under the same account picks up the running job
 # (and a result that finished while no page was open). Password and local sessions keep a per-session owner.
-owner = "acct:" + email if email else st.session_state.studio_owner
+# The account part is the ledger's HMAC of the email, so jobs.sqlite3 never holds an email in plain.
+owner = jobs().store.owner(email) if email else st.session_state.studio_owner
 # A public URL must never be able to spend the key, so AI needs a password, a signed-in account or the local flag.
-ai_ready = jobs().model is not None and (teacher or bool(email) or LOCAL_AI)
+# A signed-in account's calls are paid, so they also need the ledger.
+ai_ready = jobs().model is not None and (teacher or bool(email) or LOCAL_AI) and not (email and ledger() is None)
 
 
 def handle(action, payload, manager, choices):
@@ -310,7 +372,7 @@ def handle(action, payload, manager, choices):
         account_view(refresh=True, history=True)
     elif action == "find_payment":
         # {payer_email, amount, date: YYYY-MM-DD} → account.find = {found, added, credits, too_many}
-        if not email:
+        if not email or ledger() is None:
             return
         p = payload if isinstance(payload, dict) else {}
         try:
@@ -323,7 +385,7 @@ def handle(action, payload, manager, choices):
         account_view(refresh=True, history=True)
     elif action == "coupon":
         # {code} → account.coupon = {status: ok|none|used|empty|too_many, added, credits, n}
-        if not email:
+        if not email or ledger() is None:
             return
         try:
             got = ledger().redeem(email, str((payload or {}).get("code") or "")[:60])
@@ -365,6 +427,9 @@ def handle(action, payload, manager, choices):
                "state": p.get("state") if isinstance(p.get("state"), dict) else {}, "lang": lang,
                "model": p.get("model") if p.get("model") in known else (choices or {}).get("model", ""),
                "effort": str(p.get("effort") or (choices or {}).get("effort", ""))[:20], "account": email or ""}
+        if email and ledger() is None:
+            agents().fail(owner, p.get("n"), T["no_ledger"])
+            return
         agents().start(owner, req, manager.model, manager, ledger() if email else None)
     elif action == "lang":
         chosen = (payload or {}).get("lang")
@@ -398,8 +463,13 @@ def render():
     st.session_state.studio_error = ""
     try:
         handle(result.get("action"), result.get("payload"), manager, choices)
-    except (ValueError, KeyError, TypeError) as exc:
+    except ValueError as exc:  # our own words for the user
         st.session_state.studio_error = str(exc)
+    except Exception:
+        log.exception("action %s failed", str(result.get("action"))[:40])
+        st.session_state.studio_error = T["server_error"]
 
 
+if email and ledger_state()[1]:
+    st.error(T["no_ledger"], icon=":material/error:")
 render()

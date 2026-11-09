@@ -10,6 +10,7 @@ import binascii
 import datetime
 import hashlib
 import json
+import logging
 import math
 import os
 import queue
@@ -23,7 +24,10 @@ import urllib.error
 import urllib.request
 import uuid
 
-from credits import LedgerError, call_cost
+from credits import LedgerError, call_cost, worst_usd
+from server_ops import scrub
+
+log = logging.getLogger("olmuse.jobs")
 
 DEFAULT_MODEL = "gemini-3.8-flash"
 DEFAULT_CLAUDE_MODEL = "claude-sonnet-5-5"
@@ -105,6 +109,8 @@ MSG = {
         "daily_limit": "Hit today's AI call limit, so I stopped.",
         "account_limit": "This account hit today's AI call limit ({n} calls), so I stopped. It resets tomorrow.",
         "session_limit": "This password session hit its AI call limit ({n} calls), so I stopped.",
+        "operator_limit": "Today's shared AI budget for password sessions is used up, so I stopped. It resets tomorrow.",
+        "no_ledger": "The credit ledger is not connected, so AI calls that use credits are off.",
         "no_browser_refund": "The browser stopped responding, so I stopped. The last call's {n} credits were refunded.",
         "no_credits": "Out of credits, so I stopped. You can top up with the credits button at the top.",
         "no_key": "No Gemini key is set.",
@@ -192,6 +198,8 @@ MSG = {
         "daily_limit": "오늘의 AI 호출 한도에 닿아 멈췄어.",
         "account_limit": "이 계정의 오늘 AI 호출 한도({n}회)에 닿아 멈췄어. 내일 다시 쓸 수 있어.",
         "session_limit": "이 비밀번호 세션의 AI 호출 한도({n}회)에 닿아 멈췄어.",
+        "operator_limit": "비밀번호 세션의 오늘 공용 AI 예산을 다 써서 멈췄어. 내일 다시 쓸 수 있어.",
+        "no_ledger": "크레딧 장부가 연결되지 않아 크레딧을 쓰는 AI 호출을 막았어.",
         "no_browser_refund": "브라우저 응답이 없어 멈췄어. 마지막 호출의 {n}크레딧은 돌려줬어.",
         "no_credits": "크레딧이 모자라 멈췄어. 위쪽 크레딧 버튼에서 충전할 수 있어.",
         "no_key": "Gemini 키가 설정되지 않았어.",
@@ -383,8 +391,7 @@ def redact(text: str, secret: str = "") -> str:
     text = str(text)
     if secret:
         text = text.replace(secret, "[redacted]")
-    text = re.sub(r"sk-or-[0-9A-Za-z_-]{10,}", "[redacted]", text)
-    return re.sub(r"AIza[0-9A-Za-z_-]{20,}", "[redacted]", text)[:300]
+    return scrub(text)[:300]
 
 
 class Gemini:
@@ -966,8 +973,13 @@ class JobStore:
     """Job views, paid calls still in flight and daily call counts on disk, so a restart keeps finished results,
     fails jobs that were running and refunds their unfinished calls once (the ledger refund is idempotent by ref)."""
 
-    def __init__(self, path: str = ":memory:"):
+    KEEP_DAYS = 30  # finished results are deleted this long after their last change
+
+    def __init__(self, path: str = ":memory:", hasher=None):
+        """hasher(email) -> account key (the ledger's key_of). With it no email is written in plain: owners are
+        "acct:<key>", counters likewise, and a paid call in flight keeps only the key (refunded by key)."""
         self.lock = threading.Lock()
+        self.hasher = hasher
         self.db = sqlite3.connect(path, check_same_thread=False)
         with self.lock, self.db:
             self.db.execute("pragma journal_mode=wal")
@@ -975,14 +987,42 @@ class JobStore:
                 "create table if not exists views (kind text, owner text, view text, lang text, primary key (kind, owner));"
                 "create table if not exists charges (ref text primary key, kind text, owner text, email text, cost integer);"
                 "create table if not exists counts (day text, name text, n integer, primary key (day, name));")
+            if "at" not in [r[1] for r in self.db.execute("pragma table_info(views)")]:
+                self.db.execute("alter table views add column at real")
+            self.db.execute("update views set at=? where at is null", (time.time(),))
+            self.db.execute("delete from views where at<?", (time.time() - self.KEEP_DAYS * 86400,))
+            if hasher:
+                self._hash_old_rows()
+
+    def key(self, email: str) -> str:
+        """What is stored for an email: its account key when a hasher is set."""
+        return self.hasher(email) if self.hasher and "@" in str(email) else str(email)
+
+    def owner(self, email: str) -> str:
+        return "acct:" + self.key(email)
+
+    def _hash_old_rows(self):
+        """Rows written before emails were hashed. Called inside the lock and transaction."""
+        for kind, owner in self.db.execute("select kind, owner from views where owner like 'acct:%@%'").fetchall():
+            self.db.execute("delete from views where kind=? and owner=?", (kind, self.owner(owner[5:])))
+            self.db.execute("update views set owner=? where kind=? and owner=?", (self.owner(owner[5:]), kind, owner))
+        for ref, owner, email in self.db.execute(
+                "select ref, owner, email from charges where email like '%@%' or owner like 'acct:%@%'").fetchall():
+            new_owner = self.owner(owner[5:]) if owner.startswith("acct:") else owner
+            self.db.execute("update charges set owner=?, email=? where ref=?", (new_owner, self.key(email), ref))
+        for day, name, n in self.db.execute("select day, name, n from counts where name like 'acct:%@%'").fetchall():
+            self.db.execute("delete from counts where day=? and name=?", (day, name))
+            self.db.execute("insert into counts values (?,?,?) on conflict (day, name) do update set n=n+?",
+                            (day, self.owner(name[5:]), n, n))
 
     def save(self, kind: str, owner: str, view: dict, lang: str = DEFAULT_LANG):
         with self.lock, self.db:
-            self.db.execute("insert or replace into views values (?,?,?,?)", (kind, owner, json.dumps(view), lang))
+            self.db.execute("insert or replace into views (kind, owner, view, lang, at) values (?,?,?,?,?)",
+                            (kind, owner, json.dumps(view), lang, time.time()))
 
     def charged(self, kind: str, owner: str, email: str, cost: int, ref: str):
         with self.lock, self.db:
-            self.db.execute("insert or replace into charges values (?,?,?,?,?)", (ref, kind, owner, email, cost))
+            self.db.execute("insert or replace into charges values (?,?,?,?,?)", (ref, kind, owner, self.key(email), cost))
 
     def settled(self, ref: str):
         with self.lock, self.db:
@@ -999,7 +1039,10 @@ class JobStore:
             if ledger is None:
                 continue  # kept until a start with a ledger can refund it
             try:
-                ledger.refund(email, cost, ref)
+                if "@" in str(email):
+                    ledger.refund(email, cost, ref)
+                else:
+                    ledger.refund_key(email, cost, ref)
             except LedgerError:
                 continue  # tried again on the next start
             refunded[owner] = refunded.get(owner, 0) + cost
@@ -1018,19 +1061,19 @@ class JobStore:
             self.db.execute("delete from counts where day<>?", (day,))
             return dict(self.db.execute("select name, n from counts where day=?", (day,)).fetchall())
 
-    def count(self, day: str, names):
+    def count(self, day: str, names, n: int = 1):
         with self.lock, self.db:
             for name in names:
-                self.db.execute("insert into counts values (?,?,1) on conflict (day, name) do update set n=n+1", (day, name))
+                self.db.execute("insert into counts values (?,?,?) on conflict (day, name) do update set n=n+?", (day, name, n, n))
 
 
-def job_store(path: str = "") -> JobStore:
+def job_store(path: str = "", hasher=None) -> JobStore:
     """OLMUSE_JOBS_DB picks the file; the default sits next to the local credits file in .studio-data."""
     path = path or os.environ.get("OLMUSE_JOBS_DB") or os.path.join(
         os.path.dirname(os.path.abspath(__file__)), ".studio-data", "jobs.sqlite3")
     if path != ":memory:":
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    return JobStore(path)
+    return JobStore(path, hasher)
 
 
 def restart_message(lang: str, refunded: int) -> str:
@@ -1115,12 +1158,14 @@ class Jobs:
     """Owners are a signed-in account ("acct:<email>") or one browser session, so a reload under the same account
     picks up the running job. Daily call limits: signed-in accounts each have account_limit and together daily_limit
     (a safety ceiling on the owner's key). Password (teacher) and local sessions are a separate pool, teacher_limit
-    in all and session_limit per session. None means no limit."""
+    in all and session_limit per session. They spend the operator's key without credits, so their calls also count
+    against operator_usd, a daily cap in dollars at each model's worst measured cost. None means no limit."""
 
     def __init__(self, model=None, daily_limit: int | None = 200, feedback_timeout: int = FEEDBACK_TIMEOUT, ledger=None,
                  account_limit: int | None = None, teacher_limit: int | None = None, session_limit: int | None = None,
-                 store: JobStore | None = None):
+                 store: JobStore | None = None, operator_usd: float | None = None):
         self.model = model
+        self.operator_usd = operator_usd
         self.ledger = ledger
         self.daily_limit = daily_limit
         self.account_limit, self.teacher_limit, self.session_limit = account_limit, teacher_limit, session_limit
@@ -1176,11 +1221,35 @@ class Jobs:
         view = self.restored.get(owner)
         return json.loads(json.dumps(view)) if view else None
 
+    OPERATOR = "operator_microusd"  # counter of the password sessions' worst-case spend, in millionths of a dollar
+
     def _buckets(self, account: str, owner: str) -> list[tuple[str, int | None, str]]:
         """(counter, limit, message key) that one call by this requester counts against."""
         if account:
-            return [("acct:" + account, self.account_limit, "account_limit"), ("members", self.daily_limit, "daily_limit")]
+            name = self.store.owner(account) if self.store else "acct:" + account
+            return [(name, self.account_limit, "account_limit"), ("members", self.daily_limit, "daily_limit")]
         return [("session:" + owner, self.session_limit, "session_limit"), ("teachers", self.teacher_limit, "daily_limit")]
+
+    def _take(self, account: str, owner: str, model: str, effort: str, lang: str) -> str:
+        """Counts one call against every limit, or returns the message key of the limit it would pass ("" when none).
+        Called under self.lock."""
+        self._today()
+        buckets = self._buckets(account, owner)
+        for name, limit, key in buckets:
+            if limit is not None and self.counts.get(name, 0) >= limit:
+                return key
+        micro = 0
+        if not account and self.operator_usd is not None:
+            micro = int(round(worst_usd(model, effort) * 1_000_000))
+            if self.counts.get(self.OPERATOR, 0) + micro > self.operator_usd * 1_000_000:
+                log.warning("operator daily budget reached (%.2f USD)", self.operator_usd)
+                return "operator_limit"
+        self._bump([name for name, _, _ in buckets])
+        if micro:
+            self.counts[self.OPERATOR] = self.counts.get(self.OPERATOR, 0) + micro
+            if self.store:
+                self.store.count(self.day, [self.OPERATOR], micro)
+        return ""
 
     def _today(self):
         today = datetime.date.today().isoformat()
@@ -1200,15 +1269,15 @@ class Jobs:
             left = [limit - self.counts.get(name, 0) for name, limit, _ in self._buckets(account, owner) if limit is not None]
         return max(0, min(left)) if left else None
 
-    def count_call(self, account: str, owner: str, lang: str = DEFAULT_LANG):
+    def count_call(self, account: str, owner: str, lang: str = DEFAULT_LANG, model: str = "", effort: str = ""):
         """One model call outside a job (the asset board's agent) counts against the same daily limits."""
         with self.lock:
-            self._today()
-            buckets = self._buckets(account, owner)
-            for name, limit, key in buckets:
-                if limit is not None and self.counts.get(name, 0) >= limit:
-                    raise ValueError(msg(lang, key, n=limit))
-            self._bump([name for name, _, _ in buckets])
+            key = self._take(account, owner, model, effort, lang)
+        if key:
+            raise ValueError(msg(lang, key, n=self._limit_of(key, account, owner)))
+
+    def _limit_of(self, key: str, account: str, owner: str):
+        return next((limit for _, limit, k in self._buckets(account, owner) if k == key), None)
 
     def _spend(self, job: Job):
         if job.cancelled.is_set():
@@ -1216,17 +1285,17 @@ class Jobs:
         seconds = max(MIN_JOB_SECONDS, SECONDS_PER_ROUND * job.view["limit"])
         if time.monotonic() - job.started > seconds:
             raise Stop("limit", job.text("time_limit", minutes=seconds // 60))
+        account = job.request.get("account", "")
         with self.lock:
-            self._today()
-            buckets = self._buckets(job.request.get("account", ""), job.owner)
-            for name, limit, key in buckets:
-                if limit is not None and self.counts.get(name, 0) >= limit:
-                    raise Stop("limit", job.text(key, n=limit))
-            self._bump([name for name, _, _ in buckets])
+            key = self._take(account, job.owner, job.request.get("model", ""), job.request.get("effort", ""), job.lang)
+        if key:
+            raise Stop("limit", job.text(key, n=self._limit_of(key, account, job.owner)))
 
     def _ask(self, job: Job, call, *args):
         """One model call. A signed-in user pays before it runs and gets it back if the model fails."""
         email, ref, cost = job.request.get("account"), None, 0
+        if email and not self.ledger:
+            raise Stop("failed", job.text("no_ledger"))  # a signed-in user's calls are paid; never run them free
         if self.ledger and email:
             cost = call_cost(job.request.get("model", ""), job.request.get("effort", ""))
             ref = f"{job.id}:{job.view.get('calls', 0)}"
@@ -1241,7 +1310,7 @@ class Jobs:
                 self.store.charged("studio", job.owner, email, cost, ref)
         try:
             reply = call(*args)
-        except ModelError:
+        except BaseException:  # the model's own failure or our bug: either way nobody got this call's result
             if ref:
                 self._refund(job, email, cost, ref)
             raise
@@ -1295,6 +1364,7 @@ class Jobs:
             if job.running:
                 job.end("failed", "error", job.text("model_failed", error=exc.text(job.lang)))
         except Exception:
+            log.exception("job %s failed unexpectedly", job.id)
             if job.running:
                 job.end("failed", "error", job.text("internal"))
 

@@ -19,6 +19,11 @@ FREE_CREDITS = 20
 MODEL_COST = {"deepseek/deepseek-v4.1-flash": 1, "claude-haiku-5-5": 1, "claude-sonnet-5-5": 1,
               "gemini-3.8-flash": 2, "claude-opus-5-5": 3}
 EFFORT_EXTRA = {"low": 0, "medium": 0, "high": 1}
+# Worst measured cost of one call in USD (docs/CREDITS.md). Calls that spend the operator's key without credits
+# (password sessions) are counted against a daily dollar cap with these. Unknown models count as the dearest one.
+WORST_USD = {"deepseek/deepseek-v4.1-flash": 0.0032, "claude-haiku-5-5": 0.0015, "claude-sonnet-5-5": 0.0266,
+             "gemini-3.8-flash": 0.0681, "claude-opus-5-5": 0.0382}
+HIGH_EFFORT_FACTOR = 1.5
 
 
 class LedgerError(Exception):
@@ -27,6 +32,18 @@ class LedgerError(Exception):
 
 def call_cost(model: str, effort: str) -> int:
     return MODEL_COST.get(model, 2) + EFFORT_EXTRA.get(effort, 0)
+
+
+def worst_usd(model: str, effort: str) -> float:
+    """The most one call of this model may cost the operator, for the password sessions' daily cap."""
+    usd = WORST_USD.get(model, max(WORST_USD.values()))
+    return usd * (HIGH_EFFORT_FACTOR if effort == "high" else 1)
+
+
+def email_key(pepper, email: str) -> str:
+    """The ledger's account key: HMAC-SHA256(pepper, lowercased email). Same formula as the Lambda's acct_key."""
+    pepper = pepper.encode() if isinstance(pepper, str) else pepper
+    return hmac.new(pepper, str(email).strip().lower().encode(), hashlib.sha256).hexdigest()
 
 
 COUPON_STATUS = {200: "ok", 404: "none", 409: "used", 410: "empty", 429: "too_many"}
@@ -41,8 +58,14 @@ def price_table() -> dict:
 
 
 class RemoteLedger:
-    def __init__(self, url: str, token: str, timeout: float = 10):
-        self.url, self.token, self.timeout = url.rstrip("/"), token, timeout
+    def __init__(self, url: str, token: str, timeout: float = 10, pepper: str = ""):
+        """pepper is the Lambda's PEPPER, so key_of() gives the same account key the ledger stores."""
+        self.url, self.token, self.timeout, self.pepper = url.rstrip("/"), token, timeout, pepper
+
+    def key_of(self, email: str) -> str:
+        if not self.pepper:
+            raise LedgerError("크레딧 장부 키 설정이 없어.")
+        return email_key(self.pepper, email)
 
     def _post(self, path: str, body: dict, ok=(200,)) -> tuple[int, dict]:
         req = urllib.request.Request(self.url + path, data=json.dumps(body).encode(), method="POST",
@@ -66,6 +89,10 @@ class RemoteLedger:
 
     def refund(self, email: str, amount: int, ref: str) -> int:
         return int(self._post("/api/refund", {"email": email, "amount": amount, "ref": ref})[1].get("credits", 0))
+
+    def refund_key(self, key: str, amount: int, ref: str) -> int:
+        """Refund by account key, for charges kept on disk without the email (the restart refund)."""
+        return int(self._post("/api/refund", {"acct": key, "amount": amount, "ref": ref})[1].get("credits", 0))
 
     def history(self, email: str) -> list:
         return self._post("/api/history", {"email": email})[1].get("items", [])
@@ -114,7 +141,9 @@ class LocalLedger:
         self.find_tries: dict[tuple, int] = {}
 
     def _key(self, email: str) -> str:
-        return hmac.new(self.pepper, email.strip().lower().encode(), hashlib.sha256).hexdigest()
+        return email_key(self.pepper, email)
+
+    key_of = _key
 
     def _log(self, key, kind, amount, credits, note=""):
         self.db.execute("insert into history values (?,?,?,?,?,?)", (key, kind, amount, credits, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), note))
@@ -166,13 +195,16 @@ class LocalLedger:
             return True, credits
 
     def refund(self, email: str, amount: int, ref: str) -> int:
-        key = self._key(email)
+        return self.refund_key(self._key(email), amount, ref)
+
+    def refund_key(self, key: str, amount: int, ref: str) -> int:
         with self.lock, self.db:
             row = self.db.execute("select amount, refunded from refs where ref=? and key=?", (ref, key)).fetchone()
             if row and not row[1]:
                 self.db.execute("update refs set refunded=1 where ref=?", (ref,))
                 self._log(key, "refund", row[0], self._add(key, row[0]), "실패한 호출")
-            return self._credits(key)
+            row = self.db.execute("select credits from accounts where key=?", (key,)).fetchone()
+            return row[0] if row else 0
 
     def hold(self, payer_email: str, amount: str, day: str, credits: int):
         """A payment with no code, kept until its payer finds it. Stands in for the Lambda's orphans in tests."""
@@ -238,3 +270,16 @@ class LocalLedger:
         key = self._key(email)
         rows = self.db.execute("select kind, amount, credits, at, note from history where key=? order by rowid desc limit 50", (key,)).fetchall()
         return [dict(zip(("kind", "amount", "credits", "at", "note"), r)) for r in rows]
+
+
+def open_ledger(url: str, token: str, pepper: str, local: bool, path: str):
+    """(ledger, problem). The Lambda ledger needs its url, token and pepper. The local SQLite ledger opens only when
+    local mode is chosen on purpose (STRUDEL_LOCAL_LEDGER=1); otherwise the answer is (None, what is missing), so a
+    public server with a lost token shuts paid AI instead of handing out fresh free credits from an empty file."""
+    if url and token and pepper:
+        return RemoteLedger(url, token, pepper=pepper), ""
+    if local:
+        return LocalLedger(path, pepper=pepper or "local-only"), ""
+    missing = [name for name, value in (("STRUDEL_CREDITS_URL", url), ("strudel-credits.token", token),
+                                        ("strudel-credits.pepper", pepper)) if not value]
+    return None, "credit ledger not configured: missing " + ", ".join(missing)

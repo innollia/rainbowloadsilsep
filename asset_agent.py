@@ -6,12 +6,15 @@ Calls go through the music screen's model choice, daily limits and credits; a fa
 from __future__ import annotations
 
 import json
+import logging
 import secrets
 import threading
 import time
 
 from credits import LedgerError, call_cost
-from studio_backend import AgyCli, ModelError, lang_of, restart_message
+from studio_backend import AgyCli, ModelError, lang_of, msg, restart_message
+
+log = logging.getLogger("olmuse.agent")
 
 OPS = ["add_ref", "remove_ref", "move", "rename", "describe", "set_when", "add_cat", "set_brief", "revise", "select"]
 STATE_CHARS = 60000
@@ -137,7 +140,7 @@ class Agents:
             if self.store:
                 self.store.save("agent", owner, self.views[owner], lang)
         try:
-            jobs.count_call(request.get("account", ""), owner, lang)
+            jobs.count_call(request.get("account", ""), owner, lang, model=request.get("model", ""), effort=request.get("effort", ""))
         except ValueError as exc:
             self.fail(owner, n, str(exc))
             return
@@ -147,6 +150,8 @@ class Agents:
         email, cost, ref = request.get("account", ""), 0, None
         view = {"n": n, "status": "done"}
         try:
+            if email and not ledger:
+                raise ValueError(msg(lang, "no_ledger"))  # a signed-in user's calls are paid; never run them free
             if ledger and email:
                 cost = call_cost(request.get("model", ""), request.get("effort", ""))
                 ref = f"agent:{owner[-12:]}:{secrets.token_hex(4)}:{int(time.time())}"
@@ -164,13 +169,23 @@ class Agents:
             state = request.get("state") if isinstance(request.get("state"), dict) else {}
             reply = ask(engine, prompt_for(state, str(request.get("text") or "")[:4000], lang))
             view.update(clean(reply if isinstance(reply, dict) else {}, state))
-        except (ModelError, ValueError, LedgerError, OSError) as exc:
+        except Exception as exc:  # whatever happens the call ends failed and refunded, never stuck at "working"
             if ref:
                 try:
                     view["credits"] = ledger.refund(email, cost, ref)
-                except LedgerError:
-                    pass
-            view.update(status="failed", error=exc.text(lang) if isinstance(exc, ModelError) else str(exc))
-        if ref and self.store:
-            self.store.settled(ref)
-        self._set(owner, view, lang)
+                except Exception:
+                    log.exception("agent refund failed")
+            if isinstance(exc, ModelError):
+                error = exc.text(lang)
+            elif isinstance(exc, (ValueError, LedgerError)):
+                error = str(exc)  # our own words for the user
+            else:
+                log.exception("agent call failed unexpectedly")
+                error = msg(lang, "internal")
+            view = {k: v for k, v in view.items() if k in ("n", "credits")}
+            view.update(status="failed", error=error)
+        try:
+            if ref and self.store:
+                self.store.settled(ref)
+        finally:
+            self._set(owner, view, lang)

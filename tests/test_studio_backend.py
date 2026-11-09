@@ -178,7 +178,7 @@ def _member(email, **kw):
 
 def test_each_account_has_its_own_daily_limit_under_a_shared_ceiling():
     fake = Fake()
-    jobs = sb.Jobs(fake, daily_limit=3, account_limit=2, teacher_limit=10, session_limit=10)
+    jobs = sb.Jobs(fake, daily_limit=3, account_limit=2, teacher_limit=10, session_limit=10, ledger=LocalLedger())
     for i in range(3):
         jobs.submit("acct:a", _member("a@example.com", lang="ko"))
         snap = drive(jobs, "acct:a")
@@ -254,7 +254,7 @@ def test_a_result_a_page_saw_is_not_refunded():
 
 
 def test_a_talk_reply_that_finished_unseen_waits_for_the_next_visit():
-    jobs = sb.Jobs(Fake(edits=[{"intent": "talk", "reply": "hi", "summary": "", "bpm": 120, "changes": []}]))
+    jobs = sb.Jobs(Fake(edits=[{"intent": "talk", "reply": "hi", "summary": "", "bpm": 120, "changes": []}]), ledger=LocalLedger())
     jobs.submit("acct:a@example.com", _member("a@example.com"))
     _wait_end(jobs.jobs["acct:a@example.com"])
     later = jobs.snapshot("acct:a@example.com")  # a later sign-in under the same account

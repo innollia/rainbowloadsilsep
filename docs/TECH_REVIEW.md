@@ -152,3 +152,24 @@
 - Streamlit 1.67에서 로그인 쿠키 수명 문제가 고쳐졌는지
 - 시험 실행(이번 검토에서는 어떤 시험도 돌리지 않음)
 - 재부팅 후 서비스가 저절로 다시 뜨는지(DP7 감시 설정은 열어 보지 않음)
+
+## 처리 상태 (2026-11-09)
+
+| 번호 | 한 것 | 남은 것 |
+|---|---|---|
+| 1 | 비밀번호 모드는 유료 전환까지 둔다(사용자 결정). 비밀번호는 세션당 5번 틀리면 15분, 전체 시간당 20번 틀리면 그 시간 동안 잠긴다. 비밀번호 세션의 운영자 키 지출은 하루 최악 0.60달러(`STRUDEL_OPERATOR_DAILY_USD`, 모델별 최악 실측 원가로 셈. 30일 모두 채워도 약 18달러 < 3만 원) | olmuse 전용 키와 제공사 상한(아래 "사람이 할 일") |
+| 2 | 원격 장부 주소·토큰·pepper가 없으면 로컬 장부를 열지 않고 로그인 계정의 AI를 막고 화면에 알린다. 로컬 장부는 `STRUDEL_LOCAL_LEDGER=1`(run_local.ps1)일 때만 | |
+| 3 | `ADMIN_TOKEN` 분리(`~/.all-tomorrow/strudel-credits-admin.token`). `coupon_make`·`reviews`는 관리 토큰만, 발행마다 ALERT. 실제 장부에서 앱 토큰 401·관리 토큰 200·쿠폰 쓰기 200 확인 | |
+| 4 | DynamoDB PITR 켬(`pitr: ENABLED`). SQLite는 시작 때와 실행 중 하루 한 번 백업 API로 `.studio-data/backups/날짜/`(14일, `OLMUSE_BACKUP_DIR`로 다른 곳 지정) | 다른 디스크·OneDrive로 보낼지, 복원 실습 |
+| 5 | `.studio-data/logs/olmuse.log` 하루 단위 7일, 이메일·키·토큰 가림, 예상 밖 예외는 traceback. 에셋 에이전트는 어떤 예외에도 실패로 닫고 환불 | |
+| 6 | `jobs.sqlite3`의 계정·차감·카운터를 장부 HMAC 키로 저장(기존 행은 시작 때 바꿈, 재시작 환불은 `acct` 키로). 끝난 결과 30일 뒤 삭제. 처리방침에 OpenRouter/DeepSeek·TypeSafe·서버 보관·국외 이전 표 | 사업자 등록 뒤 사업자 정보·보호책임자 이름, 법률 검토 |
+| 7 | ALERT 경보 + SNS 메일, AWS 예산 월 5달러 알림 | 동시 실행 한도: 계정 한도가 10이라 걸 수 없음(한도 상향 요청 뒤 deploy.ps1 재실행) |
+| 8 | `requirements.txt`를 지금 설치된 버전으로 고정 | |
+| 9 | 화면에는 우리 문구(`ValueError`)만, 나머지는 일반 문구 + 로그 | |
+| 10 | 모델 호출 중 어떤 예외든 환불 | |
+| 11 | 조사 문서의 현재 구조·위험·1단계 갱신 | 강제 종료 후 환불 실측 |
+
+### 사람이 할 일 (콘솔·돈·결정)
+- olmuse 전용 API 키를 만들고 상한 걸기: OpenRouter 키 설정의 credit limit(예: 월 10달러), Anthropic Console → Workspaces → olmuse 워크스페이스 월 지출 한도, Google은 자동 차단이 없으니 공개 서버에서 Gemini 키를 빼거나 Cloud Billing 예산 알림만 건다. 만든 키는 `key-pool.env`가 아니라 olmuse만 읽는 곳에 둔다.
+- SNS 확인 메일(`olmuse-alerts`)의 링크를 누른다.
+- Lambda 동시 실행 한도를 쓰려면 Service Quotas에서 계정 동시 실행 한도 상향을 요청한다.

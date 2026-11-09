@@ -3,15 +3,17 @@
   POST /webhooks/bmc   BMC 웹훅. x-signature-sha256 = HMAC-SHA256(BMC_WEBHOOK_SECRET, 원문) 16진수. 틀리면 403.
   POST /api/account    {email}               → {code, credits, free}
   POST /api/charge     {email, amount, ref}  → 200 {credits} | 402 {credits}
-  POST /api/refund     {email, amount, ref}  → 200 {credits}
+  POST /api/refund     {email 또는 acct(계정 키 64자리 16진수), amount, ref}  → 200 {credits}
+                       acct는 웹 서버가 이메일 없이 디스크에 남긴 차감을 재시작 때 환불하는 길이다
   POST /api/history    {email}               → {items:[...]} 최근 50개
   POST /api/find       {email, payer_email, amount, date(YYYY-MM-DD)} → {found, added, credits} | 429
                        주인 없는 결제를 결제 이메일·금액·날짜(±1일)로 찾아 이 계정에 넣는다. 하루 FIND_TRIES 번
-  POST /api/reviews    {email(아무 값)}      → {items:[...]} 운영자가 볼 보류 결제(환율을 모르는 통화)
-  POST /api/coupon_make {email(아무 값), code, credits, uses} → 200 {code} | 409 이미 있음. 운영자 도구(tools/coupon.py)만 쓴다
+  POST /api/reviews    {email(아무 값)}      → {items:[...]} 운영자가 볼 보류 결제(환율을 모르는 통화). ADMIN_TOKEN 전용
+  POST /api/coupon_make {email(아무 값), code, credits, uses} → 200 {code} | 409 이미 있음. ADMIN_TOKEN 전용(tools/coupon.py)
   POST /api/redeem     {email, code}         → 200 {added, credits} | 404 없는 쿠폰 | 409 이미 씀 | 410 다 씀 | 429
                        쿠폰 하나는 계정당 한 번. 시도는 하루 FIND_TRIES 번(결제 찾기와 따로 셈)
-/api/* 는 Authorization: Bearer APP_TOKEN.
+/api/* 는 Authorization: Bearer APP_TOKEN (웹 서버). 쿠폰 발행과 보류 결제 조회는 Bearer ADMIN_TOKEN 만 받는다
+(웹 서버는 이 토큰을 갖지 않는다). ADMIN_TOKEN 이 없으면 두 경로는 늘 401 이다.
 
 테이블 항목 (pk, sk):
   ACC#<key>, META         계정: credits, code, ver(낙관적 잠금)
@@ -522,12 +524,19 @@ def refund_event(pid):
 
 
 # ---------- 앱 API ----------
-def authorized(event):
+ADMIN_ROUTES = ("/api/coupon_make", "/api/reviews")
+ACCT_RE = re.compile(r"[0-9a-f]{64}")
+
+
+def authorized(event, env_name="APP_TOKEN"):
+    want = os.environ.get(env_name, "")
+    if not want:
+        return False
     got = (event.get("headers") or {}).get("authorization", "")
-    return hmac.compare_digest(got.encode(), f"Bearer {os.environ['APP_TOKEN']}".encode())
+    return hmac.compare_digest(got.encode(), f"Bearer {want}".encode())
 
 
-def parse_api(event):
+def parse_api(event, allow_acct=False):
     try:
         b = json.loads(raw_body(event) or b"{}")
     except ValueError:
@@ -535,6 +544,8 @@ def parse_api(event):
     if not isinstance(b, dict):
         return None, resp(400, {"error": "bad json"})
     email = str(b.get("email") or "").strip()
+    if allow_acct and not email and ACCT_RE.fullmatch(str(b.get("acct") or "")):
+        return b, None
     if "@" not in email or len(email) > 254:
         return None, resp(400, {"error": "bad email"})
     return b, None
@@ -575,7 +586,7 @@ def api_refund(b):
     amount, ref, err = parse_amount_ref(b)
     if err:
         return err
-    key = acct_key(b["email"])
+    key = b["acct"] if not str(b.get("email") or "").strip() else acct_key(b["email"])
     chg = get(f"CHG#{key}#{ref}")
     if not chg or chg.get("st") != "charged":
         return resp(200, {"credits": balance(key)})
@@ -689,6 +700,7 @@ def api_coupon_make(b):
     item = {"pk": f"COUPON#{code}", "sk": "META", "credits": amount, "remain": uses, "uses": uses, "at": now_iso()}
     if transact([op_put(item, "attribute_not_exists(pk)")]) is not None:
         return resp(409, {"error": "exists"})
+    alert("coupon_made", code=code[:3] + "…", credits=amount, uses=uses, total=amount * uses)
     return resp(200, {"code": code})
 
 
@@ -721,7 +733,7 @@ def lambda_handler(event, context):
     if method == "POST" and path == "/webhooks/bmc":
         return webhook(event)
     if path.startswith("/api/"):
-        if not authorized(event):
+        if not authorized(event, "ADMIN_TOKEN" if path in ADMIN_ROUTES else "APP_TOKEN"):
             return resp(401, {"error": "unauthorized"})
         if method != "POST":
             return resp(405, {"error": "method"})
@@ -732,6 +744,6 @@ def lambda_handler(event, context):
         fn = routes.get(path)
         if not fn:
             return resp(404, {"error": "not found"})
-        b, err = parse_api(event)
+        b, err = parse_api(event, allow_acct=path == "/api/refund")
         return err or fn(b)
     return resp(404, {"error": "not found"})

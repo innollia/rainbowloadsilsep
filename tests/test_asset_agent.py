@@ -50,7 +50,7 @@ class FakeJobs:
     def __init__(self, limit=False):
         self.limit = limit
 
-    def count_call(self, account, owner, lang):
+    def count_call(self, account, owner, lang, **kw):
         if self.limit:
             raise ValueError("daily limit")
 

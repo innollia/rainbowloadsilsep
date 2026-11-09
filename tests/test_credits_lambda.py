@@ -13,6 +13,7 @@ import pytest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SECRET = "whsec-test"
 TOKEN = "app-token-test"
+ADMIN = "admin-token-test"
 
 
 class Canceled(Exception):
@@ -97,6 +98,7 @@ class FakeDDB:
 def lf(monkeypatch):
     monkeypatch.setenv("TABLE", "strudel-credits")
     monkeypatch.setenv("APP_TOKEN", TOKEN)
+    monkeypatch.setenv("ADMIN_TOKEN", ADMIN)
     monkeypatch.setenv("PEPPER", "pepper-test")
     monkeypatch.setenv("BMC_WEBHOOK_SECRET", SECRET)
     monkeypatch.setenv("CREDITS_PER_USD", "20")
@@ -291,9 +293,9 @@ def test_non_usd_is_converted_and_unknown_currency_is_held_for_review(lf, capsys
     assert items[0]["kind"] == "pending" and "XYZ" in items[0]["note"]
     assert "≈ 5.04 USD" in items[1]["note"]
     assert "ALERT" in capsys.readouterr().out
-    assert [x["currency"] for x in api(lf, "/api/reviews", {"email": "ops@x"})[1]["items"]] == ["XYZ"]
+    assert [x["currency"] for x in api(lf, "/api/reviews", {"email": "ops@x"}, ADMIN)[1]["items"]] == ["XYZ"]
     hook(lf, donation(121, kind="donation.refunded"))
-    assert api(lf, "/api/reviews", {"email": "ops@x"})[1]["items"] == []
+    assert api(lf, "/api/reviews", {"email": "ops@x"}, ADMIN)[1]["items"] == []
 
 
 def test_find_payment_by_payer_email_amount_and_date(lf):
@@ -366,8 +368,8 @@ def test_replayed_forward_from_blog_credits_once_and_still_says_credit(lf):
 
 
 def test_coupon_once_per_account_and_runs_out(lf):
-    assert api(lf, "/api/coupon_make", {"email": "op@x.io", "code": "olmuse-start-1", "credits": 10000, "uses": 2})[0] == 200
-    assert api(lf, "/api/coupon_make", {"email": "op@x.io", "code": "OLMUSESTART1", "credits": 5, "uses": 1})[0] == 409
+    assert api(lf, "/api/coupon_make", {"email": "op@x.io", "code": "olmuse-start-1", "credits": 10000, "uses": 2}, ADMIN)[0] == 200
+    assert api(lf, "/api/coupon_make", {"email": "op@x.io", "code": "OLMUSESTART1", "credits": 5, "uses": 1}, ADMIN)[0] == 409
     before = credits(lf, "a@x.io")
     st, body = api(lf, "/api/redeem", {"email": "a@x.io", "code": "olmuse start 1"})
     assert st == 200 and body == {"added": 10000, "credits": before + 10000}
@@ -382,3 +384,29 @@ def test_coupon_tries_are_limited(lf):
     for _ in range(10):
         assert api(lf, "/api/redeem", {"email": "d@x.io", "code": "WRONG0"})[0] == 404
     assert api(lf, "/api/redeem", {"email": "d@x.io", "code": "WRONG0"})[0] == 429
+
+
+def test_app_token_cannot_mint_coupons_or_read_reviews(lf, capsys):
+    body = {"email": "op@x.io", "code": "FREEMONEY1", "credits": 1000000, "uses": 100000}
+    assert api(lf, "/api/coupon_make", body)[0] == 401
+    assert api(lf, "/api/reviews", {"email": "ops@x"})[0] == 401
+    assert api(lf, "/api/charge", {"email": "a@x.io", "amount": 1, "ref": "r"}, ADMIN)[0] == 401  # admin is not the app
+    assert api(lf, "/api/coupon_make", body, ADMIN)[0] == 200
+    out = capsys.readouterr().out
+    assert "ALERT" in out and "coupon_made" in out and "FREEMONEY1" not in out
+    assert api(lf, "/api/redeem", {"email": "a@x.io", "code": "FREEMONEY1"})[0] == 200  # the app token still redeems
+
+
+def test_admin_routes_are_shut_without_admin_token(lf, monkeypatch):
+    monkeypatch.delenv("ADMIN_TOKEN")
+    assert api(lf, "/api/coupon_make", {"email": "op@x.io", "code": "ABCDEF1", "credits": 1}, "")[0] == 401
+    assert api(lf, "/api/coupon_make", {"email": "op@x.io", "code": "ABCDEF1", "credits": 1})[0] == 401
+
+
+def test_refund_by_account_key(lf):
+    before = credits(lf, "k@x.io")
+    assert api(lf, "/api/charge", {"email": "k@x.io", "amount": 3, "ref": "job:0"})[0] == 200
+    st, body = api(lf, "/api/refund", {"acct": lf.acct_key("k@x.io"), "amount": 3, "ref": "job:0"})
+    assert st == 200 and body["credits"] == before
+    assert api(lf, "/api/refund", {"acct": "not-a-key", "amount": 3, "ref": "job:0"})[0] == 400
+    assert api(lf, "/api/charge", {"acct": lf.acct_key("k@x.io"), "amount": 3, "ref": "job:1"})[0] == 400  # charge needs the email

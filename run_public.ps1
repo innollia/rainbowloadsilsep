@@ -12,6 +12,7 @@ $env:STRUDEL_CREDITS_URL = 'https://6wasuz6jowaayhoedd4h3vmthe0alpoq.lambda-url.
 $env:STRUDEL_DAILY_CALLS = '200'
 $env:OLMUSE_SKILL_ROUTER = '1'  # 상황에 맞는 음악 조각만 넣는다 (skill_router.py)
 Remove-Item Env:STRUDEL_LOCAL_AI -ErrorAction SilentlyContinue
+Remove-Item Env:STRUDEL_LOCAL_LEDGER -ErrorAction SilentlyContinue  # the public run never falls back to a local ledger
 if (-not $ServerOnly) {
   # The DP7 server watch (all-tomorrow config/infrastructure.json 'olmuse') reruns this script whenever olmuse.app
   # stops answering. Retire any earlier loop and its tunnel first so only one copy keeps running.
@@ -23,8 +24,15 @@ if (-not $ServerOnly) {
 }
 # Scripts and styles carry a content hash so a browser never pairs a new page with an old cached script.
 python (Join-Path $PSScriptRoot 'tools\stamp_assets.py')
+# A copy of the SQLite files before each start; the app makes one a day while it runs (server_ops.start_daily_backup).
+python (Join-Path $PSScriptRoot 'tools\backup_data.py')
+# The app writes its own rotating log in .studio-data\logs\olmuse.log; this file only keeps the console of the last start.
+$logs = Join-Path $PSScriptRoot '.studio-data\logs'; New-Item -ItemType Directory -Force $logs | Out-Null
+function Start-App {
+  Start-Process python -WindowStyle Hidden -WorkingDirectory $PSScriptRoot -RedirectStandardOutput (Join-Path $logs 'console.out.log') -RedirectStandardError (Join-Path $logs 'console.err.log') -ArgumentList '-m', 'streamlit', 'run', 'app.py', '--server.address', '127.0.0.1', '--server.port', '8501', '--server.headless', 'true'
+}
 Stop-Server
-Start-Process python -WindowStyle Hidden -WorkingDirectory $PSScriptRoot -ArgumentList '-m', 'streamlit', 'run', 'app.py', '--server.address', '127.0.0.1', '--server.port', '8501', '--server.headless', 'true'
+Start-App
 if ($ServerOnly) { return }
 $tunnel = (Get-Command cloudflared -ErrorAction SilentlyContinue).Source
 if (-not $tunnel) { $tunnel = "${env:ProgramFiles(x86)}\cloudflared\cloudflared.exe" }
@@ -32,9 +40,7 @@ if (-not $tunnel) { $tunnel = "${env:ProgramFiles(x86)}\cloudflared\cloudflared.
 $config = Join-Path $HOME '.cloudflared\olmuse.yml'
 try {
   while ($true) {
-    if (-not (Get-NetTCPConnection -LocalPort 8501 -State Listen -ErrorAction SilentlyContinue)) {
-      Start-Process python -WindowStyle Hidden -WorkingDirectory $PSScriptRoot -ArgumentList '-m', 'streamlit', 'run', 'app.py', '--server.address', '127.0.0.1', '--server.port', '8501', '--server.headless', 'true'
-    }
+    if (-not (Get-NetTCPConnection -LocalPort 8501 -State Listen -ErrorAction SilentlyContinue)) { Start-App }
     & $tunnel tunnel --config $config run olmuse 2>&1 | Select-Object -Last 3
     Write-Host "$(Get-Date -Format s) tunnel exited ($LASTEXITCODE), restarting in 5s"
     Start-Sleep 5
