@@ -54,6 +54,8 @@
   const uid = () => Math.random().toString(36).slice(2, 10);
   const snapshot = (p) => ({ bpm: p.bpm, head: p.head || '', tracks: p.tracks.map((tr) => ({ ...tr })) });
 
+  // A new file starts with a playable template; the AI must not take it as the user's music, so untouched template code goes out empty.
+  const forAI = (tracks) => tracks.map((tr) => (DEFAULT_TRACKS.some((d) => d.id === tr.id && d.code === tr.code) ? { ...tr, code: '' } : tr));
   function newProject(name) {
     const p = { id: uid(), name, bpm: 120, tracks: DEFAULT_TRACKS.map((d) => ({ ...d, name: t('role_' + d.role) })), mix: {}, chat: [], versions: [], versionId: '' };
     addVersion(p, t('v_default'), 'user');
@@ -1042,7 +1044,7 @@
       .map((m) => ({ role: m.kind === 'user' ? 'user' : 'assistant', text: m.detail ? m.text + ' ' + m.detail : m.text }));
     say('user', text); $('ask').value = ''; p.draft = '';
     askedFrom = p.id;
-    send('generate', { project_id: p.id, text, tracks: p.tracks, bpm: p.bpm, target: selected, auto: !!db.autoRounds, rounds: db.autoRounds || 0, model: $('modelPick').value, effort: $('effortPick').value, base_version: p.versionId, history, lang: i18n.lang });
+    send('generate', { project_id: p.id, text, tracks: forAI(p.tracks), bpm: p.bpm, target: selected, auto: !!db.autoRounds, rounds: db.autoRounds || 0, model: $('modelPick').value, effort: $('effortPick').value, base_version: p.versionId, history, lang: i18n.lang });
   }
   $('ask').oninput = () => { const p = project(); if (p) { p.draft = $('ask').value.slice(0, 4000); touched(p); } };
   $('askForm').onsubmit = (e) => { e.preventDefault(); submit(); };

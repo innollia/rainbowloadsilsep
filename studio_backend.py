@@ -1328,7 +1328,7 @@ class Jobs:
             p.edits += 1
             prompt = edit_prompt(p.state, p.instruction, p.error, req["target"], req.get("history", ()),
                                  goal=req["text"] if p.tried else "", tried=p.tried, lang=job.lang)
-            kind = ("fix_after_listen" if p.tried else "new_song" if not p.state["tracks"]
+            kind = ("fix_after_listen" if p.tried else "new_song" if not any(t["code"].strip() for t in p.state["tracks"])
                     else "track_edit" if req["target"] else "edit")
             prompt = with_skills(prompt, p.instruction, kind,
                                  [f"{m['role']}: {m['text']}" for m in req.get("history", ())])
