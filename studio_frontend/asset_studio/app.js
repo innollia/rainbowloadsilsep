@@ -106,7 +106,7 @@
       agentPh: 'Tell the assistant (references, groups, names, how sounds should change)…', agentTitle: 'Assistant', agentThinking: 'Thinking…', agentUndo: 'Undo', agentUndone: 'Undone',
       agentDid: (n) => `${n} change${n === 1 ? '' : 's'} made`, agentFailed: (x) => `Could not answer: ${x}`, agentClose: 'Hide assistant', agentOpen: 'Assistant',
       agentLocal: 'AI is not connected here, so I only understand links, notes ("note: …") and remakes of the picked sounds.', agentNoted: 'Saved it as a reference.', agentRemake: (n) => `Remaking ${n} sound${n === 1 ? '' : 's'}.`,
-      handoffTitle: 'A few questions before work starts', handoffIntro: 'Answers are saved as project references and reach every sound. Pick one or write your own.', handoffRec: 'Recommended', handoffOwn: 'Or write your own',
+      handoffTitle: 'A few questions before work starts. Answers are saved as project references.', handoffRec: 'Recommended', handoffOwn: 'Pick an answer above or write your own…', handoffSkip: 'Skip', handoffSkipped: '(skipped)', handoffEnd: 'Thanks. Every sound will follow these.', handoffStep: (i, n) => `${i}/${n}`,
       handoffLocal: [['What mood should the sounds have overall?', ['Warm and soft', 'Bright and lively', 'Dark and tense', 'Grand and epic'], 'Warm and soft'],
         ['How realistic should they be?', ['Realistic', 'Lightly stylised', 'Cartoon-like', 'Retro / chiptune'], 'Lightly stylised'],
         ['What must never be heard?', ['Harsh highs', 'Long tails', 'Loud bass', 'Nothing in particular'], 'Harsh highs'],
@@ -247,7 +247,7 @@ ${p.form}`,
       agentPh: '도우미에게 말하기 (레퍼런스, 분류, 이름, 소리 고치기)…', agentTitle: '도우미', agentThinking: '생각하는 중…', agentUndo: '되돌리기', agentUndone: '되돌렸어요',
       agentDid: (n) => `${n}가지를 바꿨어요`, agentFailed: (x) => `답하지 못했어요: ${x}`, agentClose: '도우미 숨기기', agentOpen: '도우미',
       agentLocal: '여기서는 AI가 연결되지 않아 링크, 메모("메모: …"), 고른 소리 다시 만들기만 알아들어요.', agentNoted: '레퍼런스로 저장했어요.', agentRemake: (n) => `소리 ${n}개를 다시 만들어요.`,
-      handoffTitle: '작업 전에 몇 가지만 물어볼게요', handoffIntro: '답은 프로젝트 레퍼런스로 저장되어 모든 소리에 적용돼요. 하나를 고르거나 직접 써 주세요.', handoffRec: '추천', handoffOwn: '직접 쓰기',
+      handoffTitle: '작업 전에 몇 가지만 물어볼게요. 답은 프로젝트 레퍼런스로 저장돼요.', handoffRec: '추천', handoffOwn: '위에서 고르거나 직접 써서 답하기…', handoffSkip: '건너뛰기', handoffSkipped: '(건너뜀)', handoffEnd: '고마워요. 모든 소리에 이대로 적용할게요.', handoffStep: (i, n) => `${i}/${n}`,
       handoffLocal: [['전체 소리의 분위기는 어떤가요?', ['따뜻하고 부드럽게', '밝고 경쾌하게', '어둡고 긴장감 있게', '웅장하게'], '따뜻하고 부드럽게'],
         ['얼마나 사실적이어야 하나요?', ['사실적으로', '살짝 과장되게', '만화처럼', '레트로·칩튠'], '살짝 과장되게'],
         ['절대 들리면 안 되는 소리는요?', ['귀를 찌르는 고음', '긴 잔향', '큰 저음', '특별히 없음'], '귀를 찌르는 고음'],
@@ -670,7 +670,7 @@ ${p.form}`,
     $('selCount').hidden = !count; $('selCount').textContent = t('selected', count);
     $('selAll').hidden = $('selApprove').hidden = $('selClear').hidden = !count;
     document.body.classList.toggle('selecting', !!count);
-    $('ask').placeholder = count ? t('askSelected', count) : target?.versions.length ? t('askOne', nm(target)) : t('agentPh');
+    $('ask').placeholder = handoff ? t('handoffOwn') : count ? t('askSelected', count) : target?.versions.length ? t('askOne', nm(target)) : t('agentPh');
     $('send').disabled = agentBusy;
   }
 
@@ -1012,7 +1012,7 @@ ${p.form}`,
   };
   // The assistant: whatever is typed below goes to it. It answers with changes the board applies at once,
   // and every answer that changed something can be undone. Without AI it understands links, notes and remakes.
-  let agentLog = [], agentBusy = false, agentOn = false, handoffDone = false, agentN = 0;
+  let agentLog = [], agentBusy = false, agentOn = false, handoffDone = false, agentN = 0, handoff = null;
   const agentWaits = new Map();
   const pickedSounds = () => (selected.size ? [...selected].map(byId) : focused ? [byId(focused)] : []).filter(Boolean);
   function boardState() {
@@ -1092,7 +1092,7 @@ ${p.form}`,
   function renderAgent() {
     agentBox.textContent = '';
     const head = el('div', 'agentHead'), ico = el('span', 'agentIco'); setIcon(ico, 'agent');
-    head.append(ico, el('b', 'grow', t('agentTitle')), iconButton('close', t('agentClose'), () => { agentBox.hidden = true; }, 'ghost iconBtn'));
+    head.append(ico, el('b', 'grow', t('agentTitle')), iconButton('close', t('agentClose'), () => { agentBox.hidden = true; document.body.classList.remove('agentOpen'); }, 'ghost iconBtn'));
     const list = el('div', 'agentList');
     for (const m of agentLog.slice(-8)) {
       const b = el('div', 'msg ' + (m.me ? 'me' : 'ai'));
@@ -1106,8 +1106,21 @@ ${p.form}`,
       }
       list.append(b);
     }
+    if (handoff) {
+      const q = handoff.qs[handoff.at], card = el('div', 'msg ai handoffNow');
+      card.append(el('div', 'handoffStep', t('handoffStep', handoff.at + 1, handoff.qs.length)), el('b', '', q.question));
+      const row = el('div', 'chips');
+      for (const o of q.options) {
+        const c = el('button', 'chip', o);
+        if (o === q.recommended) { c.classList.add('rec'); c.append(el('small', '', t('handoffRec'))); }
+        c.onclick = () => answerHandoff(o); row.append(c);
+      }
+      const skip = el('button', 'ghost', t('handoffSkip')); skip.onclick = () => answerHandoff('');
+      card.append(row, skip); list.append(card);
+    }
     if (agentBusy) list.append(el('div', 'msg ai thinking', t('agentThinking')));
     agentBox.append(head, list);
+    document.body.classList.toggle('agentOpen', !agentBox.hidden);
     requestAnimationFrame(() => { list.scrollTop = list.scrollHeight; });
   }
   async function sendAgent(text, mode = '') {
@@ -1116,7 +1129,11 @@ ${p.form}`,
     agentBusy = true; agentBox.hidden = false; renderAgent(); syncDock();
     try {
       const answer = await askAgent(text, mode);
-      if (mode === 'handoff') { handoffDialog(answer.questions || []); if (answer.reply) agentLog.push({ id: newRefId(), text: answer.reply }); }
+      if (mode === 'handoff') {
+        const qs = (answer.questions || []).filter((q) => q.question && q.options?.length);
+        agentLog.push({ id: newRefId(), text: answer.reply || t('handoffTitle') });
+        handoff = qs.length ? { qs, at: 0 } : null;
+      }
       else {
         const undo = applyActions(answer.actions), id = newRefId();
         agentLog.push({ id, text: answer.reply || '', did: undo ? (answer.actions || []).filter((x) => !['select', 'revise'].includes(x.op)).length : 0, questions: answer.questions || [] });
@@ -1125,43 +1142,23 @@ ${p.form}`,
     } catch (e) { agentLog.push({ id: newRefId(), text: t('agentFailed', e.message || e) }); }
     agentBusy = false; renderAgent(); syncDock(); autosave();
   }
+  // Hand-over questions go one at a time in the assistant's conversation; each answer becomes a project note.
+  function answerHandoff(answer) {
+    const q = handoff.qs[handoff.at], id = `handoff${handoff.at}`;
+    agentLog.push({ id: newRefId(), me: true, text: answer || t('handoffSkipped') });
+    const r = projectRefs.find((x) => x.id === id);
+    if (r) projectRefs.splice(projectRefs.indexOf(r), 1);
+    if (answer) projectRefs.push({ id, kind: 'text', name: q.question.slice(0, 60), note: `${q.question} → ${answer}`, url: '', at: Date.now(), by: 'handoff' });
+    handoff.at++;
+    if (handoff.at >= handoff.qs.length) { handoff = null; agentLog.push({ id: newRefId(), text: t('handoffEnd') }); }
+    syncRefs(); renderBoard(); renderAgent(); syncDock(); autosave();
+  }
   $('askForm').onsubmit = (e) => {
     e.preventDefault();
     const text = $('ask').value.trim(); if (!text || agentBusy) return;
-    $('ask').value = ''; sendAgent(text);
+    $('ask').value = '';
+    if (handoff) answerHandoff(text); else sendAgent(text);
   };
-  // After the first spec: the hand-over questions. A pick is saved at once as a project note.
-  function handoffDialog(questions) {
-    if (!questions.length) return;
-    openDialog(t('handoffTitle')); reopen = () => handoffDialog(questions);
-    dlg.append(el('p', 'note', t('handoffIntro')));
-    questions.forEach((q, i) => {
-      const id = `handoff${i}`, box = el('section', 'handoffQ'), row = el('div', 'chips');
-      const saved = () => projectRefs.find((r) => r.id === id);
-      const save = (answer) => {
-        const r = saved();
-        if (!answer) { if (r) projectRefs.splice(projectRefs.indexOf(r), 1); }
-        else if (r) r.note = `${q.question} → ${answer}`;
-        else projectRefs.push({ id, kind: 'text', name: q.question.slice(0, 60), note: `${q.question} → ${answer}`, url: '', at: Date.now(), by: 'handoff' });
-        syncRefs(); autosave(); renderBoard(); paint();
-      };
-      const now = () => saved()?.note.split(' → ').slice(1).join(' → ') || '';
-      const own = el('input'); own.placeholder = t('handoffOwn'); own.setAttribute('aria-label', t('handoffOwn'));
-      own.onchange = () => save(own.value.trim());
-      const paint = () => {
-        row.textContent = '';
-        for (const o of q.options) {
-          const c = el('button', 'chip' + (o === q.recommended ? ' rec' : ''), o); c.setAttribute('aria-pressed', String(now() === o));
-          if (o === q.recommended) c.title = t('handoffRec');
-          c.onclick = () => save(now() === o ? '' : o); row.append(c);
-        }
-        if (now() && !q.options.includes(now())) own.value = now();
-      };
-      paint();
-      box.append(el('h3', '', q.question), row, own); dlg.append(box);
-    });
-    if (!dlg.open) dlg.showModal();
-  }
   $('selAll').onclick = () => { ready(visible()).forEach((x) => selected.add(x.id)); renderBoard(); };
   $('selClear').onclick = () => { selected.clear(); renderBoard(); };
   $('selApprove').onclick = () => { [...selected].map(byId).filter((a) => a.status === 'draft' || a.status === 'flagged').forEach(approve); selected.clear(); renderBoard(); };
@@ -2200,7 +2197,7 @@ ${p.form}`,
   const recipe = (v) => ({ change: v.change, note: v.note, at: v.at });
   function snapshot() {
     return {
-      v: 1, game, brief, platform, demo, stage, loud: [...rule('loud').range], cats, idRule, exportOpts, projectRefs, handoffDone, agentLog: agentLog.slice(-30),
+      v: 1, game, brief, platform, demo, stage, loud: [...rule('loud').range], cats, idRule, exportOpts, projectRefs, handoffDone, handoff, agentLog: agentLog.slice(-30),
       trash: trash.map((a) => { const { versions, drafts: options, source, progress, ...rest } = a; return { ...rest, key: source ? keyOf(a) : a.key, status: a.status === 'working' || a.status === 'review' ? (versions.length ? 'draft' : 'pending') : a.status, versions: versions.map(recipe), drafts: [], pick: -1, hasSource: !!source }; }),
       dynamics: dynamics.map((d) => ({ ...d, params: d.params.map((p) => ({ ...p })) })),
       assets: assets.map((a) => {
@@ -2273,7 +2270,7 @@ ${p.form}`,
     if (data.idRule) idRule = data.idRule;
     if (data.exportOpts) exportOpts = { ...exportOpts, ...data.exportOpts };
     projectRefs = Array.isArray(data.projectRefs) ? data.projectRefs : [];
-    handoffDone = !!data.handoffDone; agentLog = Array.isArray(data.agentLog) ? data.agentLog : [];
+    handoffDone = !!data.handoffDone; handoff = data.handoff?.qs?.length ? data.handoff : null; agentLog = Array.isArray(data.agentLog) ? data.agentLog : [];
     for (const [k, blob] of blobs) if (String(k).startsWith('ref:')) { try { refBlobs.set(k, new Uint8Array(await blob.arrayBuffer())); savedRefs.add(k); } catch { /* unreadable blob */ } }
     if (Array.isArray(data.dynamics)) dynamics = data.dynamics;
     assets.length = 0; trash = [];

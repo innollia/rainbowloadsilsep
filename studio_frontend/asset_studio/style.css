@@ -275,8 +275,11 @@ dialog textarea { width:100%; min-height:190px; background:var(--raised); border
 #agentPanel .msg button.ghost { margin-top:6px; min-height:30px; padding:0 10px; }
 .agentQ { margin-top:8px; }
 .chip { min-height:32px; padding:0 12px; margin:4px 6px 0 0; border-radius:16px; background:var(--raised); border:1px solid var(--divider); }
-.chip.rec { border-color:var(--ok); }
-.chip[aria-pressed="true"] { background:var(--ok); color:#111; }
-.handoffQ { padding:10px 0; border-bottom:1px solid var(--divider); }
-.handoffQ input, .refAdd input, .refAdd textarea, .refNote { width:100%; margin-top:8px; background:var(--raised); color:var(--text); border:1px solid var(--divider); border-radius:8px; padding:6px 10px; font:inherit; }
+.chip.rec small { margin-left:6px; font-size:.7rem; color:var(--ok); }
+#agentPanel .handoffNow { background:var(--raised); padding:10px 12px; }
+#agentPanel .handoffNow b { display:block; color:var(--text); margin-bottom:4px; }
+.handoffStep { font-size:.75rem; color:var(--text3); }
+body.agentOpen #board { padding-right:412px; }
+@media (max-width:760px) { body.agentOpen #board { padding-right:20px; } }
+.refAdd input, .refAdd textarea, .refNote { width:100%; margin-top:8px; background:var(--raised); color:var(--text); border:1px solid var(--divider); border-radius:8px; padding:6px 10px; font:inherit; }
 .refAdd input, .refAdd textarea { width:auto; margin-top:0; }
