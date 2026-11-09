@@ -22,6 +22,8 @@
     check: '<path d="m5 13 4 4 10-11"/>',
     flag: '<path d="M6 21V4h12l-3 4 3 4H6"/>',
     upload: '<path d="M12 15V4M7 8l5-5 5 5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/>',
+    menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+    gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/>',
   };
   const setIcon = (el, name) => { el.innerHTML = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`; };
   const iconButton = (name, label, fn, cls = 'iconBtn') => { const b = el('button', cls); setIcon(b, name); b.setAttribute('aria-label', label); b.title = label; b.onclick = fn; return b; };
@@ -33,7 +35,7 @@
   if (!LANGS.includes(lang)) lang = 'en';
   const TEXT = {
     en: {
-      docTitle: 'Game sound assets', gameInfo: 'Game info', stagesLabel: 'Progress', help: 'How to use', spec: 'Spec', export: 'Export',
+      docTitle: 'Game sound assets', menu: 'Menu', settings: 'Settings', language: 'Language', gameInfo: 'Game info', stagesLabel: 'Progress', help: 'How to use', spec: 'Spec', export: 'Export',
       backToMusic: 'To music studio', category: 'Category', board: 'Asset board', playAll: 'Play all', stopAll: 'Stop playing all', hoverPlay: 'Play on hover',
       acceptAll: 'Keep all', rejectAll: 'Discard all', selectAll: 'Select all', deselect: 'Deselect', approve: 'Approve', approved: 'Approved', clear: 'Clear',
       ask: 'Edit request', send: 'Send',
@@ -118,7 +120,7 @@ ${p.form}`,
       tutorialTitle: 'How to make game sounds',
       steps: [
         ['Bring in what you have', 'Already have sounds, a list of the sounds the game needs, or a bundle exported here? Import puts them on the board.'],
-        ['Get a spec', 'From the Spec button, copy the prompt, send it to the AI that has the game design doc, and paste back the spec it returns.'],
+        ['Get a spec', 'From Spec in the top-right menu, copy the prompt, send it to the AI that has the game design doc, and paste back the spec it returns.'],
         ['Check samples', 'Key sounds come first. Hover over a tile to listen, then approve.'],
         ['Make the rest', 'The rest are made at once in the style of the approved samples.'],
         ['Revise', 'Clicking a tile selects it and plays it. Pick several and write what to change. Raise the draft count to compare several options. Press and hold to open it large.'],
@@ -126,7 +128,7 @@ ${p.form}`,
       ],
     },
     ko: {
-      docTitle: '게임 소리 에셋', gameInfo: '게임 정보', stagesLabel: '진행 단계', help: '사용법', spec: '명세', export: '내보내기',
+      docTitle: '게임 소리 에셋', menu: '메뉴', settings: '설정', language: '언어', gameInfo: '게임 정보', stagesLabel: '진행 단계', help: '사용법', spec: '명세', export: '내보내기',
       backToMusic: '음악 작업실로', category: '분류', board: '에셋 보드', playAll: '전체 듣기', stopAll: '전체 듣기 멈춤', hoverPlay: '올리면 듣기',
       acceptAll: '모두 채택', rejectAll: '모두 버림', selectAll: '전체 선택', deselect: '선택 해제', approve: '승인', approved: '승인됨', clear: '해제',
       ask: '수정 요청', send: '보내기',
@@ -211,7 +213,7 @@ ${p.form}`,
       tutorialTitle: '게임 소리 만드는 법',
       steps: [
         ['가진 것 가져오기', '만들어 둔 소리, 게임에 필요한 소리 목록, 여기서 내보낸 묶음이 있으면 가져오기로 보드에 올려요.'],
-        ['명세 받기', '명세 버튼에서 프롬프트를 복사해 게임 기획서를 가진 AI에게 보내고, 돌아온 명세를 붙여 넣어요.'],
+        ['명세 받기', '오른쪽 위 메뉴의 명세에서 프롬프트를 복사해 게임 기획서를 가진 AI에게 보내고, 돌아온 명세를 붙여 넣어요.'],
         ['샘플 확인', '대표 소리가 먼저 나와요. 타일에 마우스를 올려 듣고 승인하세요.'],
         ['나머지 만들기', '승인한 샘플의 스타일로 나머지를 한 번에 만들어요.'],
         ['고치기', '타일을 누르면 선택되고 소리가 나요. 여러 개를 고르고 바꿀 내용을 적으세요. 시안 개수를 늘리면 여러 안을 비교해 고를 수 있어요. 길게 누르면 크게 열려요.'],
@@ -963,6 +965,38 @@ ${p.form}`,
     dlg.showModal();
   }
 
+  function settingsDialog() {
+    openDialog(t('settings')); reopen = settingsDialog;
+    const pick = el('select'); pick.id = 'langPick'; pick.setAttribute('aria-label', t('language'));
+    pick.add(new Option('English', 'en')); pick.add(new Option('한국어', 'ko')); pick.value = lang;
+    // In the music studio the host owns the language, so the choice also goes up to it.
+    pick.onchange = () => { if (inHost) parent.postMessage({ type: 'asset:setlang', lang: pick.value }, '*'); setLang(pick.value); };
+    const row = el('div', 'lineItem'); row.append(el('span', 'grow', t('language')), pick);
+    const hover = el('input'); hover.type = 'checkbox'; hover.checked = $('hoverPlay').checked;
+    hover.onchange = () => { $('hoverPlay').checked = hover.checked; };
+    const row2 = el('label', 'lineItem'); row2.append(el('span', 'grow', t('hoverPlay')), hover);
+    dlg.append(row, row2); if (!dlg.open) dlg.showModal();
+  }
+
+  /* ---------- header menu ---------- */
+  const menu = $('menu'), menuBtn = $('menuBtn');
+  function toggleMenu(open = menu.hidden) {
+    menu.hidden = !open; menuBtn.setAttribute('aria-expanded', String(open));
+    if (open) menu.querySelector('button').focus();
+  }
+  menuBtn.onclick = (e) => { e.stopPropagation(); toggleMenu(); };
+  menu.onclick = (e) => {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    toggleMenu(false);
+    ({ settings: settingsDialog, spec: () => specDialog(), game: gameDialog, help: tutorial })[b.dataset.act]();
+  };
+  addEventListener('click', (e) => { if (!menu.hidden && !e.target.closest('.menuWrap')) toggleMenu(false); });
+  menu.addEventListener('keydown', (e) => {
+    const items = [...menu.querySelectorAll('button')], i = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') { toggleMenu(false); menuBtn.focus(); }
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus(); }
+  });
+
   function tutorial() {
     openDialog(t('tutorialTitle')); reopen = tutorial;
     const list = el('ol', 'steps');
@@ -1352,9 +1386,10 @@ ${p.form}`,
 
   /* ---------- start ---------- */
   applyStatic();
-  setIcon($('backBtn'), 'music'); setIcon($('send'), 'send'); setIcon($('playAll'), 'play'); setIcon($('gameName'), 'folder'); setIcon($('specBtn'), 'spec'); setIcon($('exportBtn'), 'download'); setIcon($('helpBtn'), 'help');
+  setIcon($('backBtn'), 'music'); setIcon($('send'), 'send'); setIcon($('playAll'), 'play'); setIcon($('exportBtn'), 'download'); setIcon($('menuBtn'), 'menu');
+  document.querySelectorAll('[data-icon]').forEach((s) => setIcon(s, s.dataset.icon));
   $('importBtn').querySelector('.importIco').innerHTML = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS.upload}</svg>`; $('importBtn').onclick = () => importDialog();
-  $('helpBtn').onclick = tutorial; $('specBtn').onclick = specDialog; $('exportBtn').onclick = exportDialog; $('gameName').onclick = gameDialog;
+  $('exportBtn').onclick = exportDialog;
   addEventListener('resize', () => { if (openAsset) renderDetail(); else assets.filter((a) => a.versions.length).forEach(drawTile); });
   $('draftSlot').append(draftPicker());
   (async () => {

@@ -10,15 +10,21 @@
 <body>
 <div id="app">
   <header>
-    <button id="gameName" class="ghost iconBtn" aria-haspopup="dialog" aria-label="Game info" title="Game info" data-i18n-aria="gameInfo" data-i18n-title="gameInfo"></button>
     <span id="gameTitle"></span>
     <ol id="stages" aria-label="Progress" data-i18n-aria="stagesLabel"></ol>
     <span class="spacer"></span>
     <span id="counts"></span>
     <button id="importBtn" class="importBtn"><span class="importIco"></span><span data-i18n="importShort">Import</span></button>
-    <button id="helpBtn" class="iconBtn" aria-label="How to use" title="How to use" data-i18n-aria="help" data-i18n-title="help"></button>
-    <button id="specBtn" class="iconBtn" aria-label="Spec" title="Spec" data-i18n-aria="spec" data-i18n-title="spec"></button>
     <button id="exportBtn" class="iconBtn" aria-label="Export" title="Export" data-i18n-aria="export" data-i18n-title="export"></button>
+    <div class="menuWrap">
+      <button id="menuBtn" class="iconBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="menu" aria-label="Menu" title="Menu" data-i18n-aria="menu" data-i18n-title="menu"></button>
+      <div id="menu" role="menu" hidden>
+        <button role="menuitem" data-act="settings"><span class="icoSlot" data-icon="gear"></span><span data-i18n="settings">Settings</span></button>
+        <button role="menuitem" data-act="spec"><span class="icoSlot" data-icon="spec"></span><span data-i18n="spec">Spec</span></button>
+        <button role="menuitem" data-act="game"><span class="icoSlot" data-icon="folder"></span><span data-i18n="gameInfo">Game info</span></button>
+        <button role="menuitem" data-act="help"><span class="icoSlot" data-icon="help"></span><span data-i18n="help">How to use</span></button>
+      </div>
+    </div>
     <button id="backBtn" class="iconBtn" aria-label="To music studio" title="To music studio" data-i18n-aria="backToMusic" data-i18n-title="backToMusic"></button>
   </header>
 

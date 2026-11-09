@@ -1151,7 +1151,11 @@
     morphing = false;
   }
   $('assetBtn').onclick = () => showAssets(true);
-  addEventListener('message', (e) => { if (e.data?.type === 'asset:back') showAssets(false); });
+  addEventListener('message', (e) => {
+    if (e.data?.type === 'asset:back') showAssets(false);
+    // The asset studio's own language picker: switch here too and tell Streamlit, as the header picker does.
+    if (e.data?.type === 'asset:setlang' && i18n.pick(e.data.lang) && e.data.lang !== i18n.lang) { pendingLang = e.data.lang; setLang(e.data.lang); send('lang', { lang: e.data.lang }); }
+  });
 
   window.studioEditor = () => editor;
 
