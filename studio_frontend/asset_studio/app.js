@@ -167,15 +167,15 @@ ${p.files}`,
       ] },
       specPrompt: (p) => `Please write a game sound spec as JSON. This spec goes into a sound production tool that makes the assets.
 
-Before writing it, ask the user a few hand-over questions the way a sound designer would when taking over the work: one at a time, each with a few short options and the one you recommend. Ask only what the design docs and code leave open and what would change many sounds: overall mood and reference games or music, how realistic or stylised, what must never be heard, what comes first in the mix (effects, music, voice). If you cannot ask the user, put those questions in questions instead.
+First settle the hand-over points a sound designer would need when taking over: overall mood and reference games or music, how realistic or stylised, what must never be heard, what comes first in the mix (effects, music, voice). Take each from the design docs, the code and what the user has already told you in your conversations. Ask the user only about points none of these settle, one at a time, with a few short options and the one you recommend. If everything is settled, ask nothing. If you cannot ask the user, put the open points in questions.
 
-Then, based on the design docs, the code and the user's answers, list every sound the game needs. Do not invent values that have no basis; leave them null, and put anything that still needs deciding in questions.
+Then, based on the design docs, the code, your conversations with the user and any answers, list every sound the game needs. Do not invent values that have no basis; leave them null, and put anything that still needs deciding in questions.
 
 Fields
 - game: game name
 - platform: main device, one of ${p.platforms}
-- style: overall sound direction of the game, one or two sentences, including the user's answers
-- references: notes and links every sound should follow, each { name, note, url }. One per hand-over answer (name the question, note the answer), plus reference tracks or pages the user named (url)
+- style: overall sound direction of the game, one or two sentences, including the settled hand-over points
+- references: notes and links every sound should follow, each { name, note, url }. One per settled hand-over point (name the point, note the decision), plus reference tracks or pages the user named (url)
 - categories: sound groups for this game, each { id, name, kind } with kind sfx (effect), amb (ambience) or music. Start from ${p.cats} and add, rename or drop groups to fit the game
 - assets: list of sounds
   - id: ${p.idRule}. If the code already uses a name, keep it
@@ -189,7 +189,7 @@ Fields
 
 Do not reference tracks or samples with unclear licenses. Available materials: ${p.licenses}.
 
-When the questions are done, reply only with JSON in the format below, no explanation.
+When that is done, reply only with JSON in the format below, no explanation.
 ${p.form}`,
       sendPrompt: 'Send prompt', receiveSpec: 'Receive spec', pasteToAgent: 'Paste this into the agent that worked on the music.', prompt: 'Prompt',
       copyPrompt: 'Copy prompt', copiedPrompt: 'Copied the prompt', pasteSpec: 'Paste the spec the agent gave you.', insertExample: 'Insert example',
@@ -306,15 +306,15 @@ ${p.files}`,
       ] },
       specPrompt: (p) => `게임 소리 명세서를 JSON으로 작성해 주세요. 이 명세서를 소리 제작 도구에 넣어 에셋을 만듭니다.
 
-쓰기 전에 사운드 디자이너가 작업을 넘겨받을 때처럼 사용자에게 인수인계 질문을 몇 가지 해 주세요. 한 번에 하나씩, 짧은 선택지 몇 개와 추천 답을 붙여서요. 기획서와 코드로 알 수 없고 여러 소리를 바꾸는 것만 물어보세요: 전체 분위기와 참고할 게임이나 음악, 얼마나 사실적이거나 과장할지, 절대 들리면 안 되는 소리, 믹스에서 무엇이 먼저인지(효과음, 음악, 목소리). 사용자에게 물을 수 없으면 그 질문을 questions에 적어 주세요.
+먼저 사운드 디자이너가 작업을 넘겨받을 때 알아야 할 것을 정리해 주세요: 전체 분위기와 참고할 게임이나 음악, 얼마나 사실적이거나 과장할지, 절대 들리면 안 되는 소리, 믹스에서 무엇이 먼저인지(효과음, 음악, 목소리). 각각 기획서, 코드, 사용자와 이미 나눈 대화에서 찾아 채우세요. 그 어디에서도 정해지지 않은 것만 사용자에게 한 번에 하나씩, 짧은 선택지 몇 개와 추천 답을 붙여 물어보세요. 다 정해져 있으면 묻지 마세요. 사용자에게 물을 수 없으면 정해지지 않은 것을 questions에 적어 주세요.
 
-그다음 기획서, 코드, 사용자의 답을 근거로 게임에 필요한 소리를 빠짐없이 적어 주세요. 근거가 없는 값은 지어내지 말고 null로 두고, 아직 정해야 할 것은 questions에 적어 주세요.
+그다음 기획서, 코드, 사용자와의 대화와 답을 근거로 게임에 필요한 소리를 빠짐없이 적어 주세요. 근거가 없는 값은 지어내지 말고 null로 두고, 아직 정해야 할 것은 questions에 적어 주세요.
 
 항목
 - game: 게임 이름
 - platform: ${p.platforms} 중 주요 기기
-- style: 게임 전체의 소리 방향, 한두 문장. 사용자의 답을 담아서
-- references: 모든 소리가 따를 메모와 링크, 각각 { name, note, url }. 인수인계 답마다 하나(name은 질문, note는 답), 사용자가 말한 참고곡이나 페이지는 url로
+- style: 게임 전체의 소리 방향, 한두 문장. 정리한 인수인계 내용을 담아서
+- references: 모든 소리가 따를 메모와 링크, 각각 { name, note, url }. 정리한 인수인계 항목마다 하나(name은 항목, note는 정해진 내용), 사용자가 말한 참고곡이나 페이지는 url로
 - categories: 이 게임의 소리 분류. 각각 { id, name, kind }, kind는 sfx(효과음), amb(환경음), music(음악). ${p.cats}에서 시작해 게임에 맞게 더하고 바꾸고 빼세요
 - assets: 소리 목록
   - id: ${p.idRule}. 코드에 이미 쓰는 이름이 있으면 그대로
@@ -328,7 +328,7 @@ ${p.files}`,
 
 저작권이 불분명한 곡이나 샘플은 참조하지 마세요. 쓸 수 있는 재료는 ${p.licenses}입니다.
 
-질문이 끝나면 설명 없이 아래 형식의 JSON만 답해 주세요.
+정리가 끝나면 설명 없이 아래 형식의 JSON만 답해 주세요.
 ${p.form}`,
       sendPrompt: '프롬프트 보내기', receiveSpec: '명세 받기', pasteToAgent: '음악 작업을 하던 에이전트에게 붙여 넣으세요.', prompt: '프롬프트',
       copyPrompt: '프롬프트 복사', copiedPrompt: '프롬프트를 복사했어요', pasteSpec: '에이전트가 준 명세를 붙여 넣으세요.', insertExample: '예시 넣기',
