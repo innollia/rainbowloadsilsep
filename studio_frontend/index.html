@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>olmuse</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="style.css?v=cd70fd4085">
+<link rel="stylesheet" href="style.css?v=5729607a42">
 <link rel="stylesheet" href="score.css?v=ecb330a15e">
 </head>
 <body>
@@ -54,7 +54,9 @@
       <div id="log" aria-live="polite"></div>
       <div id="progress" hidden><span id="progressText"></span><button id="stopAi" class="iconBtn" data-icon="stop" aria-label="Stop" title="Stop" data-i18n-aria="stop_ai" data-i18n-title="stop_ai"></button></div>
       <div id="targetChip" hidden></div>
+      <div id="refBox"><div id="refChips" hidden></div><div id="refMore"></div></div>
       <div id="askTools">
+        <span id="refAddWrap"><button id="refAdd" type="button" class="iconBtn ghost" data-icon="clip" aria-haspopup="menu" aria-expanded="false" aria-label="Add reference" title="Add reference" data-i18n-aria="ref_add" data-i18n-title="ref_add"></button><span id="refMenu" role="menu" hidden><button type="button" role="menuitem" data-kind="file" data-i18n="ref_add_file">Add files</button><button type="button" role="menuitem" data-kind="link" data-i18n="ref_add_link">Add link</button><button type="button" role="menuitem" data-kind="text" data-i18n="ref_add_note">Add note</button></span><input id="refFiles" type="file" multiple hidden></span>
         <label id="autoLabel"><span data-icon="auto" aria-hidden="true"></span><span data-i18n="auto">Auto-improve</span><input id="autoRounds" type="range" min="0" max="5" step="1" value="0" aria-label="Max auto-improve rounds" data-i18n-aria="auto_max"></label>
         <span id="autoHint"></span>
         <span id="costHint"></span>
@@ -86,11 +88,13 @@
 <dialog id="dialog"></dialog>
 <iframe id="assetFrame" title="Game sound assets" data-i18n-title="game_assets" allow="autoplay; clipboard-write" hidden></iframe>
 <div id="morph" aria-hidden="true" hidden></div>
-<script src="i18n.js?v=03bef652ff"></script>
+<script src="i18n.js?v=b678e8db95"></script>
 <script src="art.js?v=ec4f453661"></script>
 <script src="song.js?v=f2bce0d40a"></script>
 <script src="score.js?v=b962576f02"></script>
 <script src="wait.js?v=9ae0bcb317"></script>
-<script src="app.js?v=5d40b62f9a"></script>
+<script src="asset_studio/importer.js?v=11a1933225"></script>
+<script src="asset_studio/refs.js?v=d6b838fe2e"></script>
+<script src="app.js?v=cc5169eead"></script>
 </body>
 </html>

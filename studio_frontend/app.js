@@ -17,6 +17,7 @@
   /* ---------- language ---------- */
   const i18n = window.studioI18n, { t, raw } = i18n;
   let pendingLang = '';
+  let refOpen = '', refDrawn = ''; // the song's reference chips: which one is open, what was last drawn
   function applyStatic() {
     document.documentElement.lang = i18n.lang;
     document.querySelectorAll('[data-i18n]').forEach((e) => { e.textContent = t(e.dataset.i18n); });
@@ -43,6 +44,10 @@
     game: '<path d="M7 8h10a5 5 0 0 1 4.7 6.7l-.8 2.1a2.5 2.5 0 0 1-4.1.9L14.5 15.5h-5l-2.3 2.2a2.5 2.5 0 0 1-4.1-.9l-.8-2.1A5 5 0 0 1 7 8z"/><path d="M8 10v3.5M6.2 11.750h3.6M15.5 11h.01M17.5 13h.01"/>',
     upload: '<path d="M12 20V9M7 13l5-5 5 5M5 4h14"/>',
     trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+    clip: '<path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9.7 17.2a1.7 1.7 0 0 1-2.4-2.4L15 7.2"/>',
+    link: '<path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/>',
+    music: '<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>',
+    note: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h7"/>',
   };
   const setIcon = (e, name) => { e.innerHTML = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`; };
   const iconLabel = (e, name, label) => { setIcon(e, name); e.setAttribute('aria-label', label); e.title = label; };
@@ -719,6 +724,7 @@
     $('autoRounds').value = db.autoRounds || 0;
     $('autoHint').textContent = db.autoRounds ? t('auto_on', { n: db.autoRounds }) : t('auto_off');
     $('ask').placeholder = aiEnabled ? t('ask_ph') : t('ask_ph_off');
+    renderRefs();
     if (tab === 'score' && scoreShown !== p.versionId) showScore();
   }
   function renderChat() { $('log').textContent = ''; project()?.chat.forEach(appendMsg); }
@@ -1044,11 +1050,108 @@
       .map((m) => ({ role: m.kind === 'user' ? 'user' : 'assistant', text: m.detail ? m.text + ' ' + m.detail : m.text }));
     say('user', text); $('ask').value = ''; p.draft = '';
     askedFrom = p.id;
-    send('generate', { project_id: p.id, text, tracks: forAI(p.tracks), bpm: p.bpm, target: selected, auto: !!db.autoRounds, rounds: db.autoRounds || 0, model: $('modelPick').value, effort: $('effortPick').value, base_version: p.versionId, history, lang: i18n.lang });
+    send('generate', { project_id: p.id, text, tracks: forAI(p.tracks), bpm: p.bpm, target: selected, auto: !!db.autoRounds, rounds: db.autoRounds || 0, model: $('modelPick').value, effort: $('effortPick').value, base_version: p.versionId, history, references: forAIRefs(p), lang: i18n.lang });
   }
   $('ask').oninput = () => { const p = project(); if (p) { p.draft = $('ask').value.slice(0, 4000); touched(p); } };
   $('askForm').onsubmit = (e) => { e.preventDefault(); submit(); };
   $('ask').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); } };
+  /* ---------- references ---------- */
+  // A song's references, as in the asset room: chips above the request, added with the clip or by dropping files on
+  // the chat. A file is read into a short line of facts (refs.js, shared with the asset room) and only that line is
+  // kept with the song, so nothing big lands in storage. The AI gets them with every request.
+  const MAX_REFS = 8, REF_FILE_MAX = 30 * 1024 * 1024;
+  const REF_ICON = { audio: 'sound', midi: 'music', score: 'music', link: 'link', text: 'note' };
+  const refKinds = (k) => t('ref_kind_' + k);
+  const unzipRef = async (bytes) => (await importer.unzip(bytes, REF_FILE_MAX)).map((z) => ({ path: z.path, bytes: async () => z.bytes }));
+  async function monoOf(bytes) {
+    const ac = new OfflineAudioContext(1, 1, 22050);
+    const buf = await ac.decodeAudioData(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+    const data = new Float32Array(buf.length);
+    for (let c = 0; c < buf.numberOfChannels; c++) { const ch = buf.getChannelData(c); for (let i = 0; i < data.length; i++) data[i] += ch[i] / buf.numberOfChannels; }
+    return data;
+  }
+  async function refFromFile(f) {
+    const kind = refKit.kindOf(f.name);
+    if (!kind) throw new Error(t('ref_bad_type'));
+    if (f.size > REF_FILE_MAX) throw new Error(t('ref_too_big'));
+    const bytes = new Uint8Array(await f.arrayBuffer());
+    const facts = kind === 'audio' ? refKit.audioFacts(await monoOf(bytes), 22050) : kind === 'midi' ? refKit.midiFacts(bytes) : await refKit.scoreFacts(f.name, bytes, unzipRef);
+    return { id: uid(), kind, name: f.name.slice(0, 120), summary: refKit.summary(kind, facts).slice(0, 400), note: '' };
+  }
+  function addRef(p, r) {
+    p.refs ||= [];
+    if (p.refs.length >= MAX_REFS) { toast(t('ref_full', { n: MAX_REFS })); return false; }
+    p.refs.push(r); touched(p); return true;
+  }
+  async function addRefFiles(files) {
+    const p = project(); if (!p) return;
+    for (const f of files) {
+      try { if (!addRef(p, await refFromFile(f))) break; } catch (e) { toast(`${f.name}: ${e.message || e}`); }
+    }
+    renderRefs(true);
+  }
+  const forAIRefs = (p) => (p.refs || []).map(({ kind, name, url, note, summary }) => ({ kind, name, url, note, summary }));
+  function renderRefs(force) {
+    const p = project(), box = $('refChips'); if (!p) return;
+    const refs = p.refs || [], key = `${p.id}|${refOpen}|${refs.map((r) => r.id).join(',')}|${i18n.lang}`;
+    if (!force && key === refDrawn) return; // a note being typed in an open card is left alone
+    refDrawn = key; box.textContent = '';
+    for (const r of refs) {
+      const b = el('button', { type: 'button', className: 'refChip' + (refOpen === r.id ? ' open' : '') }), kind = el('span', { className: 'kind' });
+      setIcon(kind, REF_ICON[r.kind] || 'note'); b.append(kind, el('span', { className: 'name', textContent: r.name || refKinds('text') }));
+      b.title = `${refKinds(r.kind)} · ${r.summary || r.note || r.name || ''}`; b.setAttribute('aria-expanded', String(refOpen === r.id));
+      b.onclick = () => { refOpen = refOpen === r.id ? '' : r.id; renderRefs(); };
+      box.append(b);
+    }
+    const r = refs.find((x) => x.id === refOpen);
+    if (r) {
+      const card = el('div', { className: 'refCard' }), tools = el('div', { className: 'refTools' });
+      tools.append(iconButton('trash', t('ref_remove'), () => { p.refs = refs.filter((x) => x !== r); refOpen = ''; touched(p); renderRefs(); }));
+      card.append(tools);
+      if (r.kind === 'link') card.append(el('a', { href: r.url, target: '_blank', rel: 'noopener noreferrer', textContent: r.url }));
+      if (r.summary) card.append(el('div', { className: 'refFacts', textContent: r.summary }));
+      // The note says what to take from this reference; it is kept as it is typed.
+      const note = el('textarea', { className: 'refNote', value: r.note || '', rows: 2, placeholder: r.kind === 'text' ? t('ref_note_ph') : t('ref_take_ph') });
+      note.setAttribute('aria-label', t('ref_take_ph'));
+      note.oninput = () => { r.note = note.value.slice(0, 600); touched(p); };
+      card.append(note); box.append(card);
+    }
+    box.hidden = !refs.length;
+  }
+  // + file / link / note. A link or a note is typed in place above the tools; Enter adds a link, a note takes
+  // Ctrl+Enter or leaving the box, Esc drops it.
+  function refField(kind) {
+    const more = $('refMore'); more.textContent = ''; $('refMenu').hidden = true; $('refAdd').setAttribute('aria-expanded', 'false');
+    const box = kind === 'link' ? el('input', { type: 'url', placeholder: 'https://' }) : el('textarea', { rows: 2, placeholder: t('ref_note_ph') });
+    box.setAttribute('aria-label', kind === 'link' ? t('ref_add_link') : t('ref_add_note'));
+    const done = () => {
+      const text = box.value.trim(), p = project(); if (!text || !p) { more.textContent = ''; return; }
+      if (kind === 'link') {
+        if (!/^https?:\/\/\S+$/i.test(text)) { toast(t('ref_bad_link')); return; }
+        addRef(p, { id: uid(), kind: 'link', name: text.replace(/^https?:\/\/(www\.)?/i, '').slice(0, 60), url: text.slice(0, 300), note: '' });
+      } else addRef(p, { id: uid(), kind: 'text', name: text.split('\n')[0].slice(0, 40), note: text.slice(0, 600) });
+      more.textContent = ''; renderRefs();
+    };
+    box.onkeydown = (e) => {
+      if (e.isComposing) return;
+      if (e.key === 'Escape') { e.preventDefault(); more.textContent = ''; }
+      else if (e.key === 'Enter' && (kind === 'link' || e.ctrlKey || e.metaKey)) { e.preventDefault(); done(); }
+    };
+    if (kind === 'text') box.onblur = done;
+    more.append(box); box.focus();
+  }
+  $('refFiles').accept = refKit.ACCEPT;
+  $('refAdd').onclick = () => { const open = $('refMenu').hidden; $('refMenu').hidden = !open; $('refAdd').setAttribute('aria-expanded', String(open)); };
+  $('refMenu').onclick = (e) => {
+    const kind = e.target.closest('[data-kind]')?.dataset.kind; if (!kind) return;
+    if (kind === 'file') { $('refMenu').hidden = true; $('refAdd').setAttribute('aria-expanded', 'false'); $('refFiles').click(); } else refField(kind);
+  };
+  $('refFiles').onchange = () => { const files = [...$('refFiles').files]; $('refFiles').value = ''; addRefFiles(files); };
+  addEventListener('pointerdown', (e) => { if (!$('refMenu').hidden && !e.target.closest('#refAddWrap')) { $('refMenu').hidden = true; $('refAdd').setAttribute('aria-expanded', 'false'); } });
+  const carriesFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+  $('chat').addEventListener('dragover', (e) => { if (carriesFiles(e)) { e.preventDefault(); $('chat').classList.add('over'); } });
+  $('chat').addEventListener('dragleave', (e) => { if (!$('chat').contains(e.relatedTarget)) $('chat').classList.remove('over'); });
+  $('chat').addEventListener('drop', (e) => { if (!carriesFiles(e)) return; e.preventDefault(); $('chat').classList.remove('over'); addRefFiles([...e.dataTransfer.files]); });
   $('stopAi').onclick = () => send('cancel', {});
   $('play').onclick = () => (playing ? stop() : play());
   $('modelPick').onchange = (e) => { db.model = e.target.value; touched(null); showCredits(); };

@@ -69,6 +69,9 @@
     solo: '<path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/>',
     muted: '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="m17 9.5 5 5M22 9.5l-5 5"/>',
     close: '<path d="M6 6l12 12M18 6 6 18"/>',
+    clip: '<path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9.7 17.2a1.7 1.7 0 0 1-2.4-2.4L15 7.2"/>',
+    link: '<path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/>',
+    copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
     prev: '<path d="M15 6l-6 6 6 6"/>',
     next: '<path d="m9 6 6 6-6 6"/>',
     check: '<path d="m5 13 4 4 10-11"/>',
@@ -137,7 +140,7 @@ ${p.files}`,
       params: 'Game values', addParam: 'Add value', param: 'Value', paramDefault: 'Starting value', intensity: 'Intensity', layersHead: 'Layers', addLayer: 'Add layer', always: 'Always on',
       roles: { bed: 'Loop', scatter: 'Now and then', stem: 'Music stem' }, onRange: 'Fades in', fadeFrom: 'Silent at', fadeTo: 'Full at', gap: 'Gap s', beatsPerBar: 'Beats per bar',
       dynNoSounds: 'Make or import some sounds first; layers are made of them.', dynHelp: 'Move a value to hear the layers change. The game sets the same values, for example set_param("intensity", 0.8) in Godot.',
-      specField: { name: 'name', category: 'category', length: 'length', loop: 'loop', when: 'when', description: 'description' }, openAsset: 'Open', rename: 'Rename', unapprove: 'Cancel approval', menu: 'Menu', settings: 'Settings', language: 'Language', gameInfo: 'Game info', stagesLabel: 'Progress', help: 'How to use', spec: 'Spec', export: 'Export',
+      specField: { name: 'name', category: 'category', length: 'length', loop: 'loop', when: 'when', description: 'description' }, openAsset: 'Open', rename: 'Rename', unapprove: 'Cancel approval', menu: 'Menu', settings: 'Settings', language: 'Language', gameInfo: 'Game info', stagesLabel: 'Progress', total: (n) => `${n} in all`, approvedOf: (a, n) => `${a} of ${n} approved`, help: 'How to use', spec: 'Spec', export: 'Export',
       backToMusic: 'To music studio', category: 'Category', board: 'Asset board', playAll: 'Play all', stopAll: 'Stop playing all', hoverPlay: 'Play on hover',
       acceptAll: 'Keep all', rejectAll: 'Discard all', selectAll: 'Select all', deselect: 'Deselect', approve: 'Approve', approved: 'Approved', clear: 'Clear',
       ask: 'Edit request', send: 'Send',
@@ -159,9 +162,9 @@ ${p.files}`,
       stemOn: (s) => `Unmute ${s}`, stemOff: (s) => `Mute ${s}`, stemSolo: (s) => `Solo ${s}`, stemGain: (s) => `${s} volume`,
       stems: { drums: 'Drums', bass: 'Bass', chords: 'Chords', melody: 'Melody', wind: 'Wind', gust: 'Gusts', rain_streaks: 'Rain streaks', rain_floor: 'Rain bed', raindrops: 'Raindrops', fire_bed: 'Fire bed', crackle: 'Crackle', cave_echo: 'Cave echo', drips: 'Drips', noise_layer: 'Noise layer', main: 'Main' },
       toneLayer: (i) => `Tone layer ${i}`,
-      tabChat: 'Chat', tabCode: 'Code', tabVersions: (n) => `Versions ${n}`, tabLicense: 'Licenses',
+      tabChat: 'Chat', tabTracks: 'Tracks', tabCode: 'Code', tabVersions: 'Versions',
       chatEmpty: (name) => `Tell me how to change ${name}.`, listen: 'Listen', current: 'Current', copyLicenses: 'Copy all licenses',
-      askThis: 'Request for this asset', close: 'Close',
+      askThis: 'What should change?', close: 'Close',
       licenseTitle: (g) => `${g} sound asset license notice`, use: 'Use', license: 'License', holder: 'Holder', copiedLicenses: 'Copied the license notice',
       example: { style: 'Warm wooden percussion and harp, combat not too heavy', assets: [
         { name: 'Click', when: 'Pressing a menu button', description: 'Light, wooden' },
@@ -213,7 +216,7 @@ ${p.form}`,
       justImported: 'Just brought in', imported: 'Brought in', importedN: (n) => `Brought in ${n} sound${n === 1 ? '' : 's'}`, bundleLoaded: (g, n) => `Opened ${g}: ${n} assets`,
       slotsAdded: (n) => `Added ${n} empty slots`, nothingToImport: 'No sound files, bundle or list found here',
       nameLabel: 'Name', guessed: 'Guessed, check it', licenseLater: 'License (fill in later)', holderLater: 'Holder', licenseOf: (n) => `License of ${n}`,
-      importedLicense: 'You brought this sound in, so its license is yours to record. It goes into CREDITS.md.', noLicenseYet: 'license not recorded',
+      noLicenseYet: 'license not recorded',
       originHead: 'Source', fillLeft: (n) => `${n} empty slot${n === 1 ? '' : 's'} to make.`, fillAll: 'Fill with AI', filling: (n) => `Making ${n}`,
       likeThis: 'Drafts in this feel', likeName: (n) => `${n} (like)`, likeMade: (n) => `Making ${n} in this feel`, promptHead: 'AI prompt',
       fromPrompt: 'Made from the prompt', importedNote: 'Brought in', fromBundle: 'From the bundle', importHint: 'Already have sounds or a sound list? Drop them here or use Import at the top.',
@@ -277,7 +280,7 @@ ${p.files}`,
       params: '파라미터', addParam: '파라미터 추가', param: '파라미터', paramDefault: '기본값', intensity: '강도', layersHead: '레이어', addLayer: '레이어 추가', always: '항상',
       roles: { bed: '루프', scatter: '랜덤 재생', stem: '스템' }, onRange: '페이드 인 구간', fadeFrom: '최소 볼륨 지점', fadeTo: '최대 볼륨 지점', gap: '간격(초)', beatsPerBar: '마디당 박 수',
       dynNoSounds: '소리부터 만들거나 가져오라고. 레이어는 그 소리로 만드는 거잖아, 허접~', dynHelp: '파라미터를 움직여 봐, 레이어 바뀌는 게 들리지? 게임에서도 같은 파라미터를 넣는 거야. 예: Godot에서 set_param("intensity", 0.8).',
-      specField: { name: '이름', category: '분류', length: '길이', loop: '반복', when: '재생 시점', description: '설명' }, openAsset: '열기', rename: '이름 바꾸기', unapprove: '승인 취소', menu: '메뉴', settings: '설정', language: '언어', gameInfo: '게임 정보', stagesLabel: '진행 상황', help: '사용법', spec: '명세', export: '내보내기',
+      specField: { name: '이름', category: '분류', length: '길이', loop: '반복', when: '재생 시점', description: '설명' }, openAsset: '열기', rename: '이름 바꾸기', unapprove: '승인 취소', menu: '메뉴', settings: '설정', language: '언어', gameInfo: '게임 정보', stagesLabel: '진행 상황', total: (n) => `전체 ${n}`, approvedOf: (a, n) => `${n}개 중 ${a}개 승인`, help: '사용법', spec: '명세', export: '내보내기',
       backToMusic: '음악 작업실로', category: '분류', board: '에셋 보드', playAll: '전체 재생', stopAll: '전체 재생 정지', hoverPlay: '마우스 오버 시 재생',
       acceptAll: '전체 채택', rejectAll: '전체 버림', selectAll: '전체 선택', deselect: '선택 해제', approve: '승인', approved: '승인됨', clear: '해제',
       ask: '수정 요청', send: '보내기',
@@ -299,9 +302,9 @@ ${p.files}`,
       stemOn: (s) => `${s} 켜기`, stemOff: (s) => `${s} 끄기`, stemSolo: (s) => `${s} 혼자 듣기`, stemGain: (s) => `${s} 음량`,
       stems: { drums: '드럼', bass: '베이스', chords: '화음', melody: '멜로디', wind: '바람', gust: '돌풍', rain_streaks: '빗줄기', rain_floor: '빗소리 베이스', raindrops: '빗방울', fire_bed: '불 베이스', crackle: '탁탁 튀는 소리', cave_echo: '동굴 울림', drips: '물방울', noise_layer: '노이즈 레이어', main: '메인' },
       toneLayer: (i) => `톤 레이어 ${i}`,
-      tabChat: '대화', tabCode: '코드', tabVersions: (n) => `버전 ${n}`, tabLicense: '저작권',
+      tabChat: '대화', tabTracks: '트랙', tabCode: '코드', tabVersions: '버전',
       chatEmpty: (name) => `${name}을(를) 어떻게 바꿀지 말해 봐~`, listen: '듣기', current: '현재', copyLicenses: '저작권 전체 복사',
-      askThis: '이 에셋에 보낼 요청', close: '닫기',
+      askThis: '이거 어떻게 고쳐줄까? 허접~', close: '닫기',
       licenseTitle: (g) => `${g} 소리 에셋 저작권 고지`, use: '용도', license: '라이선스', holder: '저작권자', copiedLicenses: '저작권 고지 복사해 뒀어~',
       example: { style: '따뜻한 나무 타악기와 하프 중심, 전투도 무겁지 않게', assets: [
         { name: '클릭', when: '메뉴 버튼을 누를 때', description: '가볍고 나무 느낌' },
@@ -353,7 +356,7 @@ ${p.form}`,
       justImported: '방금 가져온 소리', imported: '직접 가져옴', importedN: (n) => `소리 ${n}개 가져왔어~`, bundleLoaded: (g, n) => `${g} 묶음을 열었어요. 에셋 ${n}개`,
       slotsAdded: (n) => `빈 칸 ${n}개 올려 뒀어~`, nothingToImport: '소리 파일도 묶음도 목록도 못 찾겠는데~?',
       nameLabel: '이름', guessed: '대충 짐작한 분류니까 똑바로 확인해~', licenseLater: '라이선스 (나중에 적어도 돼요)', holderLater: '저작권자', licenseOf: (n) => `${n} 라이선스`,
-      importedLicense: '직접 가져온 소리니까 라이선스는 알아서 적어 놔~ CREDITS.md에 들어가거든.', noLicenseYet: '라이선스 기록 없음',
+      noLicenseYet: '라이선스 기록 없음',
       originHead: '출처', fillLeft: (n) => `만들 빈 칸 ${n}개야~`, fillAll: 'AI로 채우기', filling: (n) => `${n}개를 만드는 중`,
       likeThis: '이 느낌으로 시안', likeName: (n) => `${n} 느낌`, likeMade: (n) => `이 느낌으로 ${n}개 만들어 줄게~`, promptHead: 'AI 프롬프트',
       fromPrompt: '프롬프트로 생성', importedNote: '직접 가져옴', fromBundle: '묶음에서 가져옴', importHint: '이미 만든 소리나 소리 목록 있어? 여기다 끌어다 놓든가 위쪽 가져오기를 눌러 봐~',
@@ -388,7 +391,8 @@ ${p.form}`,
     document.querySelectorAll('[data-i18n-title]').forEach((e) => { e.title = t(e.dataset.i18nTitle); });
   }
   const color = (cat) => catOf(cat)?.hue || 'var(--text3)';
-  const seconds = (s) => t('sec', s < 10 ? s.toFixed(s < 1 ? 2 : 1) : s.toFixed(0));
+  const secNum = (s, like = s) => s.toFixed(like < 1 ? 2 : like < 10 ? 1 : 0); // a position reads to the length's precision
+  const seconds = (s) => t('sec', secNum(s));
   const stems = ['#E8AE72', '#87B9E8', '#8CCDB2', '#C7A0E8', '#F3C978'];
 
   /* ---------- state ---------- */
@@ -653,16 +657,24 @@ ${p.form}`,
   }
   function renderHeader() {
     $('gameTitle').textContent = tx(game);
-    // One thin bar: how much of the board is approved, waiting for a check, or still empty. A part filters the board.
-    const bar = $('progress'), parts = ['approved', 'draft', 'review', 'working', 'flagged', 'pending'].map((s) => [s, assets.filter((a) => a.status === s).length]).filter(([, n]) => n);
+    // A pill filled from the left: approved, waiting for a check, being made, flagged. What is not made yet stays
+    // as the empty track. Beside it, approved out of all. A part filters the board.
+    const box = $('progress'), bar = box.querySelector('.bar'), total = assets.length;
+    const all = ['approved', 'draft', 'review', 'working', 'flagged', 'pending'].map((s) => [s, assets.filter((a) => a.status === s).length]).filter(([, n]) => n);
     bar.textContent = '';
-    for (const [s, n] of parts) {
-      const seg = el('button', `seg s-${s}`); seg.style.flexGrow = n; seg.title = `${statusText(s)} ${n}`; seg.setAttribute('aria-label', seg.title);
+    for (const [s, n] of all) {
+      const seg = el('button', `seg s-${s}`); seg.style.width = `${(n / total) * 100}%`; seg.title = `${statusText(s)} ${n}`; seg.setAttribute('aria-label', seg.title);
       seg.setAttribute('aria-pressed', String(filter.status === s));
-      seg.onclick = () => { filter.status = filter.status === s ? null : s; renderBoard(); };
+      seg.onclick = (e) => { e.stopPropagation(); filter.status = filter.status === s ? null : s; renderBoard(); };
       bar.append(seg);
     }
-    bar.setAttribute('aria-label', `${t('stagesLabel')}: ${parts.map(([s, n]) => `${statusText(s)} ${n}`).join(', ')}`);
+    const summary = `${all.map(([s, n]) => `${statusText(s)} ${n}`).join(' · ')} (${t('total', total)})`;
+    box.title = summary; box.setAttribute('aria-label', `${t('stagesLabel')}: ${summary}`);
+    // The pill is 8px tall but the whole 44px row takes the click: the part under the pointer.
+    box.onclick = (e) => { const hit = [...bar.children].find((b) => { const r = b.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right; }); hit?.click(); };
+    const count = $('progressCount'), approved = assets.filter((a) => a.status === 'approved').length;
+    count.innerHTML = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS.check}</svg>`;
+    count.append(`${approved}/${total}`); count.title = summary; count.setAttribute('aria-label', t('approvedOf', approved, total));
     const waiting = assets.filter((a) => a.status === 'review').length;
     $('review').hidden = !waiting || !!openAsset; $('reviewText').textContent = t('reviewCount', waiting);
     autosave();
@@ -822,7 +834,6 @@ ${p.form}`,
     const many = targetsOf(a);
     item(t('openAsset'), 'Enter', () => openDetail(a), !a.versions.length);
     item(t('rename'), 'F2', () => renameTile(a));
-    item(ownRefs(a).length ? t('refsN', ownRefs(a).length) : t('refs'), '', () => refDialog({ type: 'asset', a }));
     if (a.status === 'approved') item(t('unapprove'), 'A', () => { a.status = 'draft'; renderBoard(); });
     else item(t('approve'), 'A', () => { approve(a); renderBoard(); }, !canApprove);
     const mv = el('button', 'hasSub'), ico = el('span', 'subIco');
@@ -918,6 +929,7 @@ ${p.form}`,
       if (e.code === 'Space') { e.preventDefault(); toggleDetailPlay(); }
       if (e.key === 'ArrowLeft') step(-1);
       if (e.key === 'ArrowRight') step(1);
+      if (e.key.toLowerCase() === 'a' && !e.ctrlKey && !e.metaKey) toggleApprove(openAsset);
       return;
     }
     const a = focused && byId(focused);
@@ -1131,6 +1143,7 @@ ${p.form}`,
 
   function showDetail(on) {
     $('boardView').hidden = on; $('detailView').hidden = !on; $('dock').hidden = on;
+    document.body.classList.toggle('inDetail', on); // the header turns into the detail's navigation
   }
   let walk = [];
   function openDetail(a) {
@@ -1140,7 +1153,7 @@ ${p.form}`,
     if (tile) tile.style.viewTransitionName = 'zoom';
     transition(() => {
       if (tile) tile.style.viewTransitionName = '';
-      stopSound(); openAsset = a; focused = a.id; stemState = {}; detailTab = 'chat'; showDetail(true); renderDetail();
+      stopSound(); openAsset = a; focused = a.id; stemState = {}; detailTab = 'tracks'; showDetail(true); renderDetail();
     });
   }
   function closeDetail() {
@@ -1158,46 +1171,77 @@ ${p.form}`,
   function toggleDetailPlay() { if (player?.asset === openAsset) stopSound(); else play(openAsset, { loop: !!(openAsset.loop || openAsset.music) }); renderPlayButton(); }
   function renderPlayButton() { const b = $('dPlay'); if (b) { setIcon(b, player?.asset === openAsset ? 'stop' : 'play'); b.setAttribute('aria-label', player ? t('stop') : t('play')); } }
 
+  // Laid out like the music screen: play, name and approve on one line, the sound under them, then tabs (tracks,
+  // code, versions) across the full width. The side is the conversation, with the references above its input.
+  // Licences are not per sound: they are all in the export dialog, copied at once.
   function renderDetail() {
-    const a = openAsset, v = heard(a), m = v.measure, box = $('detailView'), left = issues(a);
+    const a = openAsset, v = heard(a), m = v.measure, box = $('detailView');
+    const typed = document.querySelector('.detailDock textarea')?.value || '';
     box.textContent = '';
-    const main = el('div', 'dMain'), head = el('div', 'dHead');
-    const title = el('div'); title.style.cssText = 'min-width:0;flex:1';
+    const multi = v.sound.stems.length > 1, tab = detailTab === 'tracks' && !multi ? 'versions' : detailTab;
+    const main = el('div', 'dMain' + (tab === 'code' ? ' coding' : '')), head = el('div', 'dHead');
+    const play = iconButton('play', t('play'), toggleDetailPlay, 'iconBtn dPlay'); play.id = 'dPlay';
+    const title = el('div', 'dTitle');
     // Name and category apply as they are typed; there is nothing to save.
     const name = el('input', 'dName'); name.value = nm(a); name.setAttribute('aria-label', t('nameLabel'));
     name.oninput = () => { a.name = name.value; renderHeader(); };
-    const h1 = el('h1'); h1.append(name);
-    const fileRow = el('div', 'file', a.imported && a.file ? `${a.file} → ${a.id}.wav` : `${a.id}.wav`);
-    title.append(h1, fileRow);
-    const play = iconButton('play', t('play'), toggleDetailPlay); play.id = 'dPlay'; play.classList.add('primary');
-    const approveBtn = el('button', a.status === 'approved' ? '' : 'primary', a.status === 'approved' ? t('approved') : t('approve'));
-    approveBtn.onclick = () => { if (a.status === 'approved') a.status = 'draft'; else approve(a); renderDetail(); };
-    approveBtn.disabled = a.status === 'working' || a.status === 'review';
-    head.append(iconButton('back', t('toBoard'), closeDetail, 'ghost iconBtn'), title, iconButton('prev', t('prevAsset'), () => step(-1), 'ghost iconBtn'), iconButton('next', t('nextAsset'), () => step(1), 'ghost iconBtn'), play, approveBtn);
-    const facts = el('p', 'dFacts');
+    const facts = el('div', 'dFacts');
     facts.append(catPicker(a, () => renderDetail()));
-    if (a.imported) facts.append(el('span', 'originTag', t('imported')));
-    { const n = (a.refs || []).length, b = el('button', '', n ? t('refsN', n) : t('refs')); b.id = 'dRefs'; b.onclick = () => refDialog({ type: 'asset', a }); facts.append(b); }
-    for (const f of [seconds(m.seconds), t('peak', m.peak.toFixed(1)), t('loud', m.loud.toFixed(1)), a.loop ? t('loop') : t('oneShot'), statusText(a.status)]) facts.append(el('span', '', f));
-    if (a.imported) { const like = el('button', '', t('likeThis')); like.id = 'likeThis'; like.onclick = () => likeThis(a); facts.append(like); }
-    const wave = el('div', 'dWave'), canvas = el('canvas'); wave.append(canvas);
+    if (a.imported) { const like = el('button', 'ghost', t('likeThis')); like.id = 'likeThis'; like.onclick = () => likeThis(a); facts.append(like); }
+    title.append(name, facts);
+    head.append(play, title, approveButton(a));
+    const wave = el('div', 'dWave'), canvas = el('canvas'), time = el('span', 'dTime', seconds(m.seconds)); time.id = 'dTime'; time.dataset.len = m.seconds; wave.append(canvas, time);
     wave.onclick = (e) => { const r = wave.getBoundingClientRect(); window.setTimeout(renderPlayButton); playFrom((e.clientX - r.left) / r.width * m.seconds); };
+    main.append(head, wave);
     if (a.status === 'review') {
       const row = el('div', 'tile'); row.style.cssText = 'height:auto;background:none;overflow:visible;margin-top:8px';
       const ab = reviewRow(a, renderDetail); ab.style.position = 'static';
-      row.append(ab); wave.after(row);
-      main.append(head, facts, wave, row);
-    } else main.append(head, facts, wave);
-    const spec = el('canvas', 'dSpec'); spec.id = 'dSpec'; spec.setAttribute('aria-label', t('spectrum')); main.append(spec);
-    const th = el('div', 'dTrackHead'); th.append(el('h2', '', t('tracks', v.sound.stems.length))); main.append(th);
-    v.sound.stems.forEach((s, i) => main.append(stemRow(s, i)));
-    box.append(main, sidePanel(a));
+      row.append(ab); main.append(row);
+    }
+    const tabs = el('div', 'tabs'), body = el('div', 'dTab');
+    tabs.setAttribute('role', 'tablist');
+    for (const [id, label] of [...(multi ? [['tracks', t('tabTracks')]] : []), ['code', t('tabCode')], ['versions', t('tabVersions')]]) {
+      const b = el('button', '', label); b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(id === tab));
+      b.onclick = () => { detailTab = id; renderDetail(); }; tabs.append(b);
+    }
+    if (tab === 'code') {
+      if (a.prompt) {
+        const fold = el('details', 'promptFold'), sum = el('summary'), full = el('pre', 'code prompt', a.prompt); full.id = 'promptText';
+        sum.append(el('b', '', t('promptHead')), el('span', '', a.prompt.split('\n')[0]));
+        fold.append(sum, full); body.append(fold);
+      }
+      const code = el('pre', 'codeView'); for (const line of sourceOf(a).split('\n')) code.append(el('span', 'ln', line || ' '));
+      body.append(code);
+    } else if (tab === 'versions') {
+      [...a.versions].reverse().forEach((ver) => {
+        const i = a.versions.indexOf(ver), row = el('div', 'lineItem'), text = el('span', 'grow', `v${i + 1} · ${noteText(ver.note)}`);
+        row.append(iconButton('play', t('listen'), () => { a.current = i; renderDetail(); play(a); }, 'ghost iconBtn'), text);
+        if (i === a.current) row.append(el('span', 'tag', t('current')));
+        body.append(row);
+      });
+    } else v.sound.stems.forEach((st, i) => body.append(stemRow(st, i)));
+    main.append(tabs, body);
+    box.append(main, chatPanel(a, typed));
     requestAnimationFrame(() => {
       const hue = resolved(color(a.cat));
       drawPeaks(canvas, v.peaks, hue);
       document.querySelectorAll('.stem').forEach((row, i) => drawPeaks(row.querySelector('canvas'), synth.peaks(v.sound.stems[i].data, 160), stems[i % stems.length]));
     });
     renderPlayButton(); renderHeader();
+  }
+  // One raised button: approve, or, once approved, a green "approved" that takes it back. A approves from the keyboard.
+  function approveButton(a) {
+    const done = a.status === 'approved', b = el('button', 'dApprove' + (done ? ' done' : ''));
+    setIcon(b, 'check'); b.append(done ? t('approved') : t('approve'));
+    b.setAttribute('aria-pressed', String(done)); if (done) b.title = t('unapprove');
+    b.disabled = a.status === 'working' || a.status === 'review';
+    b.onclick = () => toggleApprove(a);
+    return b;
+  }
+  function toggleApprove(a) {
+    if (a.status === 'working' || a.status === 'review') return;
+    if (a.status === 'approved') a.status = 'draft'; else approve(a);
+    renderDetail();
   }
   function playFrom(at) { play(openAsset, { from: at, loop: !!(openAsset.loop || openAsset.music) }); }
   function stemRow(s, i) {
@@ -1224,38 +1268,41 @@ ${p.form}`,
       return `// ${stemName(l.stem)}\nn"${l.notes.slice(0, 8).filter((x) => x != null).join(' ')}" |> ${l.wave}(@.freq) * adsr(@.gate) |> bus("${l.stem}")`;
     }).join('\n\n');
   }
-  function sidePanel(a) {
-    const side = el('div', 'dSide'), tabs = el('div', 'tabs'), body = el('div', 'tabBody');
-    tabs.setAttribute('role', 'tablist');
-    for (const [id, label] of [['chat', t('tabChat')], ['code', t('tabCode')], ['versions', t('tabVersions', a.versions.length)], ['license', t('tabLicense')]]) {
-      const b = el('button', '', label); b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(id === detailTab));
-      b.onclick = () => { detailTab = id; renderDetail(); }; tabs.append(b);
+  // The conversation: the log, the references as chips, then the clip and the draft count, then the request.
+  // Files dropped anywhere on it become references of this sound.
+  function chatPanel(a, typed = '') {
+    const side = el('div', 'dSide'), body = el('div', 'tabBody');
+    a.chat.forEach((msg) => body.append(el('div', 'msg ' + (msg.me ? 'me' : 'ai'), chatText(msg))));
+    const tools = el('div', 'dTools');
+    const refs = refSlot({ type: 'asset', a }, { bare: true, tools, redraw: redrawChat });
+    const busy = a.status === 'working';
+    const seg = el('div', 'draftSeg'); seg.setAttribute('role', 'radiogroup'); seg.setAttribute('aria-label', t('draftCountLabel'));
+    seg.append(el('span', 'segLabel', t('drafts')));
+    for (let i = 1; i <= MAX_DRAFTS; i++) {
+      const b = el('button', '', String(i)); b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(drafts === i));
+      b.setAttribute('aria-label', t('draftCount', i));
+      b.onclick = () => { drafts = i; seg.querySelectorAll('[role=radio]').forEach((x, k) => x.setAttribute('aria-checked', String(k + 1 === i))); };
+      seg.append(b);
     }
-    if (detailTab === 'chat') {
-      if (!a.chat.length) body.append(el('p', 'msg ai', t('chatEmpty', nm(a))));
-      a.chat.forEach((m) => body.append(el('div', 'msg ' + (m.me ? 'me' : 'ai'), chatText(m))));
-    } else if (detailTab === 'code') {
-      if (a.prompt) { const p = el('pre', 'code prompt', a.prompt); p.id = 'promptText'; body.append(el('h3', 'tabHead', t('promptHead')), p); }
-      body.append(el('pre', 'code', sourceOf(a)));
-    }
-    else if (detailTab === 'versions') {
-      [...a.versions].reverse().forEach((v) => {
-        const i = a.versions.indexOf(v), row = el('div', 'lineItem'), text = el('span', 'grow', `v${i + 1} · ${noteText(v.note)}`);
-        row.append(text, iconButton('play', t('listen'), () => { a.current = i; renderDetail(); play(a); }, 'ghost iconBtn'));
-        if (i === a.current) row.append(el('span', 'tag', t('current')));
-        body.append(row);
-      });
-    } else {
-      if (a.imported) body.append(el('p', 'msg ai', t('importedLicense')), ...licenseFields(a));
-      else body.append(...licenseRows());
-      const copy = el('button', '', t('copyLicenses')); copy.onclick = copyLicenses; body.append(copy);
-    }
-    const dock = el('form', 'detailDock'), input = el('input'); input.placeholder = t('askThis'); input.setAttribute('aria-label', t('askThis'));
-    const send = iconButton('send', t('send'), null); send.type = 'submit';
-    dock.onsubmit = (e) => { e.preventDefault(); const t = input.value.trim(); if (t && a.status !== 'working') request([a], t); };
-    dock.append(draftPicker(), input, send);
-    side.append(tabs, body, dock);
+    tools.append(seg);
+    const dock = el('form', 'detailDock'), input = el('textarea'); input.rows = 2; input.value = typed;
+    input.placeholder = t('askThis'); input.setAttribute('aria-label', t('askThis'));
+    const send = iconButton('send', t('send'), null); send.type = 'submit'; send.disabled = busy;
+    const go = () => { const text = input.value.trim(); if (text && a.status !== 'working') request([a], text); };
+    // Enter sends, Shift+Enter breaks the line; nothing is sent while a Korean syllable is still being composed.
+    input.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); go(); } };
+    dock.onsubmit = (e) => { e.preventDefault(); go(); };
+    dock.append(input, send);
+    side.append(body);
+    if (busy) side.append(el('div', 'dWorking', `${statusText('working')}…`));
+    side.append(refs, tools, dock);
+    requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
     return side;
+  }
+  function redrawChat() {
+    const old = document.querySelector('.dSide'); if (!old || !openAsset) return;
+    const typed = old.querySelector('.detailDock textarea')?.value || '';
+    old.replaceWith(chatPanel(openAsset, typed));
   }
   function liveLoop() {
     requestAnimationFrame(liveLoop);
@@ -1270,18 +1317,9 @@ ${p.form}`,
       let head = wave.querySelector('.ph');
       if (!head) { head = el('div', 'ph'); head.style.cssText = 'position:absolute;top:0;bottom:0;width:2px;background:#F5F5F5;pointer-events:none'; wave.append(head); }
       head.hidden = !player; if (player) head.style.left = position() / player.length * 100 + '%';
-    }
-    const c = $('dSpec');
-    if (c) {
-      const W = c.clientWidth, H = c.clientHeight;
-      if (c.width !== W) { c.width = W; c.height = H; }
-      const g = c.getContext('2d'); g.clearRect(0, 0, W, H);
-      if (analyser && player) {
-        const raw = new Uint8Array(analyser.frequencyBinCount); analyser.getByteFrequencyData(raw);
-        g.fillStyle = resolved(color(player.asset.cat));
-        const n = 72, w = W / n;
-        for (let i = 0; i < n; i++) { const b = raw[Math.floor(1.5 * (raw.length / 1.5) ** (i / n))] / 255; g.fillRect(i * w, H - b * H, Math.max(1, w - 2), b * H); }
-      }
+      // Where it is out of how long it is; stopped, just the length.
+      const time = $('dTime'), len = +time?.dataset.len;
+      if (time) time.textContent = player?.asset === openAsset ? `${secNum(position(), len)} / ${seconds(len)}` : seconds(len);
     }
   }
 
@@ -1311,7 +1349,6 @@ ${p.form}`,
   }
   const licenseText = () => `${t('licenseTitle', tx(game))}\n\n` + [...LICENSES.map((l) => `${l.name}\n  ${t('use')}: ${tx(l.use)}\n  ${t('license')}: ${l.license}\n  ${t('holder')}: ${l.holder}`), ...assets.filter((a) => a.imported).map((a) => `${a.file || a.id} (${nm(a)})\n  ${t('license')}: ${a.license || t('noLicenseYet')}\n  ${t('holder')}: ${a.holder || '-'}`)].join('\n\n') + '\n';
   const copyLicenses = () => copy(licenseText(), t('copiedLicenses'));
-  const licenseRows = () => LICENSES.map((l) => { const r = el('div', 'lineItem'); r.append(el('span', 'grow', `${l.name} · ${tx(l.use)}`), el('span', 'tag', l.license)); return r; });
 
   const specExample = () => {
     const ex = t('example'), ids = [['sfx_ui_click', 'ui', 0.1, false], ['sfx_combat_parry', 'combat', 0.3, false], ['bgm_garden', 'bgm', 60, true]];
@@ -1429,11 +1466,17 @@ ${p.form}`,
     opt(t('engine'), 'engine', [['none', t('engineNone')], ['godot', 'Godot 4']]);
     dlg.append(el('h3', '', t('inBundle')));
     for (const item of [t('bundleAudio', exportPath({ id: '<id>', cat: '<group>' })), ...t('bundleItems').slice(1), ...(exportOpts.engine === 'godot' ? [t('bundleGodot')] : [])]) dlg.append(Object.assign(el('div', 'lineItem'), { textContent: item }));
-    dlg.append(el('h3', '', t('licenses')));
-    dlg.append(...licenseRows());
-    const row = el('div', 'dlgRow'), go = el('button', 'primary', t('exportBundle')), lic = el('button', '', t('copyLicenses'));
+    // Every licence in one place, as CREDITS.md will read, copied at once. A sound brought in from outside gets its
+    // licence and holder typed here, and the text follows as they are typed.
+    const credits = el('section', 'credits'), head = el('h3', 'creditsHead'), text = el('pre', 'code creditsText');
+    head.append(el('span', 'grow', t('licenses')), iconButton('copy', t('copyLicenses'), copyLicenses, 'ghost iconBtn'));
+    const refresh = () => { text.textContent = licenseText(); };
+    credits.append(head);
+    for (const a of assets.filter((x) => x.imported)) { const r = el('div', 'lineItem creditRow'); r.append(el('span', 'grow', a.file ? base(a.file) : a.id), ...licenseFields(a, refresh)); credits.append(r); }
+    credits.append(text); refresh(); dlg.append(credits);
+    const row = el('div', 'dlgRow'), go = el('button', 'primary', t('exportBundle'));
     go.id = 'exportGo'; go.onclick = () => { dlg.close(); stage = 'export'; renderHeader(); exportBundle().catch((e) => toast(t('exportFailed', e.message || e), 6000)); };
-    lic.onclick = copyLicenses; row.append(lic, go); dlg.append(row);
+    row.append(go); dlg.append(row);
     if (!dlg.open) dlg.showModal();
   }
   function gameDialog() {
@@ -1713,13 +1756,13 @@ ${p.form}`,
     refBlobs.set(key, bytes);
     return { id, kind, name, note: '', url: '', key, facts, summary: refKit.summary(kind, facts), at: Date.now() };
   }
-  async function addRefFiles(scope, files) {
+  async function addRefFiles(scope, files, redraw) {
     let bad = 0;
     for (const f of files) {
       try { addRef(scope, await refFromFile(base(f.path), await f.bytes())); } catch (e) { bad++; toast(`${base(f.path)}: ${e.message || e}`, 4000); }
     }
     if (files.length - bad) toast(t('refAdded', files.length - bad));
-    renderBoard(); refDialog(scope);
+    if (redraw) { renderBoardQuiet(); redraw(); } else { renderBoard(); refDialog(scope); }
   }
   let refAudio = null;
   function playRef(r, button) {
@@ -1750,31 +1793,103 @@ ${p.form}`,
     } else if (r.note) row.append(el('div', 'refFacts', r.note));
     return row;
   }
+  // References as a slot: chips you can drop files on. A chip opens its note under the row; + adds a file, a link
+  // or a note in place. References inherited from the category or the project show dimmed, without a remove.
+  // Bare, it is the attachment row of a conversation: chips only when there are any, and the add button is the
+  // clip in the conversation's tools (opts.tools).
+  let refOpen = '';
+  const REF_ICON = { audio: 'sound', midi: 'music', score: 'music', link: 'link', text: 'spec' };
+  function refSlot(scope, opts = {}) {
+    const bare = !!opts.bare;
+    const slot = el('div', 'refSlot' + (bare ? ' bare' : '')), row = el('div', 'refChips'), extra = el('div', 'refMore');
+    if (!bare) { const head = el('span', 'refLabel'); setIcon(head, 'ref'); head.append(t('refs')); head.title = t('refsHelp')[scope.type]; row.append(head); }
+    const redraw = opts.redraw || (() => { const next = refSlot(scope); slot.replaceWith(next); return next; });
+    const inherited = scope.type === 'asset' ? scopeRefs(scope.a) : scope.type === 'cat' ? [...tagged(projectRefs, 'project'), ...chainOf(scope.c).slice(0, -1).flatMap((c) => tagged(c.refs, 'cat:' + c.id))] : [];
+    const chip = (r, own) => {
+      const b = el('button', 'refChip ref-' + r.kind + (own ? '' : ' inherited') + (refOpen === r.id ? ' open' : ''));
+      const kind = el('span', 'kind'); setIcon(kind, REF_ICON[r.kind] || 'ref');
+      b.append(kind, el('span', 'name', r.name || t('refKinds').text));
+      b.title = `${t('refKinds')[r.kind] || r.kind} · ` + (own ? (r.summary || r.note || r.name || '') : `${fromLabel(r.from)} · ${r.name || ''}`);
+      b.setAttribute('aria-expanded', String(refOpen === r.id));
+      b.onclick = () => { refOpen = refOpen === r.id ? '' : r.id; redraw(); };
+      row.append(b);
+    };
+    refList(scope).forEach((r) => chip(r, true));
+    inherited.forEach((r) => chip(r, false));
+    const pick = el('input'); pick.type = 'file'; pick.multiple = true; pick.accept = refKit.ACCEPT; pick.hidden = true;
+    pick.onchange = () => { const files = [...pick.files].map((f) => fileEntry(f, f.name)); pick.value = ''; addRefFiles(scope, files, redraw); };
+    const add = bare ? iconButton('clip', `${t('refs')} ${t('refAdd')}`, null, 'ghost iconBtn refClip') : iconButton('plus', t('refAdd'), null, 'ghost iconBtn refPlus');
+    const menu = el('div', 'refAddMenu' + (bare ? ' up' : '')); menu.hidden = true; menu.setAttribute('role', 'menu');
+    const field = (kind) => {
+      extra.textContent = ''; menu.hidden = true;
+      const box = kind === 'link' ? el('input') : el('textarea');
+      if (kind === 'link') { box.type = 'url'; box.placeholder = 'https://'; } else box.placeholder = t('refNotePh');
+      box.setAttribute('aria-label', kind === 'link' ? t('refAddLink') : t('refAddNote'));
+      const done = () => {
+        const text = box.value.trim(); if (!text) return;
+        if (kind === 'link') {
+          if (!/^https?:\/\/\S+$/i.test(text)) { toast(t('refBadLink'), 3000); return; }
+          addRef(scope, { id: newRefId(), kind: 'link', name: text.replace(/^https?:\/\/(www\.)?/i, '').slice(0, 60), url: text, note: '', at: Date.now() });
+        } else addRef(scope, { id: newRefId(), kind: 'text', name: text.split('\n')[0].slice(0, 40), note: text, url: '', at: Date.now() });
+        renderBoardQuiet(); redraw();
+      };
+      // Enter adds a link; a note takes Ctrl+Enter or leaving the box. Esc drops it.
+      box.onkeydown = (e) => {
+        if (e.isComposing) return;
+        if (e.key === 'Escape') { e.preventDefault(); extra.textContent = ''; }
+        else if (e.key === 'Enter' && (kind === 'link' || e.ctrlKey || e.metaKey)) { e.preventDefault(); done(); }
+      };
+      if (kind === 'text') box.onblur = done;
+      extra.append(box); box.focus();
+    };
+    for (const [kind, label] of [['file', t('refAddFile')], ['link', t('refAddLink')], ['text', t('refAddNote')]]) {
+      const b = el('button', '', label); b.setAttribute('role', 'menuitem');
+      b.onclick = () => (kind === 'file' ? (menu.hidden = true, pick.click()) : field(kind));
+      menu.append(b);
+    }
+    add.onclick = () => { menu.style.left = add.offsetLeft + 'px'; menu.hidden = !menu.hidden; };
+    if (bare) opts.tools.prepend(add, menu, pick); else row.append(add, menu, pick);
+    if (!bare && !refList(scope).length && !inherited.length) row.append(el('span', 'refHint', t('refEmpty')));
+    if (row.children.length) slot.append(row);
+    slot.append(extra);
+    const opened = [...refList(scope).map((r) => [r, true]), ...inherited.map((r) => [r, false])].find(([r]) => r.id === refOpen);
+    if (opened) {
+      const [r, own] = opened, card = el('div', 'refCard');
+      if (r.kind === 'link' && /^https?:\/\//i.test(r.url)) { const link = el('a', '', r.url); link.href = r.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; card.append(link); }
+      if (r.summary) card.append(el('div', 'refFacts', r.summary));
+      const tools = el('div', 'refTools');
+      if (r.kind === 'audio' && r.key) { const b = iconButton('play', t('listen'), () => playRef(r, b), 'ghost iconBtn'); tools.append(b); }
+      if (own) {
+        // The note says what to take from this reference; it is kept as it is typed.
+        const note = el('textarea', 'refNote'); note.value = r.note || ''; note.placeholder = r.kind === 'text' ? t('refNotePh') : t('refTakePh'); note.setAttribute('aria-label', t('refTakePh'));
+        note.oninput = () => { r.note = note.value; syncRefs(); autosave(); };
+        card.append(note);
+        tools.append(iconButton('trash', t('refRemove'), () => { dropRef(scope, r); refOpen = ''; renderBoardQuiet(); redraw(); }, 'ghost iconBtn'));
+      } else {
+        if (r.note) card.append(el('div', 'refFacts', r.note));
+        card.append(el('div', 'refFacts', fromLabel(r.from)));
+      }
+      card.prepend(tools);
+      slot.append(card);
+    }
+    if (bare) return slot; // the whole conversation takes dropped files (see the window's drop)
+    slot.ondragover = (e) => { if ([...e.dataTransfer.types].includes('Files')) { e.preventDefault(); e.stopPropagation(); slot.classList.add('over'); } };
+    slot.ondragleave = () => slot.classList.remove('over');
+    slot.ondrop = (e) => {
+      e.preventDefault(); e.stopPropagation(); slot.classList.remove('over');
+      const files = [...e.dataTransfer.files].map((f) => fileEntry(f, f.name));
+      if (files.length) addRefFiles(scope, files, redraw);
+    };
+    return slot;
+  }
+  // The board under the detail view keeps its reference counts without being redrawn on top of it.
+  function renderBoardQuiet() { if (!openAsset) renderBoard(); }
   let refScope = null; // the open reference panel takes dropped files instead of the import
   function refDialog(scope) {
     const title = scope.type === 'project' ? t('refsProject') : t('refsOf', scope.type === 'cat' ? tx(scope.c.name) : nm(scope.a));
     openDialog(title); reopen = () => refDialog(scope); refScope = scope;
-    dlg.addEventListener('close', () => { if (refScope === scope) refScope = null; if (refAudio) { refAudio.pause(); refAudio = null; } }, { once: true });
-    dlg.append(el('p', 'note', t('refsHelp')[scope.type]));
-    const own = refList(scope);
-    if (!own.length) dlg.append(el('p', 'note', t('refEmpty')));
-    own.forEach((r) => dlg.append(refRow(r, scope)));
-    const add = el('div', 'refAdd'), pick = el('input'); pick.type = 'file'; pick.multiple = true; pick.accept = refKit.ACCEPT; pick.hidden = true; pick.id = 'refFile';
-    pick.onchange = () => { const files = [...pick.files].map((f) => fileEntry(f, f.name)); pick.value = ''; addRefFiles(scope, files); };
-    const fileBtn = el('button', '', t('refAddFile')); fileBtn.id = 'refAddFile'; fileBtn.onclick = () => pick.click();
-    const link = el('input'); link.type = 'url'; link.placeholder = 'https://'; link.id = 'refLink'; link.setAttribute('aria-label', t('refAddLink'));
-    const linkBtn = el('button', '', t('refAddLink'));
-    linkBtn.onclick = () => { const url = link.value.trim(); if (!/^https?:\/\/\S+$/i.test(url)) { toast(t('refBadLink'), 3000); return; } addRef(scope, { id: newRefId(), kind: 'link', name: url.replace(/^https?:\/\/(www\.)?/i, '').slice(0, 60), url, note: '', at: Date.now() }); renderBoard(); refDialog(scope); };
-    const memo = el('textarea'); memo.id = 'refMemo'; memo.placeholder = t('refNotePh'); memo.setAttribute('aria-label', t('refAddNote'));
-    const memoBtn = el('button', '', t('refAddNote'));
-    memoBtn.onclick = () => { const text = memo.value.trim(); if (!text) return; addRef(scope, { id: newRefId(), kind: 'text', name: text.split('\n')[0].slice(0, 40), note: text, url: '', at: Date.now() }); renderBoard(); refDialog(scope); };
-    const r1 = el('div', 'dlgRow'), r2 = el('div', 'dlgRow'), r3 = el('div', 'dlgRow');
-    for (const r of [r1, r2, r3]) r.style.justifyContent = 'flex-start';
-    r1.append(fileBtn, el('span', 'note', t('refFileKinds')), pick); r2.append(link, linkBtn); r3.append(memo, memoBtn);
-    add.append(el('h3', '', t('refAdd')), r1, r2, r3);
-    dlg.append(add);
-    const inherited = scope.type === 'asset' ? scopeRefs(scope.a) : scope.type === 'cat' ? [...tagged(projectRefs, 'project'), ...chainOf(scope.c).slice(0, -1).flatMap((c) => tagged(c.refs, 'cat:' + c.id))] : [];
-    if (inherited.length) { dlg.append(el('h3', '', t('refInherited'))); inherited.forEach((r) => dlg.append(refRow(r, null))); }
+    dlg.addEventListener('close', () => { if (refScope === scope) refScope = null; if (refAudio) { refAudio.pause(); refAudio = null; } renderBoardQuiet(); }, { once: true });
+    dlg.append(el('p', 'note', t('refsHelp')[scope.type]), refSlot(scope));
     if (!dlg.open) dlg.showModal();
   }
   const refCount = (scope) => refList(scope).length;
@@ -1789,8 +1904,8 @@ ${p.form}`,
     pick.onchange = () => { a.cat = pick.value; a.guessed = false; delete a.autoCat; pick.classList.remove('unsure'); a.music = kindOf(a.cat) === 'music'; done?.(); };
     return pick;
   }
-  function licenseFields(a) {
-    const field = (key, label) => { const i = el('input', 'licIn'); i.value = a[key] || ''; i.placeholder = label; i.setAttribute('aria-label', label); i.oninput = () => { a[key] = i.value.trim(); autosave(); }; return i; };
+  function licenseFields(a, after) {
+    const field = (key, label) => { const i = el('input', 'licIn'); i.value = a[key] || ''; i.placeholder = label; i.setAttribute('aria-label', label); i.oninput = () => { a[key] = i.value.trim(); autosave(); after?.(); }; return i; };
     return [field('license', t('licenseLater')), field('holder', t('holderLater'))];
   }
   function importDialog(just = []) {
@@ -1925,16 +2040,25 @@ ${p.form}`,
   }
   let dragDepth = 0;
   const carriesFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
-  addEventListener('dragenter', (e) => { if (!carriesFiles(e)) return; dragDepth++; $('dropZone').hidden = false; });
-  addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) $('dropZone').hidden = true; });
-  addEventListener('dragover', (e) => { if (carriesFiles(e)) e.preventDefault(); });
+  // Over the conversation of an open sound, dropped files become its references; anywhere else they are imported.
+  const chatUnder = (e) => { const side = openAsset && document.querySelector('.dSide'), r = side?.getBoundingClientRect(); return r && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom ? side : null; };
+  const dragEnd = () => { dragDepth = 0; $('dropZone').hidden = true; document.querySelector('.dSide.over')?.classList.remove('over'); };
+  addEventListener('dragenter', (e) => { if (!carriesFiles(e)) return; dragDepth++; $('dropZone').hidden = !!chatUnder(e); });
+  addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) dragEnd(); });
+  addEventListener('dragover', (e) => {
+    if (!carriesFiles(e)) return;
+    e.preventDefault();
+    const side = chatUnder(e); document.querySelector('.dSide')?.classList.toggle('over', !!side); $('dropZone').hidden = !!side;
+  });
   addEventListener('drop', async (e) => {
     if (!carriesFiles(e)) return;
-    e.preventDefault(); dragDepth = 0; $('dropZone').hidden = true;
+    const toChat = !!chatUnder(e);
+    e.preventDefault(); dragEnd();
     const entries = [...e.dataTransfer.items].map((i) => i.webkitGetAsEntry?.()).filter(Boolean), out = [];
     if (entries.length) for (const x of entries) await walkEntry(x, out);
     else out.push(...[...e.dataTransfer.files].map((f) => fileEntry(f, f.name)));
     if (refScope && dlg.open) { addRefFiles(refScope, out); return; }
+    if (toChat && openAsset) { addRefFiles({ type: 'asset', a: openAsset }, out, redrawChat); return; }
     if (dlg.open) dlg.close();
     intake(out);
   });
@@ -2267,9 +2391,8 @@ ${p.form}`,
   function setLang(next) {
     if (!LANGS.includes(next)) return;
     lang = next; applyStatic();
-    const typed = document.querySelector('.detailDock input')?.value;
     $('draftSlot').replaceChildren(draftPicker());
-    if (openAsset) { renderDetail(); const input = document.querySelector('.detailDock input'); if (input && typed) input.value = typed; } else renderBoard();
+    if (openAsset) renderDetail(); else renderBoard(); // the detail keeps a typed request across the redraw
     markPlaying();
     if (dlg.open && reopen) { const again = reopen; dlg.close(); again(); }
   }
@@ -2277,10 +2400,12 @@ ${p.form}`,
 
   /* ---------- start ---------- */
   applyStatic();
-  setIcon($('backBtn'), 'music'); setIcon($('send'), 'send'); setIcon($('playAll'), 'play'); setIcon($('exportBtn'), 'download'); setIcon($('menuBtn'), 'menu');
+  setIcon($('backBtn'), 'music'); setIcon($('send'), 'send'); setIcon($('playAll'), 'play'); setIcon($('exportBtn'), 'download'); setIcon($('menuBtn'), 'menu'); setIcon($('boardBack'), 'back'); setIcon($('prevAsset'), 'prev'); setIcon($('nextAsset'), 'next');
   document.querySelectorAll('[data-icon]').forEach((s) => setIcon(s, s.dataset.icon));
   $('importBtn').querySelector('.importIco').innerHTML = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS.upload}</svg>`; $('importBtn').onclick = () => importDialog();
   $('exportBtn').onclick = exportDialog;
+  $('boardBack').onclick = $('gameTitle').onclick = () => { if (openAsset) closeDetail(); };
+  $('prevAsset').onclick = () => step(-1); $('nextAsset').onclick = () => step(1);
   addEventListener('resize', () => { if (openAsset) renderDetail(); else assets.filter((a) => a.versions.length).forEach(drawTile); });
   $('draftSlot').append(draftPicker());
   (async () => {

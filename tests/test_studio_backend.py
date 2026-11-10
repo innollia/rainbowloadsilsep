@@ -691,3 +691,15 @@ def test_default_model_runs_only_on_us_endpoints():
     body = sb.OpenRouter("k", sb.DEFAULT_CHOICE).request_body("p", {"type": "object", "properties": {}}, "reply")
     assert body["provider"]["only"] and all(e.endswith("/us") for e in body["provider"]["only"])
     assert body["provider"]["require_parameters"] is True
+
+
+def test_song_references_reach_the_prompt_capped_and_checked():
+    refs = [{"kind": "link", "name": "rain", "url": "https://example.com/rain", "note": "this calm"},
+            {"kind": "link", "url": "javascript:alert(1)"}, {"kind": "exe", "name": "x"},
+            {"kind": "audio", "name": "loop.wav", "summary": "8 s · 92 BPM", "note": "x" * 900}] + [{"kind": "text", "note": "n"}] * 20
+    req = sb.validate_request({"text": "bass", "tracks": [{"id": "d", "name": "d", "role": "drums", "code": 's("bd")'}],
+                               "bpm": 120, "references": refs})
+    assert len(req["references"]) == sb.MAX_REFERENCES and req["references"][0]["url"] == "https://example.com/rain"
+    assert all(r["kind"] in ("link", "audio", "text") for r in req["references"]) and len(req["references"][1]["note"]) == 600
+    prompt = sb.edit_prompt({"bpm": 120, "tracks": []}, "more", "", None, references=req["references"])
+    assert "References the user attached" in prompt and "this calm" in prompt

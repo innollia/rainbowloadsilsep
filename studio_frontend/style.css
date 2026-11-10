@@ -102,11 +102,30 @@ input[type=range] { accent-color:var(--text); height:32px; }
 #autoLabel [data-icon] .ico { width:16px; height:16px; }
 #autoRounds { width:96px; accent-color:var(--text); cursor:pointer; }
 #autoHint { color:var(--text3); font-size:.75rem; min-width:0; }
+/* The song's references: attachment chips above the request, added with the clip in the tools or by dropping files. */
+#chat.over { box-shadow:inset 0 0 0 2px var(--focus); }
+#refBox { padding:0 16px; }
+#refChips { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding-top:8px; }
+.refChip { display:inline-flex; align-items:center; gap:6px; min-height:32px; max-width:220px; padding:0 10px; background:var(--raised); border:1px solid transparent; border-radius:11px; font-size:16px; line-height:24px; font-weight:600; }
+.refChip .kind { display:inline-grid; flex:none; color:var(--text3); }
+.refChip .kind .ico { width:16px; height:16px; }
+.refChip .name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.refChip.open { border-color:var(--text); }
+.refCard { flex-basis:100%; display:flex; flex-direction:column; gap:6px; margin-top:4px; padding-top:8px; border-top:1px solid var(--divider); }
+.refCard a { color:var(--focus); font-size:16px; line-height:24px; overflow-wrap:anywhere; padding-right:56px; }
+.refFacts { color:var(--text2); font-size:16px; line-height:24px; padding-right:56px; }
+.refTools { display:flex; justify-content:flex-end; margin-bottom:-48px; }
+.refNote, #refMore input, #refMore textarea { width:100%; resize:vertical; background:var(--raised); color:var(--text); border:1px solid var(--divider); border-radius:11px; padding:8px 10px; font-size:16px; line-height:24px; }
+#refMore:not(:empty) { padding-top:8px; }
+#refAddWrap { position:relative; display:inline-flex; }
+#refMenu { position:absolute; left:0; bottom:calc(100% + 4px); z-index:5; display:flex; flex-direction:column; padding:4px; background:var(--raised); border:1px solid var(--divider); border-radius:11px; box-shadow:0 8px 24px rgba(0,0,0,.4); }
+#refMenu button { min-height:44px; padding:0 14px; background:none; text-align:left; white-space:nowrap; font-size:16px; }
+#refMenu button:hover { background:var(--surface); }
 #askForm { display:flex; gap:8px; padding:8px 16px 12px; }
 #ask { flex:1; resize:none; background:var(--raised); border:0; border-radius:11px; padding:10px 12px; min-width:0; }
 
 footer { display:flex; align-items:center; gap:20px; flex-wrap:wrap; padding:12px 24px; background:var(--surface); border-top:1px solid var(--divider); min-height:96px; }
-#play { width:56px; height:56px; border-radius:50%; corner-shape:round; padding:0; background:var(--text); color:#111; }
+#play { width:56px; height:56px; border-radius:50%; padding:0; background:var(--text); color:#111; }
 #play:hover { background:#fff; }
 .bpm { display:flex; align-items:center; gap:2px; }
 #bpm { width:68px; background:var(--raised); border:0; border-radius:11px; height:44px; padding:0 8px; text-align:center; -moz-appearance:textfield; appearance:textfield; }

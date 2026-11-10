@@ -831,7 +831,7 @@ class AgyCli:
         # The prompt goes in on stdin: a command line is capped near 32000 characters on Windows.
         system = SYSTEM if self.system is None else self.system
         text = system + "\nDo not use any tools. Reply only with the JSON object.\n\n" + prompt
-        with tempfile.TemporaryDirectory(prefix="ddalkkak-agy-") as folder:
+        with tempfile.TemporaryDirectory(prefix="ddalkkak-agy-", ignore_cleanup_errors=True) as folder:
             schema = os.path.join(folder, "schema.json")
             with open(schema, "w", encoding="utf-8") as stream:
                 json.dump(plain_schema(schema_def), stream)
@@ -975,6 +975,28 @@ def rounds_from(payload: dict) -> int:
     return max(0, min(rounds, MAX_ROUNDS))
 
 
+MAX_REFERENCES = 8
+
+
+def clean_references(refs) -> list[dict]:
+    """The song's references (a file's measured facts, a link, a note), at most MAX_REFERENCES, every field capped."""
+    out = []
+    for r in refs if isinstance(refs, list) else []:
+        if not isinstance(r, dict) or r.get("kind") not in ("audio", "midi", "score", "link", "text"):
+            continue
+        item = {"kind": r["kind"]}
+        for key, cap in (("name", 120), ("url", 300), ("note", 600), ("summary", 400)):
+            value = r.get(key)
+            if isinstance(value, str) and value.strip():
+                item[key] = value.strip()[:cap]
+        if r["kind"] == "link" and not str(item.get("url", "")).startswith(("http://", "https://")):
+            continue
+        out.append(item)
+        if len(out) >= MAX_REFERENCES:
+            break
+    return out
+
+
 def validate_request(payload: dict) -> dict:
     lang = lang_of(payload.get("lang")) if isinstance(payload, dict) else DEFAULT_LANG
     if not isinstance(payload, dict):
@@ -994,6 +1016,7 @@ def validate_request(payload: dict) -> dict:
         "model": model if model in {m["id"] for m in model_choices()} else "",
         "effort": effort if effort in EFFORTS else "",
         "history": clean_history(payload.get("history")),
+        "references": clean_references(payload.get("references")),
         # Which song asked. Echoed back in the snapshot so the result lands on that song even after a switch.
         "project_id": project if isinstance(project, str) and len(project) <= MAX_PROJECT_ID else "",
     }
@@ -1072,8 +1095,12 @@ def decode_capture(payload: dict, lang: str = DEFAULT_LANG) -> tuple[bytes, dict
 
 
 def edit_prompt(state: dict, instruction: str, error: str, target: str | None, history=(), goal="", tried=(),
-                lang: str = "") -> str:
+                lang: str = "", references=()) -> str:
     parts = ["Current song:", json.dumps({"bpm": state["bpm"], "tracks": state["tracks"]}, ensure_ascii=False)]
+    if references:
+        # The user's references: the feel to aim for. A file is described by what was measured from it.
+        parts += ["References the user attached to this song (aim for their feel; a note says what to take):",
+                  *(json.dumps(r, ensure_ascii=False) for r in references)]
     if history:
         parts += ["Recent conversation:", *(f"{m['role']}: {m['text']}" for m in history)]
     if goal:
@@ -1543,7 +1570,8 @@ class Jobs:
             self._spend(job)
             p.edits += 1
             prompt = edit_prompt(p.state, p.instruction, p.error, req["target"], req.get("history", ()),
-                                 goal=req["text"] if p.tried else "", tried=p.tried, lang=job.lang)
+                                 goal=req["text"] if p.tried else "", tried=p.tried, lang=job.lang,
+                                 references=req.get("references", ()))
             kind = ("fix_after_listen" if p.tried else "new_song" if not any(t["code"].strip() for t in p.state["tracks"])
                     else "track_edit" if req["target"] else "edit")
             prompt = with_skills(prompt, p.instruction, kind,

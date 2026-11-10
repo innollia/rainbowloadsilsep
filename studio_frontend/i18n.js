@@ -40,6 +40,10 @@
       viz_aria: 'Live output visualizer', tracks: 'Tracks', score: 'Score', code: 'Code', code_title: 'Code (Ctrl+E)', run: 'Run', run_title: 'Run (Ctrl+Enter)',
       reload_latest: 'Load latest song', import: 'Import', export_code: 'Export code', chat_width: 'Chat width', stop_ai: 'Stop', auto: 'Auto-improve',
       auto_max: 'Max auto-improve rounds', ai_model: 'AI model', effort: 'Reasoning level', ask_aria: 'Talk to the AI', send: 'Send',
+      ref_add: 'Add reference', ref_add_file: 'Add files', ref_add_link: 'Add link', ref_add_note: 'Add note', ref_remove: 'Remove reference',
+      ref_take_ph: 'What to take from this reference', ref_note_ph: 'What it should sound like, what to avoid…', ref_full: 'Up to {n} references.',
+      ref_bad_type: 'not a sound, MIDI or score file', ref_too_big: 'file too large', ref_bad_link: 'Enter a link starting with http:// or https://',
+      ref_kind_audio: 'Sound', ref_kind_midi: 'MIDI', ref_kind_score: 'Score', ref_kind_text: 'Note', ref_kind_link: 'Link',
       bpm_down: 'Lower BPM by 10', bpm_down_t: 'Down 10', bpm_up: 'Raise BPM by 10', bpm_up_t: 'Up 10', volume: 'Volume',
       tip_list: [
         ['Click the album cover', 'It changes to a new picture.'],
@@ -107,6 +111,10 @@
       viz_aria: '실제 출력 시각화', tracks: '트랙', score: '악보', code: '코드', code_title: '코드 (Ctrl+E)', run: '실행', run_title: '실행 (Ctrl+Enter)',
       reload_latest: '최신 곡 불러오기', import: '불러오기', export_code: '코드 내보내기', chat_width: '채팅 너비', stop_ai: '중단', auto: '자동 개선',
       auto_max: '자동 개선 최대 횟수', ai_model: 'AI 모델', effort: '추론 수준', ask_aria: 'AI에게 말하기', send: '보내기',
+      ref_add: '레퍼런스 추가', ref_add_file: '파일 추가', ref_add_link: '링크 추가', ref_add_note: '메모 추가', ref_remove: '레퍼런스 삭제',
+      ref_take_ph: '이 레퍼런스에서 가져올 점', ref_note_ph: '이런 느낌으로, 이건 피해서…', ref_full: '레퍼런스는 {n}개까지만 된다고, 욕심쟁이야~',
+      ref_bad_type: '소리나 MIDI, 악보 파일이 아니잖아, 바보야!', ref_too_big: '파일이 너무 크잖아, 무식하긴~', ref_bad_link: 'http://나 https://로 시작하는 링크를 넣으란 말이야, 허접~',
+      ref_kind_audio: '소리', ref_kind_midi: 'MIDI', ref_kind_score: '악보', ref_kind_text: '메모', ref_kind_link: '링크',
       bpm_down: 'BPM 10 내리기', bpm_down_t: '10 내리기', bpm_up: 'BPM 10 올리기', bpm_up_t: '10 올리기', volume: '음량',
       tip_list: [
         ['앨범 커버 누르기', '새 그림으로 바뀌어~♡'],

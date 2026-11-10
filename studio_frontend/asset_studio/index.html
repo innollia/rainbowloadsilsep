@@ -5,14 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Game sound assets</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="style.css?v=0067a651d1">
+<link rel="stylesheet" href="style.css?v=61c8747526">
 </head>
 <body>
 <div id="app">
   <header>
+    <button id="boardBack" class="iconBtn ghost" aria-label="Back to the board" title="Back to the board" data-i18n-aria="toBoard" data-i18n-title="toBoard"></button>
     <span id="gameTitle"></span>
-    <div id="progress" role="group" aria-label="Progress"></div>
+    <div id="progress" role="group" aria-label="Progress"><div class="bar"></div></div>
+    <span id="progressCount"></span>
     <span class="spacer"></span>
+    <span id="detailNav"><button id="prevAsset" class="iconBtn ghost" aria-label="Previous" title="Previous" data-i18n-aria="prevAsset" data-i18n-title="prevAsset"></button><button id="nextAsset" class="iconBtn ghost" aria-label="Next" title="Next" data-i18n-aria="nextAsset" data-i18n-title="nextAsset"></button></span>
     <button id="importBtn" class="importBtn"><span class="importIco"></span><span data-i18n="importShort">Import</span></button>
     <button id="exportBtn" class="iconBtn" aria-label="Export" title="Export" data-i18n-aria="export" data-i18n-title="export"></button>
     <div class="menuWrap">
@@ -65,6 +68,6 @@
 <script src="importer.js?v=11a1933225"></script>
 <script src="godot.js?v=c4e46569c2"></script>
 <script src="refs.js?v=d6b838fe2e"></script>
-<script src="app.js?v=66064b8472"></script>
+<script src="app.js?v=a42be8b376"></script>
 </body>
 </html>

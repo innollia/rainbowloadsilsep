@@ -66,12 +66,14 @@ header { display:flex; align-items:center; gap:8px; padding:12px; border-bottom:
 header button { min-height:48px; }
 header .iconBtn { width:48px; position:relative; }
 #gameTitle { font-size:.89rem; color:var(--text2); white-space:nowrap; min-width:0; overflow:hidden; text-overflow:ellipsis; }
-#progress { display:flex; gap:2px; flex:none; width:clamp(72px, 14vw, 180px); height:44px; margin-left:14px; }
-#progress .seg { flex-basis:0; min-width:4px; min-height:0; height:100%; padding:18px 0; background-clip:content-box; border:0; border-radius:0; cursor:pointer; }
-#progress .seg:first-child { border-radius:4px 0 0 4px; } #progress .seg:last-child { border-radius:0 4px 4px 0; }
-#progress .seg[aria-pressed="true"] { padding:15px 0; }
+#progress { display:flex; align-items:center; flex:none; width:160px; height:44px; margin-left:14px; cursor:pointer; }
+#progress .bar { display:flex; gap:2px; width:100%; height:8px; border-radius:999px; overflow:hidden; background:var(--raised); }
+#progress .seg { flex:none; min-width:4px; min-height:0; height:100%; padding:0; border:0; border-radius:0; cursor:pointer; }
+#progress .seg[aria-pressed="true"] { box-shadow:inset 0 0 0 1px var(--text); }
+#progressCount { display:inline-flex; align-items:center; gap:4px; margin-left:10px; font-size:.8rem; color:var(--text3); font-variant-numeric:tabular-nums; white-space:nowrap; }
+#progressCount .ico { width:14px; height:14px; color:var(--ok); }
 #progress .s-approved { background-color:var(--ok); } #progress .s-draft { background-color:var(--warn); } #progress .s-review, #progress .s-working { background-color:var(--work); }
-#progress .s-flagged { background-color:var(--err); } #progress .s-pending { background-color:var(--text3); opacity:.45; }
+#progress .s-flagged { background-color:var(--err); } #progress .s-pending { background:none; }
 
 #boardView { display:flex; min-height:0; }
 #side { width:190px; flex:none; padding:14px 10px; border-right:1px solid var(--divider); overflow:auto; display:flex; flex-direction:column; gap:2px; }
@@ -132,7 +134,7 @@ header .iconBtn { width:48px; position:relative; }
 .tile .ab button.drop { color:var(--err); }
 
 #dock { display:flex; align-items:center; gap:12px; padding:10px 16px; background:var(--surface); border-top:1px solid var(--divider); min-height:68px; }
-#playAll { background:var(--text); color:#111; border-radius:50%; corner-shape:round; }
+#playAll { background:var(--text); color:#111; border-radius:50%; }
 #playAll:hover { background:#fff; }
 #nowPlaying { color:var(--text2); font-size:.85rem; min-width:110px; max-width:200px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 #review { display:flex; align-items:center; gap:6px; white-space:nowrap; }
@@ -144,38 +146,79 @@ header .iconBtn { width:48px; position:relative; }
 #lasso { position:fixed; border:1px solid var(--text); background:rgba(245,245,245,.08); pointer-events:none; z-index:5; }
 #toast { position:fixed; left:50%; bottom:88px; transform:translateX(-50%); background:var(--text); color:#111; padding:8px 16px; border-radius:11px; font-weight:600; z-index:10; }
 
-/* Detail */
-#detailView { min-height:0; display:grid; grid-template-columns:minmax(0,1fr) 340px; }
-.dMain { min-width:0; overflow:auto; padding:14px 20px 20px; }
-.dHead { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
-.dHead h1 { font-size:1.4rem; margin:0; line-height:1.3; }
-.dHead .file { color:var(--text3); font-size:.8rem; font-family:ui-monospace,Consolas,monospace; }
-.dFacts { display:flex; flex-wrap:wrap; gap:6px 18px; color:var(--text2); font-size:.85rem; margin:0 0 10px; font-variant-numeric:tabular-nums; }
+/* Detail, in the music screen's sizes: body 18/29, labels 18/26, title 32/42, secondary 16/24, code 16/26.
+   The header turns into its navigation: back and the game's name on the left, previous/next on the right. */
+body.inDetail #progress, body.inDetail #progressCount, body.inDetail #importBtn, body.inDetail #exportBtn { display:none; }
+body:not(.inDetail) #boardBack, body:not(.inDetail) #detailNav { display:none; }
+#detailNav { display:inline-flex; margin-right:16px; }
+body.inDetail #gameTitle { font-size:16px; color:var(--text3); cursor:pointer; }
+body.inDetail #gameTitle:hover { color:var(--text); }
+#detailView { min-height:0; display:grid; grid-template-columns:minmax(0,1fr) 400px; font-size:18px; line-height:29px; }
+#detailView button { min-height:48px; }
+#detailView .iconBtn { width:48px; }
+#detailView .ico { width:22px; height:22px; }
+.dMain { min-width:0; overflow:auto; padding:20px 32px 32px; }
+.dHead { display:flex; align-items:center; gap:16px; margin-bottom:16px; }
+#detailView .dPlay { width:56px; height:56px; flex:none; border-radius:50%; background:var(--text); color:#111; }
+#detailView .dPlay:hover { background:#fff; }
+.dTitle { min-width:0; flex:1; }
+.dName { width:100%; font-family:inherit; font-size:32px; line-height:42px; font-weight:700; background:none; border:0; border-radius:11px; padding:0 4px; margin-left:-4px; color:var(--text); }
+.dName:hover, .dName:focus { background:var(--raised); }
+.dFacts { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.dFacts .catPick { height:32px; font-size:16px; line-height:24px; color:var(--text3); background:none; padding:0 4px; margin-left:-4px; cursor:pointer; }
+.dFacts .catPick:hover, .dFacts .catPick:focus { background:var(--raised); color:var(--text); }
+#detailView .dFacts button { min-height:32px; padding:0 10px; font-size:16px; color:var(--text3); }
+#detailView .dFacts button:hover { color:var(--text); }
+.dApprove { display:inline-flex; align-items:center; gap:8px; flex:none; padding:0 20px; font-size:18px; line-height:26px; }
+.dApprove.done { color:var(--ok); }
 .dWave { position:relative; background:var(--surface); border-radius:14px; overflow:hidden; cursor:pointer; }
-.dWave canvas { width:100%; height:150px; display:block; }
-.dSpec { width:100%; height:64px; display:block; margin-top:8px; background:var(--surface); border-radius:14px; }
-.dTrackHead { display:flex; align-items:center; justify-content:space-between; margin:16px 0 4px; }
-.dTrackHead h2 { font-size:.95rem; margin:0; font-weight:600; }
-.stem { display:grid; grid-template-columns:120px minmax(60px,1fr) 44px 44px 100px; gap:8px; align-items:center; padding:6px 0; border-top:1px solid var(--divider); }
-.stem .sName { display:flex; align-items:center; gap:8px; font-size:.9rem; font-weight:500; overflow-wrap:anywhere; }
+.dWave canvas { width:100%; height:120px; display:block; }
+.dTime { position:absolute; right:12px; bottom:6px; padding:0 6px; background:rgba(25,25,25,.85); border-radius:8px; font-size:16px; line-height:24px; color:var(--text3); font-variant-numeric:tabular-nums; pointer-events:none; }
+.dMain.coding .dWave canvas { height:48px; }
+.dMain.coding .dTime { bottom:12px; }
+.dMain > .tabs { padding:0; margin-top:16px; gap:4px; }
+#detailView .dMain > .tabs button { padding:0 16px; font-size:18px; line-height:26px; }
+.dTab { padding:16px 0 0; display:flex; flex-direction:column; gap:8px; }
+.dTab .lineItem { font-size:18px; line-height:29px; gap:12px; padding:8px 0; }
+.codeView { margin:0; padding:16px 20px; background:#111; border-radius:14px; font:400 16px/26px ui-monospace,Consolas,monospace; white-space:pre; overflow:auto; counter-reset:ln; }
+.codeView .ln { display:block; }
+.codeView .ln::before { counter-increment:ln; content:counter(ln); display:inline-block; width:3ch; margin-right:20px; text-align:right; color:var(--text3); user-select:none; }
+.promptFold { background:var(--surface); border-radius:14px; }
+.promptFold summary { display:flex; align-items:center; gap:12px; min-height:48px; padding:0 16px; cursor:pointer; font-size:16px; line-height:24px; color:var(--text3); list-style:none; }
+.promptFold summary::-webkit-details-marker { display:none; }
+.promptFold summary::after { content:'▾'; margin-left:auto; flex:none; }
+.promptFold[open] summary::after { content:'▴'; }
+.promptFold summary b { flex:none; color:var(--text2); font-weight:600; }
+.promptFold summary span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.promptFold[open] summary span { visibility:hidden; }
+.promptFold pre.code { margin:0 16px 16px; font-size:16px; line-height:26px; }
+.stem { display:grid; grid-template-columns:160px minmax(60px,1fr) 48px 48px 110px; gap:12px; align-items:center; min-height:64px; padding:8px 0; border-top:1px solid var(--divider); }
+.stem .sName { display:flex; align-items:center; gap:8px; font-size:18px; line-height:26px; font-weight:600; overflow-wrap:anywhere; }
 .stem .sName i { width:10px; height:10px; border-radius:50%; corner-shape:round; flex:none; background:var(--c); }
-.stem canvas { width:100%; height:44px; display:block; background:rgba(255,255,255,.03); border-radius:8px; }
+.stem canvas { width:100%; height:48px; display:block; background:rgba(255,255,255,.03); border-radius:11px; }
 .stem button[aria-pressed="true"].mute { color:var(--err); }
 .stem button[aria-pressed="true"].solo { background:var(--text); color:#111; }
 .stem input[type=range] { width:100%; accent-color:var(--text); }
 
+/* The conversation: log, reference chips, tools (clip, drafts), request. */
 .dSide { background:var(--surface); display:flex; flex-direction:column; min-height:0; border-left:1px solid var(--divider); }
+.dSide.over { box-shadow:inset 0 0 0 2px var(--focus); }
 .tabs { display:flex; gap:2px; padding:6px 8px 0; border-bottom:1px solid var(--divider); flex:none; }
 .tabs button { background:none; border-radius:11px 11px 0 0; color:var(--text3); padding:0 10px; font-size:.88rem; }
 .tabs button[aria-selected="true"] { color:var(--text); box-shadow:inset 0 -2px 0 var(--text); }
-.tabBody { flex:1; min-height:0; overflow:auto; padding:12px; display:flex; flex-direction:column; gap:8px; }
-.msg { padding:8px 10px; border-radius:11px; background:var(--raised); font-size:.9rem; overflow-wrap:anywhere; }
+.tabBody { flex:1; min-height:0; overflow:auto; padding:16px 16px 8px; display:flex; flex-direction:column; gap:8px; }
+.msg { padding:8px 12px; border-radius:11px; background:var(--raised); overflow-wrap:anywhere; }
 .msg.me { align-self:flex-end; max-width:90%; }
 .msg.ai { background:none; color:var(--text2); padding-left:0; }
-pre.code, .dHead .file { word-break:normal; }
-pre.code { margin:0; padding:10px; border-radius:11px; background:#111; font:400 .8rem/1.6 ui-monospace,Consolas,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
-.detailDock { display:flex; gap:8px; padding:8px 12px; border-top:1px solid var(--divider); flex:none; }
-.detailDock input { flex:1; min-width:0; height:44px; background:var(--raised); border:0; border-radius:11px; padding:0 10px; }
+.dWorking { padding:6px 16px; border-top:1px solid var(--divider); color:var(--work); font-size:16px; line-height:24px; }
+.dTools { position:relative; display:flex; align-items:center; gap:8px; padding:8px 16px 0; }
+.draftSeg { display:inline-flex; align-items:center; gap:4px; }
+.draftSeg .segLabel { margin-right:4px; font-size:16px; line-height:24px; color:var(--text3); }
+#detailView .draftSeg button { width:40px; height:36px; min-height:36px; padding:0; font-size:16px; color:var(--text2); }
+#detailView .draftSeg button[aria-checked="true"] { background:var(--text); color:#111; }
+.detailDock { display:flex; align-items:flex-end; gap:8px; padding:8px 16px 12px; flex:none; }
+.detailDock textarea { flex:1; min-width:0; resize:none; background:var(--raised); border:0; border-radius:11px; padding:10px 12px; font-size:18px; line-height:26px; }
+pre.code { margin:0; padding:10px; border-radius:11px; background:#111; font:400 .8rem/1.6 ui-monospace,Consolas,monospace; white-space:pre-wrap; overflow-wrap:anywhere; word-break:normal; }
 .draftPick { display:inline-flex; align-items:center; gap:6px; flex:none; color:var(--text2); font-size:.82rem; }
 .draftPick select { height:36px; background:var(--raised); color:var(--text); border:0; border-radius:10px; padding:0 6px; }
 #draftSlot { flex:none; }
@@ -248,10 +291,7 @@ dialog textarea { width:100%; min-height:190px; background:var(--raised); border
 .catPick.unsure { box-shadow:inset 0 0 0 2px var(--warn); }
 .tile .origin { position:absolute; left:8px; top:6px; font-size:.68rem; line-height:18px; padding:0 7px; border-radius:10px; background:rgba(0,0,0,.6); color:var(--text2); pointer-events:none; }
 .originTag { color:var(--warn); }
-.dName { width:100%; font-family:inherit; font-size:1.4rem; font-weight:600; line-height:1.3; background:none; border:0; border-radius:8px; padding:0 4px; margin-left:-4px; color:var(--text); }
-.dName:hover, .dName:focus { background:var(--raised); }
 .dFacts button { min-height:32px; padding:0 10px; font-size:.82rem; }
-.tabHead { font-size:.82rem; color:var(--text3); margin:0; font-weight:600; }
 .licIn { width:100%; }
 @media (max-width:900px) { .importBtn span[data-i18n] { display:none; } .justRow .licIn { width:110px; } }
 #tileSub { position:fixed; z-index:31; min-width:180px; max-height:min(420px, calc(100vh - 16px)); overflow:auto; display:flex; flex-direction:column; padding:6px; background:var(--surface); border:1px solid var(--divider); border-radius:14px; box-shadow:0 12px 32px rgba(0,0,0,.45); }
@@ -293,3 +333,42 @@ dialog textarea { width:100%; min-height:190px; background:var(--raised); border
   .group h2 { flex-wrap:wrap; }
 }
 @media (max-width:420px) { .tile.wide { grid-column:auto; } }
+
+/* References: a slot of chips in the project/category dialog; in a sound's conversation, a bare row of
+   attachment chips above the request, added with the clip. */
+.refSlot { margin-top:12px; padding:6px 8px; border:1px dashed var(--divider); border-radius:14px; }
+.refSlot.over { border-color:var(--focus); background:rgba(255,255,255,.03); }
+.refSlot.bare { margin:0; padding:0 16px; border:0; border-radius:0; }
+.refSlot.bare .refChips { padding-top:8px; }
+.refChips { display:flex; flex-wrap:wrap; align-items:center; gap:6px; position:relative; }
+.refLabel { display:inline-flex; align-items:center; gap:6px; color:var(--text3); font-size:.82rem; margin-right:4px; }
+.refLabel .ico { width:16px; height:16px; display:inline-block; }
+.refChip { display:inline-flex; align-items:center; gap:6px; min-height:32px; max-width:240px; padding:0 10px; background:var(--raised); border:1px solid transparent; border-radius:11px; font-size:.82rem; }
+#detailView .refChip { min-height:32px; font-size:16px; line-height:24px; }
+.refChip .kind { display:inline-grid; flex:none; color:var(--text3); }
+#detailView .refChip .kind .ico, .refChip .kind .ico { width:16px; height:16px; }
+.refChip .name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.refChip.inherited { background:none; border-color:var(--divider); color:var(--text3); }
+.refChip.open { border-color:var(--text); }
+.refPlus { width:32px; min-height:32px; }
+.refHint { color:var(--text3); font-size:.8rem; }
+.refAddMenu { position:absolute; z-index:5; top:100%; left:0; display:flex; flex-direction:column; padding:4px; background:var(--raised); border:1px solid var(--divider); border-radius:11px; box-shadow:0 8px 24px rgba(0,0,0,.4); }
+.refAddMenu.up { top:auto; bottom:calc(100% + 4px); }
+.refAddMenu button { background:none; text-align:left; min-height:36px; padding:0 14px; font-size:.85rem; }
+#detailView .refAddMenu button { min-height:44px; font-size:16px; }
+.refAddMenu button:hover { background:var(--surface); }
+.refMore:not(:empty) { margin-top:8px; }
+.refMore input, .refMore textarea, .refCard .refNote { width:100%; background:var(--raised); color:var(--text); border:1px solid var(--divider); border-radius:11px; padding:8px 10px; font:inherit; font-size:.85rem; }
+#detailView .refMore input, #detailView .refMore textarea, #detailView .refCard .refNote { font-size:16px; line-height:24px; }
+.refCard { margin-top:8px; padding:8px 4px 4px; border-top:1px solid var(--divider); display:flex; flex-direction:column; gap:6px; }
+.refCard a { color:var(--focus); font-size:.82rem; overflow-wrap:anywhere; }
+.refTools { display:flex; gap:4px; justify-content:flex-end; margin-bottom:-36px; }
+#detailView .refTools { margin-bottom:-48px; }
+.refCard .refFacts { margin:0; padding-right:90px; }
+#detailView .refCard .refFacts, #detailView .refCard a { font-size:16px; line-height:24px; padding-right:104px; }
+
+/* Export: every licence in one place, copied at once. */
+.creditsHead { display:flex; align-items:center; gap:8px; }
+.creditsHead .grow { flex:1; }
+.creditRow .licIn { width:160px; flex:none; }
+.creditsText { max-height:220px; overflow:auto; margin-top:8px; }
