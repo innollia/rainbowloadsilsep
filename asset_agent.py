@@ -136,7 +136,7 @@ class Agents:
         with self.lock:
             current = self.views.get(owner)
             if current and current.get("status") == "working":
-                raise ValueError("busy" if lang != "ko" else "에이전트가 아직 앞의 말을 처리하고 있어요.")
+                raise ValueError("busy" if lang != "ko" else "에이전트가 아직 아까 한 말 처리하고 있잖아~ 좀 기다려♡")
             self.views[owner] = {"n": n, "status": "working"}
             if self.store:
                 self.store.save("agent", owner, self.views[owner], lang)
@@ -160,7 +160,7 @@ class Agents:
                 view["credits"] = credits
                 if not ok:
                     ref = None
-                    raise ValueError("크레딧이 모자라요." if lang == "ko" else "Out of credits.")
+                    raise ValueError("크레딧이 모자라잖아~ 허접♡" if lang == "ko" else "Out of credits.")
                 if self.store:
                     self.store.charged("agent", owner, email, cost, ref)
             if hasattr(model, "engine"):

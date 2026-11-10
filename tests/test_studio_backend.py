@@ -558,8 +558,8 @@ def test_lang_picks_message_language_and_falls_back_to_english():
     while not jobs.snapshot("o")["candidate"]:
         time.sleep(0.005)
     jobs.cancel("o")
-    assert jobs.snapshot("o")["messages"][-1]["text"] == "중단했어. 마지막 정상 버전을 유지해."
-    assert sb.ModelError("claude_key").text("ko") == "Claude 키를 확인해 줘." and str(sb.ModelError("x")) == "x"
+    assert jobs.snapshot("o")["messages"][-1]["text"] == "일단 멈췄어~ 마지막 정상 버전은 남겨 둘게♡"
+    assert sb.ModelError("claude_key").text("ko") == "Claude 키가 맞는지 똑바로 확인해 봐~!" and str(sb.ModelError("x")) == "x"
 
 
 def test_browser_cannot_charge_someone_else():

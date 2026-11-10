@@ -64,7 +64,7 @@ class RemoteLedger:
 
     def key_of(self, email: str) -> str:
         if not self.pepper:
-            raise LedgerError("크레딧 장부 키 설정이 없어.")
+            raise LedgerError("크레딧 장부 키 설정도 안 돼 있잖아~")
         return email_key(self.pepper, email)
 
     def _post(self, path: str, body: dict, ok=(200,)) -> tuple[int, dict]:
@@ -78,7 +78,7 @@ class RemoteLedger:
                 return exc.code, json.load(exc)
             raise LedgerError(f"크레딧 장부 오류 {exc.code}") from None
         except (OSError, ValueError):
-            raise LedgerError("크레딧 장부에 연결하지 못했어.") from None
+            raise LedgerError("크레딧 장부에 연결 못 했거든~") from None
 
     def account(self, email: str) -> dict:
         return self._post("/api/account", {"email": email})[1]
