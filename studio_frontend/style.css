@@ -93,7 +93,7 @@ input[type=range] { accent-color:var(--text); height:32px; }
 .msg details div { margin-top:4px; color:var(--text2); font-size:.85rem; }
 #progress { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:6px 16px; border-top:1px solid var(--divider); }
 #progressText { flex:1; min-width:0; }
-.waitAnim { flex:none; display:block; }
+.waitAnim { flex:none; display:block; margin-left:-4px; } /* the pads line up with the chat's 16px edge */
 #targetChip { margin:0 16px; color:var(--text2); }
 #askTools { display:flex; align-items:center; flex-wrap:wrap; gap:4px 8px; padding:8px 16px 0; min-width:0; }
 #modelTools { display:inline-flex; gap:6px; margin-left:auto; }

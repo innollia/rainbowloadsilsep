@@ -20,5 +20,5 @@ def test_breathing_survives_rounding():
     }
     console.log(JSON.stringify(seen.size));
     """ % ART.read_text(encoding="utf-8")
-    out = subprocess.run(["node", "-e", script], capture_output=True, text=True, encoding="utf-8", check=True)
+    out = subprocess.run(["node", "-"], input=script, capture_output=True, text=True, encoding="utf-8", check=True)
     assert json.loads(out.stdout) <= 1

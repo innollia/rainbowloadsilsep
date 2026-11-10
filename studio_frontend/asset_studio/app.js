@@ -79,7 +79,7 @@
     upload: '<path d="M12 15V4M7 8l5-5 5 5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/>',
     menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
     folderPlus: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v6M9 14h6"/>',
-    ref: '<path d="M7 3h10v18l-5-4-5 4z"/>',
+    ref: '<path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9.7 17.2a1.7 1.7 0 0 1-2.4-2.4L15 7.2"/>',
     agent: '<path d="M12 3a7 7 0 0 1 7 7v3a7 7 0 0 1-14 0v-3a7 7 0 0 1 7-7z"/><path d="M9 11h.01M15 11h.01M9.5 15c1.5 1 3.5 1 5 0"/>',
     undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
     gear: '<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>',
@@ -93,7 +93,7 @@
   // The host page picks the language with ?lang= and can change it later with an asset:lang message.
   const LANGS = ['en', 'ko'];
   let lang = new URLSearchParams(location.search).get('lang');
-  if (!LANGS.includes(lang)) lang = 'en';
+  if (!LANGS.includes(lang)) lang = 'ko';
   const TEXT = {
     en: {
       docTitle: 'Game sound assets',
@@ -500,6 +500,7 @@ ${p.form}`,
     setIcon($('playAll'), queue ? 'stop' : 'play');
     $('playAll').setAttribute('aria-label', queue ? t('stopAll') : t('playAll'));
     document.querySelector('.dWave')?.classList.toggle('on', !!a);
+    renderPlayButton();
   }
 
   /* ---------- board ---------- */
@@ -590,7 +591,7 @@ ${p.form}`,
       if (refCount({ type: 'cat', c })) { refB.append(el('span', 'refN', String(refCount({ type: 'cat', c })))); refB.classList.add('has'); }
       h.append(refB);
       h.append(add, more);
-      h.addEventListener('contextmenu', (e) => { e.preventDefault(); catDialog(c); });
+      h.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); catMenu(c, e.clientX, e.clientY); });
       const grid = el('div', 'grid');
       grid.append(...list.map(makeTile));
       group.append(h, grid); box.append(group);
@@ -644,7 +645,7 @@ ${p.form}`,
       return b;
     };
     side.append(el('h2', '', t('category')), item(t('all'), assets.length, !filter.cat, () => { filter.cat = null; renderBoard(); }, 'var(--text)', true));
-    for (const c of catTree()) { const b = item(tx(c.name), assets.filter((a) => under(a.cat, c.id)).length, filter.cat === c.id, () => { filter.cat = filter.cat === c.id ? null : c.id; renderBoard(); }, c.hue); b.style.paddingLeft = `${12 + depthOf(c) * 14}px`; side.append(b); }
+    for (const c of catTree()) { const b = item(tx(c.name), assets.filter((a) => under(a.cat, c.id)).length, filter.cat === c.id, () => { filter.cat = filter.cat === c.id ? null : c.id; renderBoard(); }, c.hue); b.style.paddingLeft = `${12 + depthOf(c) * 14}px`; b.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); catMenu(c, e.clientX, e.clientY); }; side.append(b); }
     side.append(iconButton('folderPlus', t('addCat'), newCat, 'iconBtn addCat'));
     side.append(el('h2', '', t('statusHead')));
     for (const [id, label] of Object.entries(t('status'))) {
@@ -702,12 +703,17 @@ ${p.form}`,
   function hold(a, t, e) {
     held = false;
     if (e.button || !a.versions.length || e.target.closest('.ab')) return;
-    const x0 = e.clientX, y0 = e.clientY;
-    const end = () => { clearTimeout(timer); t.classList.remove('pressing'); removeEventListener('pointerup', end); removeEventListener('pointercancel', end); removeEventListener('pointermove', move); };
-    const move = (ev) => { if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > 8) end(); };
+    const x0 = e.clientX, y0 = e.clientY, ring = holdRing(x0, y0, color(a.cat));
+    const end = () => { clearTimeout(timer); t.classList.remove('pressing'); ring.remove(); removeEventListener('pointerup', end); removeEventListener('pointercancel', end); removeEventListener('pointermove', move); };
+    const move = (ev) => { if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > 8) end(); else ring.style.translate = `${ev.clientX}px ${ev.clientY}px`; };
     const timer = setTimeout(() => { end(); held = true; openDetail(a); }, HOLD_MS);
     t.style.setProperty('--hold', HOLD_MS + 'ms'); t.classList.add('pressing');
     addEventListener('pointerup', end); addEventListener('pointercancel', end); addEventListener('pointermove', move);
+  }
+  function holdRing(x, y, hue) {
+    const ring = el('div', 'holdRing'); ring.style.translate = `${x}px ${y}px`; ring.style.setProperty('--hold', HOLD_MS + 'ms'); ring.style.setProperty('--c', hue);
+    ring.innerHTML = '<svg viewBox="0 0 48 48" aria-hidden="true"><circle class="track" cx="24" cy="24" r="20"/><circle class="fill" cx="24" cy="24" r="20" pathLength="100"/></svg>';
+    document.body.append(ring); return ring;
   }
   // One sound at a time, for people without an agent writing a spec: an empty slot named in place.
   function addSound(cat) {
@@ -849,6 +855,45 @@ ${p.form}`,
     tileCtx.style.left = Math.min(x, innerWidth - q.width - 8) + 'px'; tileCtx.style.top = Math.min(y, innerHeight - q.height - 8) + 'px';
     focused = a.id; tileCtx.querySelector('button:not(:disabled)')?.focus();
   }
+  // The same menu with plain rows: [label, key, action, disabled] or null for a line.
+  function menuAt(x, y, rows) {
+    tileCtx.textContent = ''; closeSub();
+    for (const row of rows) {
+      if (!row) { tileCtx.append(el('div', 'ctxSep')); continue; }
+      const [label, key, fn, off] = row, b = el('button'); b.setAttribute('role', 'menuitem'); b.disabled = !!off;
+      b.append(el('span', 'grow', label)); if (key) b.append(el('kbd', '', key));
+      b.onclick = () => { closeTileMenu(); fn(); }; tileCtx.append(b);
+    }
+    tileCtx.hidden = false;
+    const q = tileCtx.getBoundingClientRect();
+    tileCtx.style.left = Math.min(x, innerWidth - q.width - 8) + 'px'; tileCtx.style.top = Math.min(y, innerHeight - q.height - 8) + 'px';
+    tileCtx.querySelector('button:not(:disabled)')?.focus();
+  }
+  function catMenu(c, x, y) {
+    const full = assets.some((a) => a.cat === c.id) || cats.some((x) => x.parent === c.id);
+    menuAt(x, y, [
+      [t('newSound'), '', () => addSound(c.id)],
+      [t('addSubCat'), '', () => { const n = addCat(t('newCat'), c.kind, undefined, c.id); renderBoard(); catDialog(n, true); }],
+      [t('refs'), '', () => refDialog({ type: 'cat', c })],
+      null,
+      [t('rename'), '', () => catDialog(c, true)],
+      [t('catSettings'), '', () => catDialog(c)],
+      null,
+      [t('deleteCat'), '', () => { cats.splice(cats.indexOf(c), 1); if (filter.cat === c.id) filter.cat = null; renderBoard(); }, full],
+    ]);
+  }
+  function boardMenu(x, y) {
+    const many = ready(visible()).length;
+    menuAt(x, y, [
+      [t('addCat'), '', newCat],
+      [t('importShort'), '', () => importDialog()],
+      [t('selectAll'), 'Ctrl+A', () => { ready(visible()).forEach((a) => selected.add(a.id)); refreshSelection(); }, !many],
+      null,
+      [t('refsProject'), '', () => refDialog({ type: 'project' })],
+      [t('export'), '', exportDialog],
+    ]);
+  }
+  for (const id of ['board', 'side']) $(id).addEventListener('contextmenu', (e) => { if (e.target.closest('.tile, .dynCard')) return; e.preventDefault(); boardMenu(e.clientX, e.clientY); });
   addEventListener('pointerdown', (e) => { if (!tileCtx.hidden && !e.target.closest('#tileMenu, #tileSub')) closeTileMenu(); }, true);
   addEventListener('scroll', closeTileMenu, true);
   tileCtx.addEventListener('keydown', (e) => {
@@ -986,7 +1031,9 @@ ${p.form}`,
       };
       tick();
     });
-    selected.clear(); renderOpen();
+    // The sounds asked about stay selected until something else is picked, so the batch is not lost.
+    if (list.length > 1) { selected.clear(); list.forEach((a) => selected.add(a.id)); }
+    renderOpen();
   }
   function renderOpen(a) { if (openAsset && (!a || a === openAsset)) renderDetail(); else if (openAsset) renderHeader(); else renderBoard(); }
   function settle(a, keep) {

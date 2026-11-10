@@ -119,6 +119,14 @@ header .iconBtn { width:48px; position:relative; }
 .tile::after { content:''; position:absolute; inset:0; background:var(--c); opacity:.22; transform:scaleX(0); transform-origin:left; pointer-events:none; }
 .tile.pressing::after { animation:holdFill calc(var(--hold,450ms) - 120ms) linear 120ms both; } /* a plain click ends before it shows */
 @keyframes holdFill { from { transform:scaleX(0); } to { transform:scaleX(1); } }
+/* Holding a tile: a ring around the pointer fills once round (shown after a plain click would have ended). */
+.holdRing { position:fixed; left:-28px; top:-28px; width:56px; height:56px; pointer-events:none; z-index:40; opacity:0; animation:holdShow 0s linear 120ms forwards; }
+.holdRing svg { display:block; width:100%; height:100%; transform:rotate(-90deg); }
+.holdRing circle { fill:none; stroke-width:4; }
+.holdRing .track { stroke:rgba(255,255,255,.18); }
+.holdRing .fill { stroke:var(--c,var(--text)); stroke-linecap:round; stroke-dasharray:100; stroke-dashoffset:100; animation:holdRing calc(var(--hold,450ms) - 120ms) linear 120ms forwards; }
+@keyframes holdRing { to { stroke-dashoffset:0; } }
+@keyframes holdShow { to { opacity:1; } }
 .group h2 button { min-height:28px; padding:0 8px; font-size:.75rem; font-weight:500; color:var(--text3); margin-left:4px; }
 .tile[data-status="pending"] { background:none; box-shadow:inset 0 0 0 1px var(--divider); cursor:default; color:var(--text3); }
 .tile[data-status="pending"] canvas { display:none; }

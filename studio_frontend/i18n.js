@@ -146,7 +146,7 @@
     },
   };
   const pick = (v) => (v === 'en' || v === 'ko' ? v : '');
-  let lang = (() => { try { return pick(new URLSearchParams(window.parent.location.search).get('lang')); } catch { return ''; } })() || 'en';
+  let lang = (() => { try { return pick(new URLSearchParams(window.parent.location.search).get('lang')); } catch { return ''; } })() || 'ko';
   const raw = (key) => TEXT[lang][key] ?? TEXT.en[key];
   const t = (key, vars = {}) => String(raw(key) ?? key).replace(/\{(\w+)\}/g, (_, n) => vars[n] ?? '');
   window.studioI18n = {

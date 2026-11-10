@@ -195,8 +195,8 @@ TEXT = {
            "open_browser": "기본 브라우저로 열기", "copy": "주소 복사", "copied": "복사했어요",
            "moved": "olmuse 주소는 {url} 이야~ 곡은 주소마다 따로 저장되니까, 여기서 만든 곡 있으면 먼저 내보내 두라고♡"},
 }
-lang = st.query_params.get("lang", st.session_state.get("lang", "en"))
-lang = lang if lang in TEXT else "en"
+lang = st.query_params.get("lang", st.session_state.get("lang", "ko"))  # Korean unless English is picked
+lang = lang if lang in TEXT else "ko"
 st.session_state.lang = lang
 T = TEXT[lang]
 

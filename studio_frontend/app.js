@@ -624,10 +624,10 @@
     return h;
   }
   function renderArt(p) {
-    const seed = seedOf(p);
-    if (renderArt.seed === seed) return;
-    renderArt.seed = seed;
-    $('art').innerHTML = albumArt.make(seed).svg;
+    const seed = seedOf(p), key = [seed, p.name, p.bpm, p.tracks.map((tr) => tr.role)].join('|');
+    if (renderArt.key === key) return;
+    renderArt.key = key;
+    $('art').innerHTML = albumArt.make(seed, p).svg;
   }
   function pickArt(p, seed) {
     p.artHistory ||= [seedOf(p)];
@@ -646,7 +646,7 @@
     shelf.setAttribute('role', 'dialog'); shelf.setAttribute('aria-modal', 'true'); shelf.setAttribute('aria-label', t('past_art'));
     let at = Math.max(0, list.indexOf(now));
     const slot = 36, side = 24, lps = list.map((seed, i) => {
-      const b = el('button', { className: 'lp', innerHTML: `<svg viewBox="0 0 100 100" aria-hidden="true">${albumArt.make(seed).svg}</svg>` });
+      const b = el('button', { className: 'lp', innerHTML: `<svg viewBox="0 0 100 100" aria-hidden="true">${albumArt.make(seed, p).svg}</svg>` });
       b.setAttribute('aria-label', t('art_n', { n: list.length - i }));
       b.style.animationDelay = `${Math.min(i, 24) * 28}ms`;
       b.onclick = () => { if (i === at) use.click(); else show(i); };
