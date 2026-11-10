@@ -11,7 +11,7 @@ import urllib.parse
 import streamlit as st
 import streamlit.components.v1 as components
 
-from studio_backend import AgyCli, Jobs, Router, in_app_browser, job_store, validate_request
+from studio_backend import AgyCli, DailyUsd, Jobs, Router, in_app_browser, job_store, validate_request
 from asset_agent import Agents
 from asset_classify import classify as classify_files
 from skill_router import ask_jev, read_key
@@ -84,8 +84,12 @@ def choose_model():
     # The public server spends it only on MODEL_CHOICES (DeepSeek); bakeoff models join only when LOCAL_AI.
     openrouter_key = "" if provider in ("claude", "gemini") else secret("OPENROUTER_API_KEY")
     if gemini_key or claude_key or openrouter_key:
-        return Router(gemini_key, claude_key, setting("GEMINI_MODEL"), setting("GEMINI_BASE_URL"), setting("CLAUDE_MODEL"), provider,
-                      openrouter_key=openrouter_key)
+        router = Router(gemini_key, claude_key, setting("GEMINI_MODEL"), setting("GEMINI_BASE_URL"), setting("CLAUDE_MODEL"),
+                        provider, openrouter_key=openrouter_key)
+        # The default model's backups are paid by the operator: STRUDEL_BACKUP_DAILY_USD caps them per day at worst cost.
+        backup_usd = float(setting("STRUDEL_BACKUP_DAILY_USD", "0.20") or 0)
+        router.backup_budget = DailyUsd(backup_usd if backup_usd > 0 else None)
+        return router
     return AgyCli() if LOCAL_AI else None
 
 

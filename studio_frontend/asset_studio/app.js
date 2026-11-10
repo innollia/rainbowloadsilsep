@@ -106,6 +106,7 @@
       refBadType: 'not a sound, MIDI or score file', refTooBig: 'file too large', refBadLink: 'Enter a link starting with http:// or https://', refAdded: (n) => `Added ${n} reference${n > 1 ? 's' : ''}`,
       refGone: 'This file was not kept in the browser.', refCannotPlay: 'The browser cannot play this file.',
       agentPh: 'Ask in words (references, groups, names, how sounds should change)…', agentThinking: 'Thinking…', agentUndo: 'Undo', agentUndone: 'Undone',
+      agentUpgraded: (m) => `The default model failed, so a stronger model (${m}) answered instead.`,
       agentDid: (n) => `${n} change${n === 1 ? '' : 's'} made`, agentFailed: (x) => `Could not answer: ${x}`,
       agentLocal: 'AI is not connected here, so I only understand links, notes ("note: …") and remakes of the picked sounds.', agentNoted: 'Saved it as a reference.', agentRemake: (n) => `Remaking ${n} sound${n === 1 ? '' : 's'}.`,
       parentCat: 'Inside', noParent: 'Top level', addSubCat: 'Add a group inside', foldersKind: 'A folder per kind (sfx, amb, music)', rootFolder: 'Audio folder',
@@ -245,6 +246,7 @@ ${p.form}`,
       refBadType: '소리나 MIDI, 악보 파일이 아니잖아, 바보야!', refTooBig: '파일이 너무 크잖아, 무식하긴~', refBadLink: 'http://나 https://로 시작하는 링크를 넣으란 말이야, 허접~', refAdded: (n) => `레퍼런스 ${n}개 넣어 줬어~`,
       refGone: '이 파일은 브라우저에 남아 있지도 않잖아.', refCannotPlay: '브라우저가 이 파일을 재생 못 한다잖아, 허접~',
       agentPh: 'AI에게 요청 (레퍼런스, 분류, 이름, 소리 수정)…', agentThinking: '생각하는 중…', agentUndo: '되돌리기', agentUndone: '되돌렸어요',
+      agentUpgraded: (m) => `원래 모델이 허접하게 실패해서 훨씬 더 좋은 상위 모델(${m})이 대신 나섰어♡ 고마운 줄 알아~`,
       agentDid: (n) => `${n}가지나 바꿔 줬어, 감사하라고~`, agentFailed: (x) => `답하지 못했어요: ${x}`,
       agentLocal: '여기선 AI 연결이 안 돼서 링크, 메모("메모: …"), 고른 소리 다시 만들기밖에 못 알아듣거든?', agentNoted: '레퍼런스로 저장해 뒀어~', agentRemake: (n) => `소리 ${n}개 다시 만들어 줄게.`,
       parentCat: '상위 분류', noParent: '없음(최상위)', addSubCat: '하위 분류 추가', foldersKind: '종류별 폴더(sfx, amb, music)', rootFolder: '소리 폴더',
@@ -1099,7 +1101,8 @@ ${p.form}`,
       const answer = await askAgent(text);
       const undo = applyActions(answer.actions);
       agentLog.push({ text: answer.reply || '' });
-      say(answer.reply || t('agentDid', (answer.actions || []).length), undo);
+      const reply = answer.reply || t('agentDid', (answer.actions || []).length);
+      say(answer.upgraded ? `${t('agentUpgraded', answer.upgraded)} ${reply}` : reply, undo);
     } catch (e) { say(t('agentFailed', e.message || e)); }
     agentBusy = false; syncDock(); autosave();
   }

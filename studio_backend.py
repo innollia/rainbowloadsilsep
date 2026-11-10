@@ -113,7 +113,7 @@ MSG = {
         "no_ledger": "The credit ledger is not connected, so AI calls that use credits are off.",
         "no_browser_refund": "The browser stopped responding, so I stopped. The last call's {n} credits were refunded.",
         "no_credits": "Out of credits, so I stopped. You can top up with the credits button at the top.",
-        "no_key": "No Gemini key is set.",
+        "no_key": "The server has no AI key set up, so AI is off.",
         "busy": "Your previous request is still running.",
         "no_browser": "The browser stopped responding, so I stopped. Check if the tab was closed.",
         "model_failed": "{error} Kept the previous version.",
@@ -146,14 +146,14 @@ MSG = {
         "effort_high": "Deep",
         "reply_lang": "Reply in English: write every text field in English.",
         "gemini_quota": "Hit the Gemini usage limit.",
-        "gemini_key": "Check your Gemini key.",
-        "gemini_http": "Gemini error {code}: {detail}",
+        "gemini_key": "Gemini rejected the server's key.",
+        "gemini_http": "Gemini error: {detail}",
         "gemini_conn": "Couldn't connect to Gemini: {detail}",
         "gemini_parse": "Couldn't read Gemini's reply.",
-        "claude_key": "Check your Claude key.",
+        "claude_key": "Claude rejected the server's key.",
         "claude_perm": "This Claude key can't use that model.",
         "claude_quota": "Hit the Claude usage limit.",
-        "claude_http": "Claude error {code}: {detail}",
+        "claude_http": "Claude error: {detail}",
         "claude_conn": "Couldn't connect to Claude.",
         "claude_refused": "Claude refused this request.",
         "claude_cut": "Claude's reply was too long and got cut off.",
@@ -163,13 +163,15 @@ MSG = {
         "agy_timeout": "The Antigravity CLI didn't finish in time.",
         "agy_parse": "Couldn't read the Antigravity CLI reply: {detail}",
         "agy_failed": "Antigravity CLI failed: {detail}",
-        "openrouter_key": "Check your OpenRouter key.",
+        "openrouter_key": "OpenRouter rejected the server's key.",
         "openrouter_credits": "OpenRouter credits or key limit ran out.",
         "openrouter_quota": "Hit the OpenRouter rate limit.",
-        "openrouter_http": "OpenRouter error {code}: {detail}",
+        "openrouter_http": "OpenRouter error: {detail}",
         "openrouter_conn": "Couldn't connect to OpenRouter: {detail}",
         "openrouter_parse": "Couldn't read OpenRouter's reply.",
         "openrouter_cut": "The OpenRouter reply was too long and got cut off.",
+        "parked": "The browser stopped answering, so the server kept the result. It goes in when you open the song again.",
+        "upgraded": "The default model failed, so a stronger model ({model}) answered instead.",
     },
     "ko": {
         "bad_payload": "요청 형식이 엉망이잖아~ 똑바로 해!",
@@ -202,7 +204,7 @@ MSG = {
         "no_ledger": "크레딧 장부가 안 연결돼서 크레딧 쓰는 AI 호출은 막아 뒀어~!",
         "no_browser_refund": "브라우저가 대답을 안 해서 멈췄어! 마지막 호출 {n}크레딧은 돌려줬어~♡",
         "no_credits": "크레딧이 모자라서 멈췄어~ 위쪽 크레딧 버튼에서 얼른 충전해 와♡",
-        "no_key": "Gemini 키도 안 넣어 놨잖아~ 바보♡",
+        "no_key": "운영자가 서버에 AI 키도 안 넣어놔서 AI가 꺼져 있네~ 풉♡",
         "busy": "아직 이전 요청도 안 끝났거든~? 성급하긴♡",
         "no_browser": "브라우저 응답이 없어서 멈췄잖아~ 탭 닫은 거 아냐? 확인해 봐!",
         "model_failed": "{error} 이전 버전 그대로 둘게~♡",
@@ -235,14 +237,14 @@ MSG = {
         "effort_high": "깊게",
         "reply_lang": "Reply in Korean: write every text field in Korean.",
         "gemini_quota": "Gemini 사용 한도에 걸려 버렸네~?",
-        "gemini_key": "Gemini 키가 맞는지 똑바로 확인해 봐~!",
-        "gemini_http": "Gemini 오류 {code}: {detail}",
+        "gemini_key": "운영자가 넣은 서버 API 키, Gemini한테 퇴짜맞았네~ 풉♡",
+        "gemini_http": "Gemini 오류: {detail}",
         "gemini_conn": "Gemini 연결 실패: {detail}",
         "gemini_parse": "Gemini 응답을 못 읽겠잖아~!",
-        "claude_key": "Claude 키가 맞는지 똑바로 확인해 봐~!",
+        "claude_key": "운영자가 넣은 서버 API 키, Claude한테 퇴짜맞았네~ 풉♡",
         "claude_perm": "이 Claude 키로는 그 모델 못 쓰거든~?♡",
         "claude_quota": "Claude 사용 한도에 걸렸잖아, 허접~",
-        "claude_http": "Claude 오류 {code}: {detail}",
+        "claude_http": "Claude 오류: {detail}",
         "claude_conn": "Claude에 연결도 못 했네? 허접~",
         "claude_refused": "푸하하, Claude한테 거절당했잖아~",
         "claude_cut": "Claude 응답이 너무 길어서 잘렸잖아.",
@@ -252,13 +254,15 @@ MSG = {
         "agy_timeout": "Antigravity CLI가 시간 안에 안 끝났잖아, 느려 터졌네~",
         "agy_parse": "Antigravity CLI 응답을 읽지 못했어: {detail}",
         "agy_failed": "Antigravity CLI 실패: {detail}",
-        "openrouter_key": "OpenRouter 키나 제대로 확인해 봐, 허접~",
+        "openrouter_key": "운영자가 넣은 서버 API 키, OpenRouter한테 퇴짜맞았네~ 풉♡",
         "openrouter_credits": "OpenRouter 크레딧이나 키 한도가 다 떨어졌잖아~",
         "openrouter_quota": "OpenRouter 속도 한도에 걸렸잖아, 성급하긴~",
-        "openrouter_http": "OpenRouter 오류 {code}: {detail}",
+        "openrouter_http": "OpenRouter 오류: {detail}",
         "openrouter_conn": "OpenRouter 연결 실패: {detail}",
         "openrouter_parse": "OpenRouter 응답을 못 읽겠잖아.",
         "openrouter_cut": "OpenRouter 응답이 너무 길어서 잘렸잖아.",
+        "parked": "다 만들어놨더니 브라우저가 뻗어버렸네~? 불쌍하니까 서버에 잘 맡아뒀어. 곡 다시 열면 그대로 들어갈 테니까 안심하라고, 허접♡",
+        "upgraded": "허접 모델이 뻗어버려서 훨씬 더 똑똑한 상위 모델({model})이 대신 대답해 줬어♡ 감사히 여겨~",
     },
 }
 
@@ -267,8 +271,29 @@ def lang_of(value) -> str:
     return value if value in LANGS else DEFAULT_LANG
 
 
+# What went wrong, as a code the user can quote. Only for failures the user cannot fix themselves.
+ERROR_CODES = {
+    "bad_payload": "REQ-1", "bad_tracks": "REQ-2", "bad_track_id": "REQ-3", "dup_ids": "REQ-4", "bad_bpm": "REQ-5",
+    "bad_capture_data": "CAP-1", "bad_capture_file": "CAP-2", "no_ledger": "LEDGER", "internal": "SRV-500",
+    "no_key": "KEY-0",
+    "reply_format": "AI-FORMAT", "model_bad_id": "AI-ID", "model_bad_code": "AI-CODE", "outside_target": "AI-SCOPE",
+    "target_bpm": "AI-BPM", "global_in_code": "AI-GLOBAL", "track_count": "AI-TRACKS",
+    "gemini_quota": "GM-429", "gemini_key": "GM-401", "gemini_http": "GM-{code}", "gemini_conn": "GM-CONN",
+    "gemini_parse": "GM-PARSE",
+    "claude_key": "CL-401", "claude_perm": "CL-403", "claude_quota": "CL-429", "claude_http": "CL-{code}",
+    "claude_conn": "CL-CONN", "claude_refused": "CL-REFUSED", "claude_cut": "CL-CUT", "claude_parse": "CL-PARSE",
+    "agy_too_long": "AG-LONG", "agy_missing": "AG-MISSING", "agy_timeout": "AG-TIMEOUT", "agy_parse": "AG-PARSE",
+    "agy_failed": "AG-FAILED",
+    "openrouter_key": "OR-401", "openrouter_credits": "OR-402", "openrouter_quota": "OR-429",
+    "openrouter_http": "OR-{code}", "openrouter_conn": "OR-CONN", "openrouter_parse": "OR-PARSE",
+    "openrouter_cut": "OR-CUT",
+}
+
+
 def msg(lang, key: str, **fields) -> str:
-    return MSG[lang_of(lang)][key].format(**fields)
+    text = MSG[lang_of(lang)][key].format(**fields)
+    code = ERROR_CODES.get(key)
+    return f"{text} ({code.format(**fields)})" if code else text
 
 
 # Language-neutral on purpose: every message ends with MSG[lang]["reply_lang"], which picks the reply language.
@@ -386,6 +411,91 @@ class ModelError(Exception):
 
     def text(self, lang) -> str:
         return msg(lang, self.key, **self.fields) if self.key in MSG[DEFAULT_LANG] else self.key
+
+
+def transient(exc: ModelError) -> bool:
+    """A failure that costs nothing and may pass on its own: no connection, rate limited, a timeout, a 5xx."""
+    key = exc.key
+    if key.endswith("_conn") or key.endswith("_quota") or key == "agy_timeout":
+        return True
+    try:
+        return key.endswith("_http") and int(exc.fields.get("code", 0)) >= 500
+    except (TypeError, ValueError):
+        return False
+
+
+class DailyUsd:
+    """A daily dollar cap for calls the operator pays for (the default model's backups)."""
+
+    def __init__(self, limit: float | None):
+        self.limit, self.day, self.spent, self.lock = limit, "", 0.0, threading.Lock()
+
+    def take(self, usd: float) -> bool:
+        with self.lock:
+            today = datetime.date.today().isoformat()
+            if today != self.day:
+                self.day, self.spent = today, 0.0
+            if self.limit is not None and self.spent + usd > self.limit:
+                log.warning("backup model daily budget reached (%.2f USD)", self.limit)
+                return False
+            self.spent += usd
+            return True
+
+
+class Backed:
+    """An engine with a pause-and-retry for transient failures and, for the default model, stronger models behind it.
+
+    A call that fails transiently is tried once more after RETRY_PAUSE. A call that still fails, and (through
+    promote) a model that keeps giving broken edits, move to the next backup: at most MAX_PROMOTIONS per job.
+    The user pays the model they chose; a backup's cost comes from the operator's daily budget.
+    Anything else is read from the engine now answering (hears, name, stop, last_usage)."""
+
+    RETRY_PAUSE = 3
+    MAX_PROMOTIONS = 1
+
+    def __init__(self, primary, backups=(), budget: DailyUsd | None = None):
+        self.current = primary
+        self.backups = list(backups)  # (label, usd, make)
+        self.budget = budget
+        self.promotions = 0
+        self.upgraded = ""  # label of a backup that took over, read and cleared by the job
+
+    def __getattr__(self, name):
+        return getattr(self.__dict__["current"], name)
+
+    def promote(self) -> bool:
+        if self.promotions >= self.MAX_PROMOTIONS:
+            return False
+        while self.backups:
+            label, usd, make = self.backups.pop(0)
+            if self.budget and not self.budget.take(usd):
+                return False
+            self.current, self.upgraded = make(), label
+            self.promotions += 1
+            log.info("default model handed over to %s", label)
+            return True
+        return False
+
+    def run(self, fn):
+        """fn(engine) -> reply, with the retry and the backups."""
+        failure = None
+        for attempt in range(2):
+            try:
+                return fn(self.current)
+            except ModelError as exc:
+                failure = exc
+                if attempt or not transient(exc):
+                    break
+                time.sleep(self.RETRY_PAUSE)
+        if not self.promote():
+            raise failure
+        return fn(self.current)
+
+    def edit(self, prompt: str) -> dict:
+        return self.run(lambda engine: engine.edit(prompt))
+
+    def listen(self, wav: bytes, prompt: str) -> dict:
+        return self.run(lambda engine: engine.listen(wav, prompt))
 
 
 def redact(text: str, secret: str = "") -> str:
@@ -683,6 +793,22 @@ class Router:
         if provider == "openrouter":
             return OpenRouter(self.keys["openrouter"], name, effort, system=system)
         return Claude(self.keys["claude"], name, self.clients.get("claude"), effort, system)
+
+    # The default model's backups, strongest-value first. Only US companies (the privacy policy's table).
+    BACKUPS = ("claude-haiku-5-5", "gemini-3.8-flash")
+    backup_budget: DailyUsd | None = None
+
+    def backed(self, model: str = "", effort: str = "", system: str | None = None) -> Backed:
+        """engine() with retries; the default model also gets stronger backups."""
+        primary = self.engine(model, effort, system)
+        backups = []
+        if (model or DEFAULT_CHOICE) == DEFAULT_CHOICE and getattr(primary, "model", "") == DEFAULT_CHOICE:
+            for name in self.BACKUPS:
+                choice = next((m for m in MODEL_CHOICES if m["id"] == name), None)
+                if choice and self.keys[choice["provider"]]:
+                    backups.append((choice["label"], worst_usd(name, effort),
+                                    lambda n=name: self.engine(n, effort, system)))
+        return Backed(primary, backups, self.backup_budget)
 
 
 class AgyCli:
@@ -1327,7 +1453,16 @@ class Jobs:
                 self.store.settled(ref)
         if ref:
             job.last_charge = (email, cost, ref, time.monotonic())
+        self._announce(job, getattr(call, "__self__", None))
         return reply
+
+    @staticmethod
+    def _announce(job: Job, engine):
+        """A stronger model took over: say so, once."""
+        label = getattr(engine, "upgraded", "") if isinstance(engine, Backed) else ""
+        if label:
+            engine.upgraded = ""
+            job.say("upgrade", job.text("upgraded", model=label))
 
     def _refund(self, job: Job, email: str, cost: int, ref: str) -> bool:
         try:
@@ -1349,8 +1484,11 @@ class Jobs:
         while True:
             left = deadline - time.monotonic()
             if left <= 0:
-                refunded = self._unseen_refund(job)
-                raise Stop("failed", job.text("no_browser_refund", n=refunded) if refunded else job.text("no_browser"))
+                # Nobody is checking the result in a browser: keep it on the server, paid and unchecked. The page
+                # proves it (catchUpResult) and applies it when the song is opened again.
+                job.last_charge = None
+                job.update(parked=seq)
+                raise Stop("done", job.text("parked"))
             try:
                 item = job.feedback.get(timeout=left)
             except queue.Empty:
@@ -1378,8 +1516,8 @@ class Jobs:
 
     def _loop(self, job: Job):
         req = job.request
-        pick = getattr(self.model, "engine", None)
-        model = pick(req["model"], req["effort"]) if pick else self.model
+        pick = getattr(self.model, "backed", None) or getattr(self.model, "engine", None)
+        model = pick(req["model"], req["effort"]) if pick else Backed(self.model)
         p = Progress(job)
         while True:
             found = self._next_candidate(job, model, p)
@@ -1419,7 +1557,7 @@ class Jobs:
                 candidate = merge_candidate({**p.state}, reply, req["target"], job.lang)
             except ValueError as exc:
                 p.fixes += 1
-                if p.fixes > MAX_ERROR_FIXES:
+                if p.fixes > MAX_ERROR_FIXES and not self._promote(job, model, p):
                     raise Stop("failed", job.text("fix_limit", error=exc)) from None
                 p.error = str(exc)
                 continue
@@ -1430,9 +1568,17 @@ class Jobs:
                 return candidate, result
             p.fixes += 1
             p.error = str(result.get("error", "run failed"))[:500]
-            if p.fixes > MAX_ERROR_FIXES:
+            if p.fixes > MAX_ERROR_FIXES and not self._promote(job, model, p):
                 raise Stop("failed", job.text("run_failed"))
             job.say("status", job.text("fixing"))
+
+    def _promote(self, job: Job, model, p: Progress) -> bool:
+        """The model kept giving edits that do not work: a stronger one gets the same fixes once."""
+        if not (isinstance(model, Backed) and model.promote()):
+            return False
+        p.fixes = 0
+        self._announce(job, model)
+        return True
 
     def _judge(self, job: Job, model, result: dict, tried: list) -> tuple[dict, list, bool]:
         """Signal check, then one listen call. Returns the verdict, its problems and whether the capture was silent."""

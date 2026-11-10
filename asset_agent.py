@@ -12,7 +12,7 @@ import threading
 import time
 
 from credits import LedgerError, call_cost
-from studio_backend import AgyCli, ModelError, lang_of, msg, restart_message
+from studio_backend import AgyCli, Backed, ModelError, lang_of, msg, restart_message
 
 log = logging.getLogger("olmuse.agent")
 
@@ -163,12 +163,17 @@ class Agents:
                     raise ValueError("크레딧이 모자라잖아~ 허접♡" if lang == "ko" else "Out of credits.")
                 if self.store:
                     self.store.charged("agent", owner, email, cost, ref)
-            if hasattr(model, "engine"):
+            if hasattr(model, "backed"):
+                engine = model.backed(request.get("model", ""), request.get("effort", ""), system=SYSTEM)
+            elif hasattr(model, "engine"):
                 engine = model.engine(request.get("model", ""), request.get("effort", ""), system=SYSTEM)
             else:  # the local agy runner: same program, the board's own instructions
                 engine = AgyCli(model.executable, model.model, system=SYSTEM)
             state = request.get("state") if isinstance(request.get("state"), dict) else {}
-            reply = ask(engine, prompt_for(state, str(request.get("text") or "")[:4000], lang))
+            prompt = prompt_for(state, str(request.get("text") or "")[:4000], lang)
+            reply = engine.run(lambda e: ask(e, prompt)) if isinstance(engine, Backed) else ask(engine, prompt)
+            if isinstance(engine, Backed) and engine.upgraded:
+                view["upgraded"] = engine.upgraded
             view.update(clean(reply if isinstance(reply, dict) else {}, state))
         except Exception as exc:  # whatever happens the call ends failed and refunded, never stuck at "working"
             if ref:

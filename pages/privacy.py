@@ -17,7 +17,7 @@ olmuse(https://olmuse.app)는 말로 음악과 게임 소리를 만드는 작업
 
 ### 쓰는 곳
 - 로그인과 크레딧 계산.
-- AI 요청: 입력한 문장, 곡 코드, 에셋 보드 내용, 듣기 평가용 녹음은 결과를 만들기 위해 고른 모델의 회사로 보냅니다. 기본 모델은 OpenRouter를 거쳐 DeepSeek으로 가고, 고르면 Anthropic(Claude) 또는 Google(Gemini)로 갑니다. 요청에 맞는 작곡 도움말을 고르기 위해 입력한 문장을 TypeSafe에도 보냅니다.
+- AI 요청: 입력한 문장, 곡 코드, 에셋 보드 내용, 듣기 평가용 녹음은 결과를 만들기 위해 고른 모델의 회사로 보냅니다. 기본 모델은 OpenRouter를 거쳐 DeepSeek으로 가고, 고르거나 기본 모델이 실패하면 Anthropic(Claude) 또는 Google(Gemini)로 갑니다. 요청에 맞는 작곡 도움말을 고르기 위해 입력한 문장을 TypeSafe에도 보냅니다.
 - 서비스 운영과 부정 사용 막기.
 
 ### 맡기는 곳과 국외 이전
@@ -25,8 +25,8 @@ olmuse(https://olmuse.app)는 말로 음악과 게임 소리를 만드는 작업
 
 | 받는 곳 | 나라 | 가는 정보 | 목적 | 그곳의 보유 기간 |
 |---|---|---|---|---|
-| Google LLC | 미국 | 로그인 이메일·프로필, Gemini를 고른 경우 AI 요청 | 로그인, AI 답 | Google 정책에 따름 |
-| Anthropic PBC | 미국 | Claude를 고른 경우 AI 요청 | AI 답 | Anthropic API 정책에 따름 |
+| Google LLC | 미국 | 로그인 이메일·프로필, Gemini를 고르거나 기본 모델이 실패한 경우 AI 요청 | 로그인, AI 답 | Google 정책에 따름 |
+| Anthropic PBC | 미국 | Claude를 고르거나 기본 모델이 실패한 경우 AI 요청 | AI 답 | Anthropic API 정책에 따름 |
 | OpenRouter, Inc. | 미국 | 기본 모델의 AI 요청(DeepSeek으로 전달) | AI 답 | OpenRouter 정책에 따름 |
 | DeepSeek 모델을 돌리는 업체(OpenRouter가 미국 서버 업체 중에서 고름: Wafer, Inference.net, Baseten, Fireworks) | 미국 | 기본 모델의 AI 요청 | AI 답 | 업체 정책에 따름 |
 | TypeSafe | 미국 | 입력한 문장 | 작곡 도움말 고르기 | TypeSafe 정책에 따름 |

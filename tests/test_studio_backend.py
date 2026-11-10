@@ -230,14 +230,15 @@ def _wait_end(job):
         time.sleep(0.01)
 
 
-def test_a_result_nobody_received_is_refunded():
+def test_a_result_nobody_checked_is_kept_on_the_server():
     ledger = LocalLedger()
     jobs = sb.Jobs(Fake(), ledger=ledger, feedback_timeout=0.3)
     jobs.submit("acct:a@example.com", _member("a@example.com", lang="ko"))
     job = jobs.jobs["acct:a@example.com"]
     _wait_end(job)  # no page polls at all
-    assert job.view["status"] == "failed" and "2크레딧은 돌려줬어" in job.view["messages"][-1]["text"]
-    assert ledger.account("a@example.com")["credits"] == 20
+    assert job.view["status"] == "done" and job.view["messages"][-1]["text"] == sb.msg("ko", "parked")
+    assert job.view["parked"] == job.view["candidate"]["seq"]  # the page applies it when the song is opened again
+    assert ledger.account("a@example.com")["credits"] == 18  # the result was made and kept, so it stays paid
 
 
 def test_a_result_a_page_saw_is_not_refunded():
@@ -249,7 +250,7 @@ def test_a_result_a_page_saw_is_not_refunded():
         time.sleep(0.005)
     jobs.snapshot("acct:a@example.com")  # a page got the candidate, then went away
     _wait_end(job)
-    assert job.view["messages"][-1]["text"] == sb.msg("en", "no_browser")
+    assert job.view["messages"][-1]["text"] == sb.msg("en", "parked")
     assert ledger.account("a@example.com")["credits"] == 18
 
 
@@ -559,7 +560,7 @@ def test_lang_picks_message_language_and_falls_back_to_english():
         time.sleep(0.005)
     jobs.cancel("o")
     assert jobs.snapshot("o")["messages"][-1]["text"] == "일단 멈췄어~ 마지막 정상 버전은 남겨 둘게♡"
-    assert sb.ModelError("claude_key").text("ko") == "Claude 키가 맞는지 똑바로 확인해 봐~!" and str(sb.ModelError("x")) == "x"
+    assert sb.ModelError("claude_key").text("ko") == sb.MSG["ko"]["claude_key"] + " (CL-401)" and str(sb.ModelError("x")) == "x"
 
 
 def test_browser_cannot_charge_someone_else():

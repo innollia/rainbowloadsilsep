@@ -85,6 +85,7 @@ input[type=range] { accent-color:var(--text); height:32px; }
 .msg { padding:8px 12px; border-radius:11px; overflow-wrap:anywhere; }
 .msg.user { background:var(--raised); align-self:flex-end; max-width:90%; }
 .msg.change { color:var(--ok); }
+.msg.upgrade { color:var(--ok); font-weight:700; }
 .msg.signal, .msg.status { color:var(--text2); }
 .msg.heard, .msg.measured { color:var(--warn); }
 .msg.error { color:var(--err); }

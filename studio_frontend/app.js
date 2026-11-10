@@ -383,7 +383,7 @@
   // A job that ended while this page was away (reload, lost connection, another tab) still lands on its song.
   async function catchUpResult(j) {
     const c = j.candidate, p = jobProject(j);
-    if (!c || !p || j.accepted !== c.seq || applied(p, j, c.seq)) return;
+    if (!c || !p || (j.accepted !== c.seq && j.parked !== c.seq) || applied(p, j, c.seq)) return;
     p.job = { ...jobMark(p, j), applied: c.seq }; // claimed before the probe so the next render does not start a second one
     if (!(await probe(compose({ bpm: c.bpm, tracks: c.tracks }, true))).ok) return;
     if (takeResult(p, j, c) && playing) play();
