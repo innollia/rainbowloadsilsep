@@ -62,7 +62,7 @@
     send: '<path d="M12 19V5M6 11l6-6 6 6"/>',
     sound: '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 9a4 4 0 0 1 0 6M19 6.5a8 8 0 0 1 0 11"/>',
     folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
-    download: '<path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>',
+    download: '<path d="M12 4v11M7 10l5 5 5-5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/>',
     spec: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h7"/>',
     help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .8-1 1.7M12 17h.01"/>',
     expand: '<path d="M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7"/>',
@@ -102,7 +102,7 @@
       addSound: 'Add', newSound: 'New sound', addCat: 'Add group', newCat: 'New group', catSettings: 'Group settings', kindLabel: 'Kind',
       kinds: { sfx: 'Effect', amb: 'Ambience', music: 'Music' }, catIdHelp: 'Lowercase English. Sounds in the group follow it.', deleteCat: 'Delete group',
       refs: 'References', refsN: (n) => `References ${n}`, refsProject: 'Project references', refsOf: (x) => `References · ${x}`,
-      refsHelp: { project: 'Everything here reaches every sound in the project.', cat: 'Everything here reaches every sound in this group and the groups inside it.', asset: 'References for this sound only. Project and group references are listed below.' },
+      refsHelp: { project: 'Everything here reaches every sound in the project.', cat: '', asset: 'References for this sound only. Project and group references are listed below.' },
       refEmpty: 'No references yet.', refAdd: 'Add', refAddFile: 'Add files', refFileKinds: 'Sound, MIDI, ABC, MusicXML. Files can also be dropped here.', refAddLink: 'Add link', refAddNote: 'Add note',
       refNotePh: 'What it should sound like, what to avoid…', refTakePh: 'What to take from this reference', refRemove: 'Remove reference', refInherited: 'Also applies here',
       refFromProject: 'Project', refKinds: { audio: 'Sound', midi: 'MIDI', score: 'Score', text: 'Note', link: 'Link' },
@@ -136,10 +136,11 @@ ${p.files}`,
       exportFormat: 'Files', fmt: 'Format', rate: 'Sample rate', bits: 'Bit depth', quality: 'Quality', qualities: { high: 'High', mid: 'Medium', low: 'Small' },
       folders: 'Folders', foldersFlat: 'One folder', foldersCat: 'A folder per group', engine: 'Game engine', engineNone: 'None (files only)',
       bundleAudio: (p) => `Approved sounds, ${p}`, bundleGodot: 'Godot 4: a plugin and a scene per dynamic sound (godot/)', encoding: (i, n) => `Converting ${i} of ${n}…`, exportFailed: (m) => `Export failed: ${m}`,
-      dynHead: 'Dynamic sounds', addDyn: 'Add dynamic sound', newDyn: 'New dynamic sound', dynType: 'Type', dynTypes: { ambience: 'Layered ambience', music: 'Adaptive music' }, dynLayers: (n) => `${n} layers`,
+      dynHead: 'Dynamic sounds', addDyn: 'Add dynamic sound', newDyn: 'New dynamic sound', dynType: 'Type', dynTypes: { ambience: 'Ambience', music: 'Music' }, dynLayers: (n) => `${n} layers`,
       params: 'Game values', addParam: 'Add value', param: 'Value', paramDefault: 'Starting value', intensity: 'Intensity', layersHead: 'Layers', addLayer: 'Add layer', always: 'Always on',
-      roles: { bed: 'Loop', scatter: 'Now and then', stem: 'Music stem' }, onRange: 'Fades in', fadeFrom: 'Silent at', fadeTo: 'Full at', gap: 'Gap s', beatsPerBar: 'Beats per bar',
-      dynNoSounds: 'Make or import some sounds first; layers are made of them.', dynHelp: 'Move a value to hear the layers change. The game sets the same values, for example set_param("intensity", 0.8) in Godot.',
+      roles: { bed: 'All the time', scatter: 'Now and then', stem: 'Music part' }, fadeFrom: 'Starts at', fadeTo: 'Loudest at', gap: 'Every', gapUnit: 's', tempo: 'Tempo (BPM)',
+      layerPlays: 'Plays', layerVol: 'Volume', layerWhen: 'When', followParam: (n) => `Follows ${n}`, layerSolo: 'Hear only this', layerMute: 'Mute',
+      dynNoSounds: 'Make or import some sounds first; layers are made of them.', dynHelp: 'Move a value to hear the sound change. The game moves the same value.',
       specField: { name: 'name', category: 'category', length: 'length', loop: 'loop', when: 'when', description: 'description' }, openAsset: 'Open', rename: 'Rename', unapprove: 'Cancel approval', menu: 'Menu', settings: 'Settings', language: 'Language', gameInfo: 'Game info', stagesLabel: 'Progress', total: (n) => `${n} in all`, approvedOf: (a, n) => `${a} of ${n} approved`, help: 'How to use', spec: 'Spec', export: 'Export',
       backToMusic: 'To music studio', category: 'Category', board: 'Asset board', playAll: 'Play all', stopAll: 'Stop playing all', hoverPlay: 'Play on hover',
       acceptAll: 'Keep all', rejectAll: 'Discard all', selectAll: 'Select all', deselect: 'Deselect', approve: 'Approve', approved: 'Approved', clear: 'Clear',
@@ -147,13 +148,13 @@ ${p.files}`,
       status: { pending: 'Pending', draft: 'Needs check', approved: 'Approved', flagged: 'Flagged', working: 'Revising', review: 'In review' },
       sec: (s) => `${s}s`,
       previous: 'Previous', newVersion: 'New version', keep: 'Keep', drop: 'Discard',
-      approveAll: 'Approve all', leftToCheck: (n) => `${n} assets left to check.`,
+      approveAll: 'Approve all', leftToCheck: (n) => `${n} to check`,
       samplesDone: (n, rest) => `All ${n} samples approved. The other ${rest} will be made in this style.`,
       samplesProgress: (n, done, rest) => `${done} of ${n} samples approved. Listen and approve them, and the other ${rest} will be made in the same style.`,
       makeRest: 'Make the rest', all: 'All', statusHead: 'Status',
       counts: (n, ok) => `${n} total · ${ok} approved`, reviewCount: (n) => `${n} to review`, selected: (n) => `${n} selected`,
       askSelected: (n) => `Request for the ${n} selected`, askOne: (name) => `Request for ${name}`, askNone: 'Pick an asset to send a request',
-      drafts: 'Drafts', draftCount: (i) => `${i}`, draftCountLabel: 'Number of drafts', draftNote: (text, k) => `${text} · draft ${k}`,
+      drafts: 'Drafts', draftCount: (i) => `${i}`, draftCountLabel: 'Number of drafts', draftNote: (text, k) => `${text} · draft ${k}`, makeOne: 'Make it',
       madeDrafts: (n) => `Made ${n} drafts. Listen and keep one.`, madeOne: 'Made a new version. Compare it with the previous one.',
       expanding: (n) => `Making ${n} in the sample style`, firstVersion: 'First version', fromSpec: 'Created from spec',
       play: 'Play', stop: 'Stop', toBoard: 'Back to board', prevAsset: 'Previous asset', nextAsset: 'Next asset',
@@ -219,7 +220,7 @@ ${p.form}`,
       slotsAdded: (n) => `Added ${n} empty slots`, nothingToImport: 'No sound files, bundle or list found here',
       nameLabel: 'Name', guessed: 'Guessed, check it', licenseLater: 'License (fill in later)', holderLater: 'Holder', licenseOf: (n) => `License of ${n}`,
       noLicenseYet: 'license not recorded',
-      originHead: 'Source', fillLeft: (n) => `${n} empty slot${n === 1 ? '' : 's'} to make.`, fillAll: 'Fill with AI', filling: (n) => `Making ${n}`,
+      originHead: 'Source', fillLeft: (n) => `${n} empty slot${n === 1 ? '' : 's'} to make.`, fillAll: 'Make all', filling: (n) => `Making ${n}`,
       likeThis: 'Drafts in this feel', likeName: (n) => `${n} (like)`, likeMade: (n) => `Making ${n} in this feel`, promptHead: 'AI prompt',
       fromPrompt: 'Made from the prompt', importedNote: 'Brought in', fromBundle: 'From the bundle', importHint: 'Already have sounds or a sound list? Drop them here or use Import at the top.',
       fillPrompt: (p) => `Make the game sound "${p.name}" (${p.id}, ${p.cat}) for ${p.game}.\n${p.when ? `When it plays: ${p.when}\n` : ''}${p.description ? `What it sounds like: ${p.description}\n` : ''}Form: ${p.loop ? 'seamless loop' : 'one shot'}${p.length ? `, about ${p.length}s` : ''}.${p.style ? `\nGame sound direction: ${p.style}` : ''}${p.ref}`,
@@ -244,7 +245,7 @@ ${p.form}`,
       addSound: '추가', newSound: '새 소리', addCat: '분류 추가', newCat: '새 분류', catSettings: '분류 설정', kindLabel: '종류',
       kinds: { sfx: '효과음', amb: '환경음', music: '음악' }, catIdHelp: '소문자 영문만 써. 분류 안 소리도 다 따라 바뀌니까.', deleteCat: '분류 지우기',
       refs: '레퍼런스', refsN: (n) => `레퍼런스 ${n}`, refsProject: '프로젝트 레퍼런스', refsOf: (x) => `레퍼런스 · ${x}`,
-      refsHelp: { project: '여기에 넣으면 프로젝트의 모든 소리에 다 적용된다고~', cat: '여기에 넣으면 이 분류랑 안쪽 분류의 모든 소리에 다 적용돼.', asset: '이 소리만의 레퍼런스야. 프로젝트랑 분류 레퍼런스는 아래에 있잖아, 눈 크게 떠~' },
+      refsHelp: { project: '여기에 넣으면 프로젝트의 모든 소리에 다 적용된다고~', cat: '', asset: '이 소리만의 레퍼런스야. 프로젝트랑 분류 레퍼런스는 아래에 있잖아, 눈 크게 떠~' },
       refEmpty: '아직 레퍼런스가 하나도 없잖아, 허접~', refAdd: '추가', refAddFile: '파일 추가', refFileKinds: '소리, MIDI, ABC, MusicXML. 여기로 그냥 끌어다 놓기나 해~', refAddLink: '링크 추가', refAddNote: '메모 추가',
       refNotePh: '이런 느낌으로, 이건 피해서…', refTakePh: '이 레퍼런스에서 가져올 점', refRemove: '레퍼런스 삭제', refInherited: '상위에서 적용된 레퍼런스',
       refFromProject: '프로젝트', refKinds: { audio: '소리', midi: 'MIDI', score: '악보', text: '메모', link: '링크' },
@@ -278,10 +279,11 @@ ${p.files}`,
       exportFormat: '파일', fmt: '형식', rate: '샘플레이트', bits: '비트', quality: '품질', qualities: { high: '높음', mid: '보통', low: '낮음' },
       folders: '폴더', foldersFlat: '한 폴더', foldersCat: '분류별 폴더', engine: '게임 엔진', engineNone: '없음(파일만)',
       bundleAudio: (p) => `승인한 소리, ${p}`, bundleGodot: 'Godot 4: 플러그인과 동적 소리마다 장면 하나(godot/)', encoding: (i, n) => `변환 중 ${i}/${n}…`, exportFailed: (m) => `내보내기 실패: ${m}`,
-      dynHead: '동적 소리', addDyn: '동적 소리 추가', newDyn: '새 동적 소리', dynType: '종류', dynTypes: { ambience: '레이어 환경음', music: '적응형 음악' }, dynLayers: (n) => `레이어 ${n}개`,
-      params: '파라미터', addParam: '파라미터 추가', param: '파라미터', paramDefault: '기본값', intensity: '강도', layersHead: '레이어', addLayer: '레이어 추가', always: '항상',
-      roles: { bed: '루프', scatter: '랜덤 재생', stem: '스템' }, onRange: '페이드 인 구간', fadeFrom: '최소 볼륨 지점', fadeTo: '최대 볼륨 지점', gap: '간격(초)', beatsPerBar: '마디당 박 수',
-      dynNoSounds: '소리부터 만들거나 가져오라고. 레이어는 그 소리로 만드는 거잖아, 허접~', dynHelp: '파라미터를 움직여 봐, 레이어 바뀌는 게 들리지? 게임에서도 같은 파라미터를 넣는 거야. 예: Godot에서 set_param("intensity", 0.8).',
+      dynHead: '동적 소리', addDyn: '동적 소리 추가', newDyn: '새 동적 소리', dynType: '종류', dynTypes: { ambience: '환경음', music: '음악' }, dynLayers: (n) => `레이어 ${n}개`,
+      params: '게임 값', addParam: '값 추가', param: '값', paramDefault: '시작 값', intensity: '강도', layersHead: '레이어', addLayer: '레이어 추가', always: '항상',
+      roles: { bed: '계속', scatter: '가끔', stem: '음악 파트' }, fadeFrom: '들리기 시작', fadeTo: '가장 크게', gap: '간격', gapUnit: '초', tempo: '빠르기(BPM)',
+      layerPlays: '재생', layerVol: '음량', layerWhen: '언제', followParam: (n) => `${n}에 따라`, layerSolo: '이것만 듣기', layerMute: '끄기',
+      dynNoSounds: '소리부터 만들거나 가져오라고. 레이어는 그 소리로 만드는 거잖아, 허접~', dynHelp: '값 막대를 움직이면 소리가 바뀌는 게 들려. 게임도 같은 값을 바꿔서 이 소리를 움직여~',
       specField: { name: '이름', category: '분류', length: '길이', loop: '반복', when: '재생 시점', description: '설명' }, openAsset: '열기', rename: '이름 바꾸기', unapprove: '승인 취소', menu: '메뉴', settings: '설정', language: '언어', gameInfo: '게임 정보', stagesLabel: '진행 상황', total: (n) => `전체 ${n}`, approvedOf: (a, n) => `${n}개 중 ${a}개 승인`, help: '사용법', spec: '명세', export: '내보내기',
       backToMusic: '음악 작업실로', category: '분류', board: '에셋 보드', playAll: '전체 재생', stopAll: '전체 재생 정지', hoverPlay: '마우스 오버 시 재생',
       acceptAll: '전체 채택', rejectAll: '전체 버림', selectAll: '전체 선택', deselect: '선택 해제', approve: '승인', approved: '승인됨', clear: '해제',
@@ -289,13 +291,13 @@ ${p.files}`,
       status: { pending: '대기', draft: '확인 필요', approved: '승인', flagged: '수정 표시', working: '수정 중', review: '검토 대기' },
       sec: (s) => `${s}초`,
       previous: '이전', newVersion: '새 버전', keep: '채택', drop: '버림',
-      approveAll: '전체 승인', leftToCheck: (n) => `확인할 에셋이 아직 ${n}개나 남았잖아, 빨리 해~`,
+      approveAll: '전체 승인', leftToCheck: (n) => `확인할 소리 ${n}개`,
       samplesDone: (n, rest) => `샘플 ${n}개 다 승인했네? 이 스타일로 나머지 ${rest}개도 만들어 줄게~`,
       samplesProgress: (n, done, rest) => `샘플 ${n}개 중에 겨우 ${done}개 승인했네. 들어 보고 다 승인하면 나머지 ${rest}개도 같은 스타일로 만들어 줄게~`,
       makeRest: '나머지 만들기', all: '전체', statusHead: '상태',
       counts: (n, ok) => `전체 ${n} · 승인 ${ok}`, reviewCount: (n) => `검토 ${n}개`, selected: (n) => `${n}개 선택`,
       askSelected: (n) => `선택한 ${n}개에 보낼 요청`, askOne: (name) => `${name}에 보낼 요청`, askNone: '에셋을 골라서 요청을 보내 봐, 허접~',
-      drafts: '시안', draftCount: (i) => `${i}개`, draftCountLabel: '시안 개수', draftNote: (text, k) => `${text} · 시안 ${k}`,
+      drafts: '시안', draftCount: (i) => `${i}개`, draftCountLabel: '시안 개수', draftNote: (text, k) => `${text} · 시안 ${k}`, makeOne: '만들기',
       madeDrafts: (n) => `시안 ${n}개 만들어 줬으니까 들어 보고 하나 골라 봐~`, madeOne: '새 버전 만들어 줬어~ 이전 거랑 비교나 해 봐♡',
       expanding: (n) => `샘플 스타일로 ${n}개 만들어 줄게~`, firstVersion: '첫 버전', fromSpec: '명세에서 생성',
       play: '재생', stop: '정지', toBoard: '보드로', prevAsset: '이전 에셋', nextAsset: '다음 에셋',
@@ -361,7 +363,7 @@ ${p.form}`,
       slotsAdded: (n) => `빈 칸 ${n}개 올려 뒀어~`, nothingToImport: '소리 파일도 묶음도 목록도 못 찾겠는데~?',
       nameLabel: '이름', guessed: '대충 짐작한 분류니까 똑바로 확인해~', licenseLater: '라이선스 (나중에 적어도 돼요)', holderLater: '저작권자', licenseOf: (n) => `${n} 라이선스`,
       noLicenseYet: '라이선스 기록 없음',
-      originHead: '출처', fillLeft: (n) => `만들 빈 칸 ${n}개야~`, fillAll: 'AI로 채우기', filling: (n) => `${n}개를 만드는 중`,
+      originHead: '출처', fillLeft: (n) => `만들 빈 칸 ${n}개야~`, fillAll: '모두 만들기', filling: (n) => `${n}개를 만드는 중`,
       likeThis: '이 느낌으로 시안', likeName: (n) => `${n} 느낌`, likeMade: (n) => `이 느낌으로 ${n}개 만들어 줄게~`, promptHead: 'AI 프롬프트',
       fromPrompt: '프롬프트로 생성', importedNote: '직접 가져옴', fromBundle: '묶음에서 가져옴', importHint: '이미 만든 소리나 소리 목록 있어? 여기다 끌어다 놓든가 위쪽 가져오기를 눌러 봐~',
       fillPrompt: (p) => `${p.game}에 쓸 게임 소리 "${p.name}"(${p.id}, ${p.cat})를 만들어 주세요.\n${p.when ? `나는 때: ${p.when}\n` : ''}${p.description ? `어떤 소리: ${p.description}\n` : ''}형태: ${p.loop ? '끊김 없는 반복' : '한 번 재생'}${p.length ? `, 약 ${p.length}초` : ''}.${p.style ? `\n게임 소리 방향: ${p.style}` : ''}${p.ref}`,
@@ -407,6 +409,7 @@ ${p.form}`,
   let game = GAME, brief = BRIEF, platform = 'mobile', demo = true;
   const selected = new Set();
   let drafts = 1;
+  try { drafts = Math.min(4, Math.max(1, +localStorage.getItem('asset-drafts') || 1)); } catch { /* one draft */ }
 
   /* ---------- AI self-check: nothing reaches the user before it has been through this ---------- */
   const MAX_CHECKS = 6;
@@ -658,7 +661,7 @@ ${p.form}`,
     }
     if (trash.length) { side.append(el('h2', '', t('trashHead'))); side.append(item(t('trashHead'), trash.length, false, trashDialog, null, 'trash')); }
     const mine = assets.filter((a) => a.imported).length;
-    if (mine) side.append(el('h2', '', t('originHead')), item(t('imported'), mine, filter.imported, () => { filter.imported = !filter.imported; renderBoard(); }, null, 'upload'));
+    if (mine) side.append(el('h2', '', t('originHead')), item(t('imported'), mine, filter.imported, () => { filter.imported = !filter.imported; renderBoard(); }, null, 'download'));
   }
   function renderHeader() {
     $('gameTitle').textContent = tx(game);
@@ -716,13 +719,13 @@ ${p.form}`,
     clearTimeout(hoverTimer);
     hoverTimer = setTimeout(() => { if (player?.asset !== a) play(a, { hover: true }); }, 140);
   }
-  // A loop has no end of its own, so one started by hovering stops with the hover.
-  function hoverEnd() { clearTimeout(hoverTimer); if (player?.hover && player.loop) stopSound(); }
+  // A hover preview stops with the hover.
+  function hoverEnd() { clearTimeout(hoverTimer); if (player?.hover) stopSound(); }
   const HOLD_MS = 450;
   let held = false;
   function hold(a, t, e) {
     held = false;
-    if (e.button || !a.versions.length || e.target.closest('.ab')) return;
+    if (e.button || !pickable(a) || e.target.closest('.ab')) return;
     const x0 = e.clientX, y0 = e.clientY, ring = holdRing(x0, y0, color(a.cat));
     const end = () => { clearTimeout(timer); t.classList.remove('pressing'); ring.remove(); removeEventListener('pointerup', end); removeEventListener('pointercancel', end); removeEventListener('pointermove', move); };
     const move = (ev) => { if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > 8) end(); else ring.style.translate = `${ev.clientX}px ${ev.clientY}px`; };
@@ -740,7 +743,7 @@ ${p.form}`,
     leaveDemoKeep();
     const name = t('newSound'), a = blank({ id: makeId(name, cat), name, cat, music: kindOf(cat) === 'music', loop: kindOf(cat) !== 'sfx' });
     assets.push(a); if (stage === 'sample' && !assets.some((x) => x.sample)) stage = 'expand';
-    filter = { cat: null, status: null, imported: false }; renderBoard();
+    filter = { cat: filter.cat && under(cat, filter.cat) ? filter.cat : null, status: null, imported: false }; renderBoard();
     const tile = tileOf(a); tile?.scrollIntoView({ block: 'nearest' }); renameTile(a, true);
   }
   // Leaving the stand-in board by building one's own keeps what is there (unlike an import, which replaces it).
@@ -858,7 +861,7 @@ ${p.form}`,
     };
     const canApprove = a.status === 'draft' || a.status === 'flagged';
     const many = targetsOf(a);
-    item(t('openAsset'), 'Enter', () => openDetail(a), !a.versions.length);
+    item(t('openAsset'), 'Enter', () => openDetail(a), !pickable(a));
     item(t('rename'), 'F2', () => renameTile(a));
     if (a.status === 'approved') item(t('unapprove'), 'A', () => { a.status = 'draft'; renderBoard(); });
     else item(t('approve'), 'A', () => { approve(a); renderBoard(); }, !canApprove);
@@ -940,17 +943,19 @@ ${p.form}`,
     label.replaceWith(input); input.focus(); input.select();
   }
 
+  // Made sounds and empty ones still to make can be picked; one being made cannot.
+  const pickable = (a) => !!a && (a.versions.length > 0 || a.status === 'pending');
   function clickTile(a, e) {
     if (held) { held = false; return; }
-    if (!a.versions.length) return;
+    if (!pickable(a)) return;
     if (e.shiftKey && anchor) {
       const list = visible(), from = list.indexOf(byId(anchor)), to = list.indexOf(a);
-      list.slice(Math.min(from, to), Math.max(from, to) + 1).filter((x) => x.versions.length).forEach((x) => selected.add(x.id));
+      list.slice(Math.min(from, to), Math.max(from, to) + 1).filter(pickable).forEach((x) => selected.add(x.id));
       refreshSelection();
     } else {
       const on = !selected.has(a.id);
       toggle(a); anchor = a.id; focused = on ? a.id : null;
-      if (on) play(a); else if (player?.asset === a) stopSound();
+      if (on && a.versions.length) play(a, { loop: false }); else if (player?.asset === a) stopSound();
     }
     syncDock();
   }
@@ -961,17 +966,22 @@ ${p.form}`,
     if (e.button || e.target.closest('.tile, button')) return;
     const x0 = e.clientX, y0 = e.clientY, base = new Set(e.ctrlKey ? selected : []), box = $('lasso');
     lassoing = true;
+    let moved = false;
     const move = (ev) => {
+      if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > 4) moved = true;
       const l = Math.min(x0, ev.clientX), t = Math.min(y0, ev.clientY), r = Math.max(x0, ev.clientX), b = Math.max(y0, ev.clientY);
       box.hidden = false; box.style.cssText = `left:${l}px;top:${t}px;width:${r - l}px;height:${b - t}px`;
       selected.clear(); base.forEach((id) => selected.add(id));
       document.querySelectorAll('.tile').forEach((tile) => {
         const q = tile.getBoundingClientRect();
-        if (q.left < r && q.right > l && q.top < b && q.bottom > t && byId(tile.dataset.id).versions.length) selected.add(tile.dataset.id);
+        if (q.left < r && q.right > l && q.top < b && q.bottom > t && pickable(byId(tile.dataset.id))) selected.add(tile.dataset.id);
       });
       refreshSelection();
     };
-    const up = () => { lassoing = false; box.hidden = true; removeEventListener('pointermove', move); removeEventListener('pointerup', up); };
+    const up = () => {
+      lassoing = false; box.hidden = true; removeEventListener('pointermove', move); removeEventListener('pointerup', up);
+      if (!moved && !e.ctrlKey && !e.shiftKey) { selected.clear(); focused = null; refreshSelection(); stopSound(); }
+    };
     addEventListener('pointermove', move); addEventListener('pointerup', up);
   });
 
@@ -1001,11 +1011,11 @@ ${p.form}`,
     if (e.key.startsWith('Arrow')) {
       e.preventDefault();
       const next = neighbour(e.key);
-      if (next) { next.focus(); next.scrollIntoView({ block: 'nearest' }); const n = byId(next.dataset.id); focused = n.id; if (n.versions.length) play(n); else stopSound(); }
+      if (next) { next.focus(); next.scrollIntoView({ block: 'nearest' }); const n = byId(next.dataset.id); focused = n.id; if (n.versions.length) play(n, { loop: false }); else stopSound(); }
     } else if (e.code === 'Space' && a) { e.preventDefault(); if (player?.asset === a) stopSound(); else play(a); }
-    else if (e.key === 'Enter' && a?.versions.length) openDetail(a);
+    else if (e.key === 'Enter' && pickable(a)) openDetail(a);
     else if (e.key.toLowerCase() === 'a' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); ready(visible()).forEach((x) => selected.add(x.id)); refreshSelection(); }
-    else if (e.key.toLowerCase() === 'x' && a?.versions.length) toggle(a);
+    else if (e.key.toLowerCase() === 'x' && pickable(a)) toggle(a);
     else if (e.key.toLowerCase() === 'a' && a) setStatus(a, 'approved');
     else if (e.key === 'F2' && a) { e.preventDefault(); renameTile(a); }
     else if (e.key === 'Delete' && a) { e.preventDefault(); removeAssets(targetsOf(a)); }
@@ -1027,15 +1037,21 @@ ${p.form}`,
     return Math.min(MAX_DRAFTS, said ? +(said[1] || said[2] || said[3]) : drafts);
   }
   function draftPicker() {
-    const box = el('label', 'draftPick', t('drafts')), pick = el('select');
-    for (let i = 1; i <= MAX_DRAFTS; i++) pick.append(Object.assign(el('option', '', t('draftCount', i)), { value: i }));
-    pick.value = drafts; pick.setAttribute('aria-label', t('draftCountLabel'));
-    pick.onchange = () => { drafts = +pick.value; };
-    box.append(pick); return box;
+    const seg = el('div', 'draftSeg'); seg.setAttribute('role', 'radiogroup'); seg.setAttribute('aria-label', t('draftCountLabel'));
+    seg.append(el('span', 'segLabel', t('drafts')));
+    for (let i = 1; i <= MAX_DRAFTS; i++) {
+      const b = el('button', '', String(i)); b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(drafts === i));
+      b.setAttribute('aria-label', t('draftCount', i));
+      b.onclick = () => {
+        drafts = i; try { localStorage.setItem('asset-drafts', String(i)); } catch { /* kept for this visit */ }
+        document.querySelectorAll('.draftSeg [role=radio]').forEach((x) => x.setAttribute('aria-checked', String(+x.textContent === i)));
+      };
+      seg.append(b);
+    }
+    return seg;
   }
   function request(list, text) {
     const change = changeFrom(text), count = draftsWanted(text);
-    drafts = 1; $('draftSlot').replaceChildren(draftPicker());
     list.forEach((a, i) => {
       a.status = 'working'; a.progress = 0;
       a.chat.push({ me: true, text });
@@ -1113,7 +1129,7 @@ ${p.form}`,
     const picked = pickedSounds(), url = text.match(/https?:\/\/\S+/i)?.[0], note = text.match(/^\s*(?:메모|참고|레퍼런스|note|reference)\s*[:：]\s*(.+)$/is)?.[1];
     const targets = picked.length ? picked.map((a) => 'asset:' + a.id) : ['project'];
     if (url || note) return { reply: t('agentNoted'), questions: [], actions: targets.map((target) => ({ op: 'add_ref', target, kind: url ? 'link' : 'text', url: url || '', text: url ? text.replace(url, '').trim() : note.trim(), name: '', assets: [] })) };
-    const usable = picked.filter((a) => a.versions.length && a.status !== 'working');
+    const usable = picked.filter((a) => (a.versions.length || a.status === 'pending') && a.status !== 'working');
     if (usable.length) return { reply: t('agentRemake', usable.length), questions: [], actions: [{ op: 'revise', assets: usable.map((a) => a.id), text }] };
     return { reply: t('agentLocal'), actions: [], questions: [] };
   }
@@ -1142,7 +1158,7 @@ ${p.form}`,
     const before = { cats: JSON.stringify(cats), projectRefs: JSON.stringify(projectRefs), brief, sel: new Set(selected),
       assets: assets.map((a) => [a, { name: a.name, cat: a.cat, description: a.description, when: a.when, music: a.music, loop: a.loop, refs: JSON.stringify(ownRefs(a)) }]) };
     let n = 0;
-    const remakes = [];
+    const remakes = [], fills = [];
     for (const x of actions || []) {
       const list = (x.assets || []).map(byId).filter(Boolean);
       const target = String(x.target || ''), scope = target === 'project' ? { type: 'project' } : target.startsWith('cat:') && catOf(target.slice(4)) ? { type: 'cat', c: catOf(target.slice(4)) } : target.startsWith('asset:') && byId(target.slice(6)) ? { type: 'asset', a: byId(target.slice(6)) } : null;
@@ -1155,10 +1171,15 @@ ${p.form}`,
       else if (x.op === 'add_cat' && x.cat && !catOf(slugOf(x.cat).join('_'))) { addCat(x.name || x.cat, x.kind, slugOf(x.cat).join('_'), catOf(x.parent) ? x.parent : undefined); n++; }
       else if (x.op === 'set_brief') { brief = x.text || ''; n++; }
       else if (x.op === 'select') { selected.clear(); list.forEach((a) => selected.add(a.id)); }
-      else if (x.op === 'revise') remakes.push([list.filter((a) => a.versions.length && a.status !== 'working'), x.text || '']);
+      else if (x.op === 'revise') {
+        remakes.push([list.filter((a) => a.versions.length && a.status !== 'working'), x.text || '']);
+        const fresh = list.filter((a) => a.status === 'pending');
+        if (fresh.length) { fresh.forEach((a) => { if (x.text) { a.description = x.text; a.chat.push({ me: true, text: x.text }); } }); fills.push(fresh); }
+      }
     }
     syncRefs(); renderBoard();
     for (const [list, text] of remakes) if (list.length) request(list, text);
+    for (const list of fills) fill(list);
     if (!n) return null;
     return () => {
       cats = JSON.parse(before.cats); projectRefs = JSON.parse(before.projectRefs); brief = before.brief;
@@ -1242,6 +1263,7 @@ ${p.form}`,
   // code, versions) across the full width. The side is the conversation, with the references above its input.
   // Licences are not per sound: they are all in the export dialog, copied at once.
   function renderDetail() {
+    if (!openAsset.versions.length) { renderEmptyDetail(); return; }
     const a = openAsset, v = heard(a), m = v.measure, box = $('detailView');
     const typed = document.querySelector('.detailDock textarea')?.value || '';
     box.textContent = '';
@@ -1296,6 +1318,21 @@ ${p.form}`,
     });
     renderPlayButton(); renderHeader();
   }
+  function renderEmptyDetail() {
+    const a = openAsset, box = $('detailView'), typed = document.querySelector('.detailDock textarea')?.value || '';
+    box.textContent = '';
+    const main = el('div', 'dMain'), head = el('div', 'dHead'), title = el('div', 'dTitle');
+    const name = el('input', 'dName'); name.value = nm(a); name.setAttribute('aria-label', t('nameLabel'));
+    name.oninput = () => { a.name = name.value; renderHeader(); };
+    const facts = el('div', 'dFacts'); facts.append(catPicker(a, () => renderDetail()));
+    title.append(name, facts); head.append(title);
+    const wave = el('div', 'dWave dEmpty');
+    if (a.status === 'working') wave.append(el('span', 'note', `${statusText('working')}…`));
+    else { const go = el('button', 'primary', t('makeOne')); go.id = 'makeOne'; go.onclick = () => fill([a]); wave.append(go); }
+    main.append(head, wave);
+    box.append(main, chatPanel(a, typed));
+    renderPlayButton(); renderHeader();
+  }
   // One raised button: approve, or, once approved, a green "approved" that takes it back. A approves from the keyboard.
   function approveButton(a) {
     const done = a.status === 'approved', b = el('button', 'dApprove' + (done ? ' done' : ''));
@@ -1306,7 +1343,7 @@ ${p.form}`,
     return b;
   }
   function toggleApprove(a) {
-    if (a.status === 'working' || a.status === 'review') return;
+    if (a.status === 'working' || a.status === 'review' || !a.versions.length) return;
     if (a.status === 'approved') a.status = 'draft'; else approve(a);
     renderDetail();
   }
@@ -1343,19 +1380,15 @@ ${p.form}`,
     const tools = el('div', 'dTools');
     const refs = refSlot({ type: 'asset', a }, { bare: true, tools, redraw: redrawChat });
     const busy = a.status === 'working';
-    const seg = el('div', 'draftSeg'); seg.setAttribute('role', 'radiogroup'); seg.setAttribute('aria-label', t('draftCountLabel'));
-    seg.append(el('span', 'segLabel', t('drafts')));
-    for (let i = 1; i <= MAX_DRAFTS; i++) {
-      const b = el('button', '', String(i)); b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(drafts === i));
-      b.setAttribute('aria-label', t('draftCount', i));
-      b.onclick = () => { drafts = i; seg.querySelectorAll('[role=radio]').forEach((x, k) => x.setAttribute('aria-checked', String(k + 1 === i))); };
-      seg.append(b);
-    }
-    tools.append(seg);
+    tools.append(draftPicker());
     const dock = el('form', 'detailDock'), input = el('textarea'); input.rows = 2; input.value = typed;
     input.placeholder = t('askThis'); input.setAttribute('aria-label', t('askThis'));
     const send = iconButton('send', t('send'), null); send.type = 'submit'; send.disabled = busy;
-    const go = () => { const text = input.value.trim(); if (text && a.status !== 'working') request([a], text); };
+    // A sound not made yet is made from what is asked; a made one gets drafts of the change.
+    const go = () => {
+      const text = input.value.trim(); if (!text || a.status === 'working') return;
+      if (a.versions.length) request([a], text); else { a.chat.push({ me: true, text }); a.description = text; fill([a]); }
+    };
     // Enter sends, Shift+Enter breaks the line; nothing is sent while a Korean syllable is still being composed.
     input.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); go(); } };
     dock.onsubmit = (e) => { e.preventDefault(); go(); };
@@ -1399,6 +1432,7 @@ ${p.form}`,
     if (e.clientX < q.left || e.clientX > q.right || e.clientY < q.top || e.clientY > q.bottom) dlg.close();
   });
   function openDialog(title) {
+    clearTimeout(hoverTimer); queue = null; stopSound(); dynStop();
     dlg.textContent = '';
     dlg.append(iconButton('close', t('close'), () => dlg.close(), 'ghost iconBtn dlgClose'), el('h2', '', title));
   }
@@ -1523,9 +1557,6 @@ ${p.form}`,
       const r = el('label', 'lineItem'); r.append(el('span', 'grow', label), s); dlg.append(r);
     };
     opt(t('fmt'), 'format', [['wav', 'WAV'], ['ogg', 'OGG Vorbis'], ['mp3', 'MP3']]);
-    opt(t('rate'), 'rate', [[44100, '44.1 kHz'], [48000, '48 kHz'], [22050, '22.05 kHz']]);
-    if (exportOpts.format === 'wav') opt(t('bits'), 'bits', [[16, '16 bit'], [24, '24 bit']]);
-    else opt(t('quality'), 'quality', [['high', t('qualities').high], ['mid', t('qualities').mid], ['low', t('qualities').low]]);
     opt(t('folders'), 'folders', [['flat', t('foldersFlat')], ['cat', t('foldersCat')], ['kind', t('foldersKind')]]);
     const root = el('input'); root.value = exportOpts.root || 'audio'; root.setAttribute('aria-label', t('rootFolder'));
     root.onchange = () => { exportOpts.root = root.value.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') || 'audio'; autosave(); exportDialog(); };
@@ -1538,8 +1569,6 @@ ${p.form}`,
       r.append(el('span', 'grow', gameDir ? t('folderLinked', gameDir.name) : t('folderHelp')), b);
       dlg.append(el('h3', '', t('gameFolder')), r);
     }
-    dlg.append(el('h3', '', t('inBundle')));
-    for (const item of [t('bundleAudio', exportPath({ id: '<id>', cat: '<group>' })), ...t('bundleItems').slice(1), ...(exportOpts.engine === 'godot' ? [t('bundleGodot')] : [])]) dlg.append(Object.assign(el('div', 'lineItem'), { textContent: item }));
     // Every licence in one place, as CREDITS.md will read, copied at once. A sound brought in from outside gets its
     // licence and holder typed here, and the text follows as they are typed.
     const credits = el('section', 'credits'), head = el('h3', 'creditsHead'), text = el('pre', 'code creditsText');
@@ -1963,7 +1992,8 @@ ${p.form}`,
     const title = scope.type === 'project' ? t('refsProject') : t('refsOf', scope.type === 'cat' ? tx(scope.c.name) : nm(scope.a));
     openDialog(title); reopen = () => refDialog(scope); refScope = scope;
     dlg.addEventListener('close', () => { if (refScope === scope) refScope = null; if (refAudio) { refAudio.pause(); refAudio = null; } renderBoardQuiet(); }, { once: true });
-    dlg.append(el('p', 'note', t('refsHelp')[scope.type]), refSlot(scope));
+    if (t('refsHelp')[scope.type]) dlg.append(el('p', 'note', t('refsHelp')[scope.type]));
+    dlg.append(refSlot(scope));
     if (!dlg.open) dlg.showModal();
   }
   const refCount = (scope) => refList(scope).length;
@@ -2287,19 +2317,24 @@ ${p.form}`,
     if (a === b) return v >= a ? 1 : 0;
     return Math.max(0, Math.min(1, (v - a) / (b - a)));
   };
+  const gainDb = (l) => ((l.gain ?? 1) > 0 ? 20 * Math.log10(l.gain ?? 1) : DB_FLOOR);
   const curveOf = (l) => {
-    const [a, b] = l.on || [0, 1];
-    return [0, 0.25, 0.5, 0.75, 1].map((k) => [Math.round((a + (b - a) * k) * 1000) / 1000, k ? Math.round(20 * Math.log10(k) * 10) / 10 : DB_FLOOR]).sort((x, y) => x[0] - y[0]);
+    const [a, b] = l.on || [0, 1], g = gainDb(l);
+    return [0, 0.25, 0.5, 0.75, 1].map((k) => [Math.round((a + (b - a) * k) * 1000) / 1000, k ? Math.round(Math.max(DB_FLOOR, 20 * Math.log10(k) + g) * 10) / 10 : DB_FLOOR]).sort((x, y) => x[0] - y[0]);
   };
+  // Preview only, never saved: layers muted or heard alone while the dialog is open.
+  const dynMix = new Map();
+  const audible = (l, d) => { const m = dynMix.get(l) || {}, solo = d.layers.some((x) => dynMix.get(x)?.solo); return m.mute || (solo && !m.solo) ? 0 : 1; };
+  const layerOut = (l, d) => layerLevel(l, d) * (l.gain ?? 1) * audible(l, d);
   const dynToSpec = (d) => ({
     id: d.id, name: d.name, type: d.type, params: d.params.map(({ id, name, min, max, default: def }) => ({ id, name, min, max, default: def })),
     ...(d.type === 'music' ? { bpm: d.bpm, beats_per_bar: d.beats || 4 } : {}),
-    layers: d.layers.filter((l) => byId(l.asset)).map((l) => ({ asset: l.asset, role: l.role, param: l.param || null, on: l.on, curve: l.param ? curveOf(l) : [[0, 0], [1, 0]], ...(l.role === 'scatter' ? { scatter: l.scatter } : {}) })),
+    layers: d.layers.filter((l) => byId(l.asset)).map((l) => ({ asset: l.asset, role: l.role, param: l.param || null, on: l.on, volume: Math.round((l.gain ?? 1) * 100) / 100, curve: l.param ? curveOf(l) : [[0, Math.round(gainDb(l) * 10) / 10], [1, Math.round(gainDb(l) * 10) / 10]], ...(l.role === 'scatter' ? { scatter: l.scatter } : {}) })),
   });
   const dynFromSpec = (x) => ({
     id: x.id, name: x.name || x.id, type: x.type === 'music' ? 'music' : 'ambience', bpm: x.bpm || 100, beats: x.beats_per_bar || 4,
     params: (x.params || []).map((p) => ({ ...p, value: p.default ?? 0 })),
-    layers: (x.layers || []).map((l) => ({ asset: l.asset, role: l.role || 'bed', param: l.param || '', on: l.on || [0, 1], scatter: l.scatter || { min_gap: 2, max_gap: 8, pitch: [0.9, 1.1], pan: [-0.8, 0.8] } })),
+    layers: (x.layers || []).map((l) => ({ asset: l.asset, role: l.role || 'bed', param: l.param || '', on: l.on || [0, 1], gain: typeof l.volume === 'number' ? l.volume : 1, scatter: l.scatter || { min_gap: 2, max_gap: 8, pitch: [0.9, 1.1], pan: [-0.8, 0.8] } })),
   });
   function dynSection() {
     const box = el('div', 'group dynGroup'), h = el('h2');
@@ -2318,8 +2353,8 @@ ${p.form}`,
   function newDynamic() {
     const d = { id: dynId(), name: t('newDyn'), type: 'ambience', bpm: 100, beats: 4, params: [{ id: 'intensity', name: t('intensity'), min: 0, max: 1, default: 0.5, value: 0.5 }], layers: [] };
     const beds = assets.filter((a) => a.versions.length && a.loop && kindOf(a.cat) === 'amb').slice(0, 2);
-    beds.forEach((a, i) => d.layers.push({ asset: a.id, role: 'bed', param: i ? 'intensity' : '', on: [0.3, 0.8], scatter: { min_gap: 2, max_gap: 8, pitch: [0.9, 1.1], pan: [-0.8, 0.8] } }));
-    dynamics.push(d); renderBoard(); dynDialog(d);
+    beds.forEach((a, i) => d.layers.push({ asset: a.id, role: 'bed', param: i ? 'intensity' : '', on: [0.3, 0.8], gain: 1, scatter: { min_gap: 2, max_gap: 8, pitch: [0.9, 1.1], pan: [-0.8, 0.8] } }));
+    dynDialog(d);
   }
   let dynPlayer = null;
   function dynStop() {
@@ -2334,7 +2369,7 @@ ${p.form}`,
     const at = ctx.currentTime + 0.05, p = { d, nodes: [], gains: [], timers: [] };
     for (const l of d.layers) {
       const a = byId(l.asset); if (!a?.versions.length) continue;
-      const g = ctx.createGain(); g.gain.value = layerLevel(l, d); g.connect(master); p.gains.push([l, g]);
+      const g = ctx.createGain(); g.gain.value = layerOut(l, d); g.connect(master); p.gains.push([l, g]);
       if (l.role === 'scatter') {
         const fire = () => {
           if (dynPlayer !== p) return;
@@ -2350,56 +2385,91 @@ ${p.form}`,
     }
     dynPlayer = p;
   }
-  const dynLevels = () => dynPlayer?.gains.forEach(([l, g]) => g.gain.setTargetAtTime(layerLevel(l, dynPlayer.d), ctx.currentTime, 0.15));
+  // Moves the playing layers and the level bars together.
+  function dynLevels() {
+    dynPlayer?.gains.forEach(([l, g]) => g.gain.setTargetAtTime(layerOut(l, dynPlayer.d), ctx.currentTime, 0.15));
+    document.querySelectorAll('.dynLayer').forEach((card) => { const bar = card.querySelector('.lvl i'); if (bar && card.layer) bar.style.width = `${Math.round(Math.min(1, layerOut(card.layer, card.d)) * 100)}%`; });
+  }
+  // Plain words, no ids to type: a name, what kind, the game values, and the layers as cards with their own
+  // sound, volume, level bar, solo and mute. Every change applies at once; a new one is kept from its first change.
   function dynDialog(d) {
     openDialog(t('dynHead')); reopen = () => dynDialog(d);
-    dlg.onclose = () => { dynStop(); dlg.onclose = null; renderBoard(); };
-    // The board card follows every change, so nothing waits on the dialog's close event.
-    const redraw = () => { const top = dlg.scrollTop; dlg.textContent = ''; build(); dlg.scrollTop = top; renderBoard(); };
+    const kept = () => dynamics.includes(d);
+    const changed = () => { if (!kept()) dynamics.push(d); renderBoard(); autosave(); };
+    dlg.onclose = () => { dynStop(); dynMix.clear(); dlg.onclose = null; renderBoard(); };
+    const redraw = () => { const top = dlg.scrollTop; dlg.textContent = ''; build(); dlg.scrollTop = top; };
+    const restart = () => { if (dynPlayer?.d === d) dynStart(d); };
     const row = (label, ...kids) => { const r = el('label', 'lineItem'); r.append(el('span', 'grow', label), ...kids); dlg.append(r); return r; };
-    const input = (value, set, type = 'text', width) => { const i = el('input'); i.type = type; i.value = value; if (type === 'number') i.step = 'any'; if (width) i.style.width = width; i.oninput = () => { set(type === 'number' ? +i.value : i.value); dynLevels(); autosave(); }; return i; };
-    const select = (value, choices, set) => { const s = el('select'); choices.forEach(([v, l]) => s.add(new Option(l, v))); s.value = value; s.onchange = () => { set(s.value); dynLevels(); autosave(); }; return s; };
+    const input = (value, set, type = 'text', width) => { const i = el('input'); i.type = type; i.value = value; if (type === 'number') i.step = 'any'; if (width) i.style.width = width; i.oninput = () => { set(type === 'number' ? +i.value : i.value); dynLevels(); changed(); }; return i; };
+    const select = (value, choices, set) => { const s = el('select'); choices.forEach(([v, l]) => s.add(new Option(l, v))); s.value = value; s.onchange = () => { set(s.value); dynLevels(); changed(); }; return s; };
+    // live: a game value is only tried out here, so moving it is not a change to keep.
+    const slider = (value, min, max, set, label, live = false) => {
+      const r = el('input'); r.type = 'range'; r.min = min; r.max = max; r.step = (max - min) / 100 || 0.01; r.value = value; r.setAttribute('aria-label', label);
+      r.oninput = () => { set(+r.value); dynLevels(); if (!live) changed(); }; return r;
+    };
+    function layerCard(l, usable, roles) {
+      const card = el('div', 'dynLayer'), mix = dynMix.get(l) || {}; card.layer = l; card.d = d;
+      const pick = select(l.asset, usable.map((a) => [a.id, nm(a)]), (v) => { l.asset = v; restart(); }); pick.setAttribute('aria-label', t('layersHead'));
+      const lvl = el('span', 'lvl'); lvl.append(el('i'));
+      const solo = iconButton('solo', t('layerSolo'), () => { dynMix.set(l, { ...mix, solo: !mix.solo }); if (dynPlayer?.d !== d) dynStart(d); dynLevels(); redraw(); }, 'ghost iconBtn');
+      solo.setAttribute('aria-pressed', String(!!mix.solo));
+      const mute = iconButton(mix.mute ? 'muted' : 'sound', t('layerMute'), () => { dynMix.set(l, { ...mix, mute: !mix.mute }); dynLevels(); redraw(); }, 'ghost iconBtn');
+      mute.setAttribute('aria-pressed', String(!!mix.mute));
+      const del = iconButton('close', t('deleteItem'), () => { d.layers.splice(d.layers.indexOf(l), 1); dynMix.delete(l); restart(); changed(); redraw(); }, 'ghost iconBtn');
+      const top = el('div', 'dlTop'); top.append(pick, lvl, solo, mute, del);
+      const opts = el('div', 'dlOpts'), field = (label, ...kids) => { const f = el('label', 'dlField'); f.append(el('span', '', label), ...kids); opts.append(f); };
+      if (d.type !== 'music') field(t('layerPlays'), select(l.role, roles, (v) => { l.role = v; restart(); redraw(); }));
+      field(t('layerVol'), slider(l.gain ?? 1, 0, 1.5, (v) => { l.gain = v; }, t('layerVol')));
+      field(t('layerWhen'), select(l.param || '', [['', t('always')], ...d.params.map((p) => [p.id, t('followParam', p.name)])], (v) => { l.param = v; redraw(); }));
+      const p = d.params.find((x) => x.id === l.param);
+      if (p) {
+        field(t('fadeFrom'), slider(l.on[0], p.min, p.max, (v) => { l.on[0] = v; }, t('fadeFrom')));
+        field(t('fadeTo'), slider(l.on[1], p.min, p.max, (v) => { l.on[1] = v; }, t('fadeTo')));
+      }
+      if (l.role === 'scatter') {
+        const gap = el('span', 'dlGap');
+        gap.append(input(l.scatter.min_gap, (v) => { l.scatter.min_gap = v; }, 'number', '56px'), '~', input(l.scatter.max_gap, (v) => { l.scatter.max_gap = v; }, 'number', '56px'), t('gapUnit'));
+        field(t('gap'), gap);
+      }
+      card.append(top, opts);
+      return card;
+    }
     function build() {
-      dlg.append(iconButton('close', t('close'), () => { dynStop(); dlg.close(); renderBoard(); }, 'ghost iconBtn dlgClose'), el('h2', '', t('dynHead')));
-      const playing = dynPlayer?.d === d, play = el('button', 'primary', playing ? t('stop') : t('play'));
+      dlg.append(iconButton('close', t('close'), () => { dynStop(); dlg.close(); }, 'ghost iconBtn dlgClose'), el('h2', '', t('dynHead')));
+      const play = el('button', 'primary', dynPlayer?.d === d ? t('stop') : t('play'));
       play.onclick = () => { if (dynPlayer?.d === d) dynStop(); else dynStart(d); redraw(); };
       const top = el('div', 'dlgRow'); top.style.justifyContent = 'flex-start'; top.append(play); dlg.append(top);
-      row(t('nameLabel'), input(d.name, (v) => { d.name = v; renderBoard(); }));
-      row('id', input(d.id, (v) => { d.id = slugOf(v).join('_') || d.id; }, 'text', '160px'));
-      row(t('dynType'), select(d.type, Object.entries(t('dynTypes')), (v) => { d.type = v; d.layers.forEach((l) => { if (v === 'music') l.role = 'stem'; else if (l.role === 'stem') l.role = 'bed'; }); redraw(); }));
-      if (d.type === 'music') { row('BPM', input(d.bpm, (v) => { d.bpm = v; }, 'number', '90px')); row(t('beatsPerBar'), input(d.beats || 4, (v) => { d.beats = v; }, 'number', '90px')); }
+      row(t('nameLabel'), input(d.name, (v) => { d.name = v; }));
+      row(t('dynType'), select(d.type, Object.entries(t('dynTypes')), (v) => { d.type = v; d.layers.forEach((l) => { if (v === 'music') l.role = 'stem'; else if (l.role === 'stem') l.role = 'bed'; }); restart(); redraw(); }));
+      if (d.type === 'music') row(t('tempo'), input(d.bpm, (v) => { d.bpm = v; }, 'number', '90px'));
       dlg.append(el('h3', '', t('params')));
       for (const p of d.params) {
-        const slider = el('input'); slider.type = 'range'; slider.min = p.min; slider.max = p.max; slider.step = (p.max - p.min) / 100; slider.value = p.value ?? p.default;
-        slider.setAttribute('aria-label', p.name); slider.oninput = () => { p.value = +slider.value; dynLevels(); };
-        const name = input(p.name, (v) => { p.name = v; }, 'text', '120px'), def = input(p.default, (v) => { p.default = v; }, 'number', '70px'); def.title = t('paramDefault');
-        const del = iconButton('close', t('deleteItem'), () => { d.params.splice(d.params.indexOf(p), 1); d.layers.forEach((l) => { if (l.param === p.id) l.param = ''; }); redraw(); }, 'ghost iconBtn');
-        const r = el('div', 'lineItem'); r.append(el('code', '', p.id), name, slider, def, del); dlg.append(r);
+        const del = iconButton('close', t('deleteItem'), () => { d.params.splice(d.params.indexOf(p), 1); d.layers.forEach((l) => { if (l.param === p.id) l.param = ''; }); dynLevels(); changed(); redraw(); }, 'ghost iconBtn');
+        const r = el('div', 'lineItem dynParam'); r.append(input(p.name, (v) => { p.name = v; }, 'text', '140px'), slider(p.value ?? p.default, p.min, p.max, (v) => { p.value = v; }, p.name, true), del); dlg.append(r);
       }
       const addP = el('button', 'ghost', '+ ' + t('addParam'));
-      addP.onclick = () => { const taken = new Set(d.params.map((p) => p.id)); let k = d.params.length + 1; while (taken.has(`param_${k}`)) k++; d.params.push({ id: `param_${k}`, name: `${t('param')} ${k}`, min: 0, max: 1, default: 0, value: 0 }); redraw(); };
+      addP.onclick = () => { const taken = new Set(d.params.map((p) => p.id)); let k = d.params.length + 1; while (taken.has(`param_${k}`)) k++; d.params.push({ id: `param_${k}`, name: `${t('param')} ${k}`, min: 0, max: 1, default: 0, value: 0 }); changed(); redraw(); };
       dlg.append(addP, el('h3', '', t('layersHead')));
-      const usable = assets.filter((a) => a.versions.length);
+      const usable = assets.filter((a) => a.versions.length), roles = Object.entries(t('roles')).filter(([r]) => r !== 'stem');
       if (!usable.length) dlg.append(el('p', 'note', t('dynNoSounds')));
-      const roles = Object.entries(t('roles')).filter(([r]) => (d.type === 'music' ? r === 'stem' : r !== 'stem'));
-      for (const l of d.layers) {
-        const r = el('div', 'lineItem dynLayer');
-        const pick = select(l.asset, usable.map((a) => [a.id, nm(a)]), (v) => { l.asset = v; if (dynPlayer?.d === d) dynStart(d); });
-        const role = select(l.role, roles, (v) => { l.role = v; if (dynPlayer?.d === d) dynStart(d); redraw(); });
-        const param = select(l.param || '', [['', t('always')], ...d.params.map((p) => [p.id, p.name])], (v) => { l.param = v; redraw(); });
-        const del = iconButton('close', t('deleteItem'), () => { d.layers.splice(d.layers.indexOf(l), 1); if (dynPlayer?.d === d) dynStart(d); redraw(); }, 'ghost iconBtn');
-        r.append(pick, role, param);
-        if (l.param) { const a = input(l.on[0], (v) => { l.on[0] = v; }, 'number', '64px'), b = input(l.on[1], (v) => { l.on[1] = v; }, 'number', '64px'); a.title = t('fadeFrom'); b.title = t('fadeTo'); r.append(el('span', 'tag', t('onRange')), a, b); }
-        if (l.role === 'scatter') { const a = input(l.scatter.min_gap, (v) => { l.scatter.min_gap = v; }, 'number', '56px'), b = input(l.scatter.max_gap, (v) => { l.scatter.max_gap = v; }, 'number', '56px'); r.append(el('span', 'tag', t('gap')), a, b); }
-        r.append(del); dlg.append(r);
-      }
+      for (const l of d.layers) dlg.append(layerCard(l, usable, roles));
       const addL = el('button', 'ghost', '+ ' + t('addLayer')); addL.disabled = !usable.length;
-      addL.onclick = () => { const a = usable[0]; d.layers.push({ asset: a.id, role: d.type === 'music' ? 'stem' : a.loop ? 'bed' : 'scatter', param: d.params[0]?.id || '', on: [0, 1], scatter: { min_gap: 2, max_gap: 8, pitch: [0.9, 1.1], pan: [-0.8, 0.8] } }); redraw(); };
-      const foot = el('div', 'dlgRow'), del = el('button', 'ghost', t('deleteItem'));
-      del.onclick = () => { if (!confirm(t('confirmDelete', 1))) return; dynStop(); dynamics.splice(dynamics.indexOf(d), 1); dlg.close(); renderBoard(); };
-      foot.append(del); dlg.append(addL, el('p', 'note', t('dynHelp')), foot);
+      addL.onclick = () => {
+        // The next sound not in it yet, of the fitting kind (music for music) when there is one.
+        const used = new Set(d.layers.map((l) => l.asset)), fits = (a) => (kindOf(a.cat) === 'music') === (d.type === 'music');
+        const a = usable.find((x) => !used.has(x.id) && fits(x)) || usable.find((x) => !used.has(x.id)) || usable[0];
+        d.layers.push({ asset: a.id, role: d.type === 'music' ? 'stem' : a.loop ? 'bed' : 'scatter', param: '', on: [0, 1], gain: 1, scatter: { min_gap: 2, max_gap: 8, pitch: [0.9, 1.1], pan: [-0.8, 0.8] } });
+        restart(); changed(); redraw();
+      };
+      dlg.append(addL, el('p', 'note', t('dynHelp')));
+      if (kept()) {
+        const foot = el('div', 'dlgRow'), del = el('button', 'ghost', t('deleteItem'));
+        del.onclick = () => { if (!confirm(t('confirmDelete', 1))) return; dynStop(); dynamics.splice(dynamics.indexOf(d), 1); dlg.close(); };
+        foot.append(del); dlg.append(foot);
+      }
+      dynLevels();
     }
-    build();
+    dlg.textContent = ''; build();
     if (!dlg.open) dlg.showModal();
   }
 
@@ -2475,7 +2545,8 @@ ${p.form}`,
   }
   function autosave() { if (paused) return; clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 500); }
   addEventListener('pagehide', saveNow);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) saveNow(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(hoverTimer); queue = null; stopSound(); dynStop(); saveNow(); } });
+  addEventListener('blur', () => { clearTimeout(hoverTimer); if (player?.hover) stopSound(); });
   async function restore() {
     let data = null;
     const blobs = new Map();
@@ -2526,7 +2597,7 @@ ${p.form}`,
       const tiles = [...document.querySelectorAll('.tile')].slice(0, 40).map((t) => { const q = t.getBoundingClientRect(); return { x: q.left, y: q.top, w: q.width, h: q.height, c: resolved(color(byId(t.dataset.id).cat)) }; });
       e.source?.postMessage({ type: 'asset:tiles', tiles }, '*');
     }
-    if (e.data?.type === 'asset:hide') { queue = null; stopSound(); dynStop(); saveNow(); }
+    if (e.data?.type === 'asset:hide') { clearTimeout(hoverTimer); queue = null; stopSound(); dynStop(); saveNow(); }
   });
   function setLang(next) {
     if (!LANGS.includes(next)) return;
@@ -2540,9 +2611,9 @@ ${p.form}`,
 
   /* ---------- start ---------- */
   applyStatic();
-  setIcon($('backBtn'), 'music'); setIcon($('send'), 'send'); setIcon($('playAll'), 'play'); setIcon($('exportBtn'), 'download'); setIcon($('menuBtn'), 'menu'); setIcon($('boardBack'), 'back'); setIcon($('prevAsset'), 'prev'); setIcon($('nextAsset'), 'next');
+  setIcon($('backBtn'), 'music'); setIcon($('send'), 'send'); setIcon($('playAll'), 'play'); setIcon($('exportBtn'), 'upload'); setIcon($('menuBtn'), 'menu'); setIcon($('boardBack'), 'back'); setIcon($('prevAsset'), 'prev'); setIcon($('nextAsset'), 'next');
   document.querySelectorAll('[data-icon]').forEach((s) => setIcon(s, s.dataset.icon));
-  $('importBtn').querySelector('.importIco').innerHTML = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS.upload}</svg>`; $('importBtn').onclick = () => importDialog();
+  $('importBtn').querySelector('.importIco').innerHTML = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS.download}</svg>`; $('importBtn').onclick = () => importDialog();
   $('exportBtn').onclick = exportDialog;
   $('boardBack').onclick = $('gameTitle').onclick = () => { if (openAsset) closeDetail(); };
   $('prevAsset').onclick = () => step(-1); $('nextAsset').onclick = () => step(1);
