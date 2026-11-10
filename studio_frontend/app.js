@@ -619,19 +619,28 @@
     $('log').append(d); $('log').scrollTop = 1e9;
   }
   function seedOf(p) {
+    if (p.artLock) return p.artLock.seed;
     if (p.artSeed != null) return p.artSeed;
     let h = 0; for (const c of p.id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
     return h;
   }
+  // Everything albumArt.make reads: the seed and the song's name, tempo and track roles.
+  // A locked cover (p.artLock) keeps these as they were, so it stays the same picture however the song changes.
+  const freeze = (p, seed) => ({ seed, name: p.name, bpm: p.bpm, roles: p.tracks.map((tr) => tr.role || 'other') });
+  const coverFacts = (p, seed = seedOf(p)) => (p.artLock?.seed === seed ? p.artLock : freeze(p, seed));
+  const drawCover = (f) => albumArt.make(f.seed, { name: f.name, bpm: f.bpm, tracks: f.roles.map((role) => ({ role })) }).svg;
+  const lockFrom = (l) => (l && typeof l.seed === 'number' && Array.isArray(l.roles)
+    ? { seed: l.seed, name: String(l.name ?? ''), bpm: +l.bpm || 120, roles: l.roles.map((r) => String(r || 'other')) } : undefined);
   function renderArt(p) {
-    const seed = seedOf(p), key = [seed, p.name, p.bpm, p.tracks.map((tr) => tr.role)].join('|');
+    const f = coverFacts(p), key = JSON.stringify(f);
     if (renderArt.key === key) return;
     renderArt.key = key;
-    $('art').innerHTML = albumArt.make(seed, p).svg;
+    $('art').innerHTML = drawCover(f);
   }
   function pickArt(p, seed) {
     p.artHistory ||= [seedOf(p)];
     p.artSeed = seed;
+    if (p.artLock) p.artLock = freeze(p, seed); // a cover picked while locked is locked as the song is now
     if (!p.artHistory.includes(seed)) p.artHistory.push(seed);
     if (p.artHistory.length > 30) p.artHistory.shift();
     touched(); render();
@@ -643,10 +652,21 @@
     const shelf = div('shelf'), rack = div('rack'), track = div('rackTrack'), plank = div('plank'), bar = div('shelfBar');
     const label = el('span'), use = button(t('use_art'), () => { pickArt(p, list[at]); close(); });
     use.className = 'primary'; use.id = 'shelfUse';
+    // Off: the cover follows the song's name, tempo and parts. On: it stays as it is now.
+    const lock = el('button', { className: 'lockSwitch', type: 'button' }, el('span', { className: 'sw' }), t('lock_cover'));
+    lock.setAttribute('role', 'switch');
+    const showLock = () => lock.setAttribute('aria-checked', String(!!p.artLock));
+    const lpArt = (seed) => `<svg viewBox="0 0 100 100" aria-hidden="true">${drawCover(coverFacts(p, seed))}</svg>`;
+    lock.onclick = () => {
+      if (p.artLock) delete p.artLock; else p.artLock = freeze(p, now);
+      showLock(); touched(); render();
+      if (list.includes(now)) lps[list.indexOf(now)].innerHTML = lpArt(now);
+    };
+    showLock();
     shelf.setAttribute('role', 'dialog'); shelf.setAttribute('aria-modal', 'true'); shelf.setAttribute('aria-label', t('past_art'));
     let at = Math.max(0, list.indexOf(now));
     const slot = 36, side = 24, lps = list.map((seed, i) => {
-      const b = el('button', { className: 'lp', innerHTML: `<svg viewBox="0 0 100 100" aria-hidden="true">${albumArt.make(seed, p).svg}</svg>` });
+      const b = el('button', { className: 'lp', innerHTML: lpArt(seed) });
       b.setAttribute('aria-label', t('art_n', { n: list.length - i }));
       b.style.animationDelay = `${Math.min(i, 24) * 28}ms`;
       b.onclick = () => { if (i === at) use.click(); else show(i); };
@@ -671,7 +691,7 @@
     shelf.onwheel = (e) => { e.preventDefault(); const stamp = performance.now(); if (stamp - wheelAt > 90) { wheelAt = stamp; show(at + Math.sign(e.deltaY || e.deltaX)); } };
     shelf.onclick = (e) => { if (e.target === shelf) close(); };
     const shut = iconButton('close', t('close'), close); shut.classList.add('ghost', 'shelfClose');
-    bar.append(label, use);
+    bar.append(label, use, lock);
     rack.append(track); shelf.append(shut, rack, plank, bar);
     $('app').after(shelf);
     addEventListener('resize', fitShelf);
@@ -912,7 +932,7 @@
     const base = newProject(String(n.name || fallback).slice(0, 80)), kept = Array.isArray(n.versions) && n.versions.length;
     return { ...base, bpm: n.bpm, tracks: n.tracks, head: n.head || '', mix: n.mix || {}, chat: Array.isArray(n.chat) ? n.chat : [],
       versions: kept ? n.versions : base.versions, versionId: kept ? n.versionId || n.versions[n.versions.length - 1].id : base.versionId,
-      artSeed: n.artSeed, artHistory: n.artHistory };
+      artSeed: n.artSeed, artHistory: n.artHistory, artLock: lockFrom(n.artLock) };
   };
   async function readSong(f) {
     const why = importProblem(f);

@@ -66,14 +66,18 @@ header { display:flex; align-items:center; gap:8px; padding:12px; border-bottom:
 header button { min-height:48px; }
 header .iconBtn { width:48px; position:relative; }
 #gameTitle { font-size:.89rem; color:var(--text2); white-space:nowrap; min-width:0; overflow:hidden; text-overflow:ellipsis; }
-#progress { display:flex; align-items:center; flex:none; width:160px; height:44px; margin-left:14px; cursor:pointer; }
-#progress .bar { display:flex; gap:2px; width:100%; height:8px; border-radius:999px; overflow:hidden; background:var(--raised); }
-#progress .seg { flex:none; min-width:4px; min-height:0; height:100%; padding:0; border:0; border-radius:0; cursor:pointer; }
-#progress .seg[aria-pressed="true"] { box-shadow:inset 0 0 0 1px var(--text); }
+#progress { display:flex; align-items:center; flex:none; max-width:160px; height:44px; margin-left:14px; cursor:pointer; }
+#progress .pads { display:grid; grid-auto-flow:column; column-gap:3px; row-gap:2px; }
+#progress i { display:block; border-radius:3px; background:var(--raised); transition:opacity .15s; }
+#progress .pads.filtering i { opacity:.3; }
+#progress .pads[data-f="approved"] .s-approved, #progress .pads[data-f="draft"] .s-draft, #progress .pads[data-f="review"] .s-review,
+#progress .pads[data-f="working"] .s-working, #progress .pads[data-f="flagged"] .s-flagged, #progress .pads[data-f="pending"] .s-pending { opacity:1; }
+#progress .s-working { animation:padWork 1.2s ease-in-out infinite; }
+@keyframes padWork { 50% { filter:brightness(.5); } }
 #progressCount { display:inline-flex; align-items:center; gap:4px; margin-left:10px; font-size:.8rem; color:var(--text3); font-variant-numeric:tabular-nums; white-space:nowrap; }
 #progressCount .ico { width:14px; height:14px; color:var(--ok); }
 #progress .s-approved { background-color:var(--ok); } #progress .s-draft { background-color:var(--warn); } #progress .s-review, #progress .s-working { background-color:var(--work); }
-#progress .s-flagged { background-color:var(--err); } #progress .s-pending { background:none; }
+#progress .s-flagged { background-color:var(--err); }
 
 #boardView { display:flex; min-height:0; }
 #side { width:190px; flex:none; padding:14px 10px; border-right:1px solid var(--divider); overflow:auto; display:flex; flex-direction:column; gap:2px; }
@@ -253,7 +257,7 @@ dialog textarea { width:100%; min-height:190px; background:var(--raised); border
 ::view-transition-group(zoom) { animation-duration:.34s; animation-timing-function:cubic-bezier(.2,.8,.2,1); }
 
 @media (max-width:900px) {
-  #progress { width:56px; margin-left:8px; }
+  #progress { max-width:56px; margin-left:8px; }
   #detailView { grid-template-columns:1fr; grid-template-rows:minmax(0,1fr) 40%; }
   .stem { grid-template-columns:90px minmax(40px,1fr) 44px 44px; }
   .stem input[type=range] { display:none; }

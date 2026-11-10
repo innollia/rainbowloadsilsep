@@ -204,6 +204,8 @@ ${p.form}`,
       moreRemoved: (n) => `${n} more removed`, startWithSpec: 'Start with this spec', addOnly: 'Add only, remove nothing',
       specApplied: (n) => `Spec applied. ${n} new assets`,
       exportIssues: (n, names) => `${n} assets with spec issues will also be exported: ${names}`, exportUnapproved: (n) => `${n} unapproved assets will be left out.`,
+      gameFolder: 'Game folder', folderHelp: 'Link it and every approval is written straight into the game with these settings.', linkFolder: 'Link folder',
+      folderLinked: (n) => `Linked to ${n}. Approving writes there.`, unlinkFolder: 'Unlink', folderFailed: (m) => `Could not write to the game folder: ${m}`, folderDenied: 'No permission to write to the folder.',
       inBundle: 'In the bundle', bundleItems: ['Approved sound files audio/*.wav', 'Spec game-audio.spec.json, which Import reads back', 'CREDITS.md and lint-report.json'], licenses: 'Licenses',
       exportBundle: 'Export bundle', exported: (n) => `Bundled ${n} sounds`, restart: 'Start again from samples',
       importShort: 'Import', importTitle: 'Bring in what you already have', importIntro: 'Already made sounds, or have a list of what the game needs? Start from there.',
@@ -344,6 +346,8 @@ ${p.form}`,
       moreRemoved: (n) => `외 ${n}개 삭제`, startWithSpec: '이 명세로 작업 시작', addOnly: '삭제 없이 추가만',
       specApplied: (n) => `명세를 적용했어요. 새 에셋 ${n}개`,
       exportIssues: (n, names) => `규격 문제가 남은 에셋 ${n}개도 함께 나갑니다: ${names}`, exportUnapproved: (n) => `아직 승인 안 한 에셋 ${n}개는 빼 버릴 거야~`,
+      gameFolder: '게임 폴더', folderHelp: '연결해 두면 승인할 때마다 이 설정대로 게임 폴더에 바로 써 줄게~', linkFolder: '폴더 연결',
+      folderLinked: (n) => `${n} 폴더에 연결됨. 승인하면 바로 저장돼~`, unlinkFolder: '연결 끊기', folderFailed: (m) => `게임 폴더에 못 썼어: ${m}`, folderDenied: '폴더에 쓸 권한이 없어~',
       inBundle: '묶음에 들어가는 것', bundleItems: ['승인한 소리 파일 audio/*.wav', '명세 game-audio.spec.json (가져오기로 다시 읽음)', 'CREDITS.md와 lint-report.json'], licenses: '저작권',
       exportBundle: '묶음 내보내기', exported: (n) => `소리 ${n}개 묶어 줬어~`, restart: '샘플 단계부터 다시',
       importShort: '가져오기', importTitle: '이미 만든 작업 가져오기', importIntro: '만들어 둔 소리나 게임에 필요한 소리 목록 있으면 거기서 시작해 봐~',
@@ -456,7 +460,7 @@ ${p.form}`,
   };
   const heard = (a) => filled(a, (a.pick >= 0 && a.drafts[a.pick]) || version(a));
   const issues = (a) => (a.versions.length ? broken(a, heard(a).measure) : []);
-  const approve = (a) => { a.status = 'approved'; };
+  const approve = (a) => { a.status = 'approved'; toFolder([a]); };
   assets.filter((a) => a.sample).forEach((a) => make(a));
 
   /* ---------- audio ---------- */
@@ -658,27 +662,43 @@ ${p.form}`,
   }
   function renderHeader() {
     $('gameTitle').textContent = tx(game);
-    // A pill filled from the left: approved, waiting for a check, being made, flagged. What is not made yet stays
-    // as the empty track. Beside it, approved out of all. A part filters the board.
-    const box = $('progress'), bar = box.querySelector('.bar'), total = assets.length;
-    const all = ['approved', 'draft', 'review', 'working', 'flagged', 'pending'].map((s) => [s, assets.filter((a) => a.status === s).length]).filter(([, n]) => n);
-    bar.textContent = '';
-    for (const [s, n] of all) {
-      const seg = el('button', `seg s-${s}`); seg.style.width = `${(n / total) * 100}%`; seg.title = `${statusText(s)} ${n}`; seg.setAttribute('aria-label', seg.title);
-      seg.setAttribute('aria-pressed', String(filter.status === s));
-      seg.onclick = (e) => { e.stopPropagation(); filter.status = filter.status === s ? null : s; renderBoard(); };
-      bar.append(seg);
-    }
-    const summary = `${all.map(([s, n]) => `${statusText(s)} ${n}`).join(' · ')} (${t('total', total)})`;
-    box.title = summary; box.setAttribute('aria-label', `${t('stagesLabel')}: ${summary}`);
-    // The pill is 8px tall but the whole 44px row takes the click: the part under the pointer.
-    box.onclick = (e) => { const hit = [...bar.children].find((b) => { const r = b.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right; }); hit?.click(); };
+    const summary = renderProgress(), total = assets.length;
     const count = $('progressCount'), approved = assets.filter((a) => a.status === 'approved').length;
     count.innerHTML = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS.check}</svg>`;
     count.append(`${approved}/${total}`); count.title = summary; count.setAttribute('aria-label', t('approvedOf', approved, total));
     const waiting = assets.filter((a) => a.status === 'review').length;
     $('review').hidden = !waiting || !!openAsset; $('reviewText').textContent = t('reviewCount', waiting);
     autosave();
+  }
+  // One pad per sound, like the music screen's wait sequencer: four rows filled column by column from the left,
+  // approved first, then waiting for a check, being made, flagged; what is not made yet stays an empty pad.
+  // Beside it, approved out of all. A pad filters the board by its status.
+  const PAD_ORDER = ['approved', 'draft', 'review', 'working', 'flagged', 'pending'];
+  function renderProgress() {
+    const box = $('progress'), pads = box.querySelector('.pads'), total = assets.length;
+    const list = PAD_ORDER.flatMap((s) => assets.filter((a) => a.status === s));
+    // Four rows like the sequencer; more rows only when the pads would get thinner than 4px.
+    const W = parseFloat(getComputedStyle(box).maxWidth) || 160, H = 38, GX = 3, GY = 2;
+    let rows = 4, cols = 1, cw = 10;
+    for (; rows <= 8; rows++) { cols = Math.max(1, Math.ceil(total / rows)); cw = Math.min(10, (W - (cols - 1) * GX) / cols); if (cw >= 4) break; }
+    rows = Math.min(rows, 8);
+    const ch = Math.min(8, (H - (rows - 1) * GY) / rows);
+    pads.style.gridTemplateRows = `repeat(${rows}, ${ch}px)`; pads.style.gridAutoColumns = `${Math.max(1.5, cw)}px`;
+    // Pads are reused so a sound being made keeps pulsing through re-renders.
+    while (pads.children.length > list.length) pads.lastChild.remove();
+    while (pads.children.length < list.length) pads.append(el('i'));
+    list.forEach((a, i) => { const p = pads.children[i]; p.className = `s-${a.status}`; p.dataset.s = a.status; p.title = `${nm(a)} · ${statusText(a.status)}`; });
+    pads.classList.toggle('filtering', !!filter.status); pads.dataset.f = filter.status || '';
+    const all = PAD_ORDER.map((s) => [s, list.filter((a) => a.status === s).length]).filter(([, n]) => n);
+    const summary = `${all.map(([s, n]) => `${statusText(s)} ${n}`).join(' · ')} (${t('total', total)})`;
+    box.setAttribute('aria-label', `${t('stagesLabel')}: ${summary}`);
+    // The whole 44px row takes the click: the pad under the pointer, or the column it is in.
+    box.onclick = (e) => {
+      const hit = e.target.closest('#progress i') || [...pads.children].find((p) => { const r = p.getBoundingClientRect(); return e.clientX >= r.left - GX / 2 && e.clientX <= r.right + GX / 2; });
+      if (!hit) return;
+      filter.status = filter.status === hit.dataset.s ? null : hit.dataset.s; renderBoard();
+    };
+    return summary;
   }
   function syncDock() {
     const count = selected.size, target = focused && byId(focused);
@@ -1511,6 +1531,13 @@ ${p.form}`,
     root.onchange = () => { exportOpts.root = root.value.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') || 'audio'; autosave(); exportDialog(); };
     { const r = el('label', 'lineItem'); r.append(el('span', 'grow', t('rootFolder')), root); dlg.append(r); }
     opt(t('engine'), 'engine', [['none', t('engineNone')], ['godot', 'Godot 4']]);
+    // Chrome and Edge can write straight into the game: linked once, every approval lands there with the settings above.
+    if ('showDirectoryPicker' in window) {
+      const r = el('div', 'lineItem'), b = el('button', gameDir ? 'ghost' : '', gameDir ? t('unlinkFolder') : t('linkFolder'));
+      b.id = 'folderLink'; b.onclick = gameDir ? () => { gameDir = null; keepDir(null); exportDialog(); } : linkFolder;
+      r.append(el('span', 'grow', gameDir ? t('folderLinked', gameDir.name) : t('folderHelp')), b);
+      dlg.append(el('h3', '', t('gameFolder')), r);
+    }
     dlg.append(el('h3', '', t('inBundle')));
     for (const item of [t('bundleAudio', exportPath({ id: '<id>', cat: '<group>' })), ...t('bundleItems').slice(1), ...(exportOpts.engine === 'godot' ? [t('bundleGodot')] : [])]) dlg.append(Object.assign(el('div', 'lineItem'), { textContent: item }));
     // Every licence in one place, as CREDITS.md will read, copied at once. A sound brought in from outside gets its
@@ -2145,7 +2172,8 @@ ${p.form}`,
     for (const p of parts) { out.set(p, at); at += p.length; }
     return out;
   }
-  async function exportBundle() {
+  // Spec, credits and lint for every approved sound, the audio of `list`, and the Godot files when they are asked for.
+  async function bundleFiles(list) {
     const going = assets.filter((a) => a.status === 'approved' && a.versions.length), utf8 = (s) => new TextEncoder().encode(s);
     const spec = {
       game: tx(game), platform, style: tx(brief) || '',
@@ -2166,8 +2194,8 @@ ${p.form}`,
     const lint = going.map((a) => ({ id: a.id, issues: issues(a).map((r) => r.id) }));
     const files = [{ path: SPEC, bytes: utf8(JSON.stringify(spec, null, 2)) }, { path: 'CREDITS.md', bytes: utf8(credits) }, { path: 'lint-report.json', bytes: utf8(JSON.stringify(lint, null, 2)) }];
     let n = 0;
-    for (const a of going) {
-      if (going.length > 1) { toast(t('encoding', ++n, going.length), 0); await breathe(); }
+    for (const a of list) {
+      if (list.length > 1) { toast(t('encoding', ++n, list.length), 0); await breathe(); }
       const s = heard(a).sound;
       files.push({ path: exportPath(a), bytes: await encode(await resample(s.mix, s.rate, exportOpts.rate), exportOpts.rate) });
     }
@@ -2176,11 +2204,75 @@ ${p.form}`,
       const project = { game: tx(game), assets: going.map((a) => ({ id: a.id, name: nm(a), category: a.cat, loop: !!a.loop, file: exportPath(a), seconds: heard(a).measure.seconds })), dynamics: dynamics.map(dynToSpec) };
       for (const f of window.godotExport.build(project)) files.push({ path: f.path, bytes: utf8(f.text) });
     }
+    return files;
+  }
+  async function exportBundle() {
+    const going = assets.filter((a) => a.status === 'approved' && a.versions.length), files = await bundleFiles(going);
     const link = el('a'); link.href = URL.createObjectURL(importer.zip(files));
     link.download = `${(tx(game) || 'game').replace(/[\\/:*?"<>|\s]+/g, '-')}-audio.zip`;
     document.body.append(link); link.click(); link.remove();
     setTimeout(() => URL.revokeObjectURL(link.href), 10000);
     toast(t('exported', going.length));
+  }
+
+  /* ---------- game folder: approved sounds written straight into the game (File System Access, Chrome and Edge) ---------- */
+  // The folder is linked once from the export dialog and kept in the board's IndexedDB. Approving writes the sound at
+  // its export path and rewrites the spec, CREDITS and lint report beside it; nothing is ever deleted there.
+  let gameDir = null, folderAsk = null, folderTimer = 0, folderChain = Promise.resolve();
+  const folderWaiting = new Set();
+  async function keepDir(dir) {
+    try { const q = (await idb()).transaction('board', 'readwrite'); if (dir) q.objectStore('board').put(dir, 'gameDir'); else q.objectStore('board').delete('gameDir'); await done(q); }
+    catch { /* the link lasts this visit only */ }
+  }
+  function toFolder(list) {
+    if (!gameDir || !list.length) return;
+    list.forEach((a) => folderWaiting.add(a));
+    // Asked during the click that approved: after a reload the browser lets go of the folder and only asks again inside one.
+    folderAsk ||= gameDir.requestPermission({ mode: 'readwrite' }).catch(() => 'denied');
+    clearTimeout(folderTimer); folderTimer = setTimeout(() => { folderChain = folderChain.then(flushFolder); }, 200);
+  }
+  async function flushFolder() {
+    const list = [...folderWaiting].filter((a) => a.status === 'approved' && a.versions.length && assets.includes(a)), ask = folderAsk;
+    folderWaiting.clear(); folderAsk = null;
+    if (!gameDir || !list.length) return;
+    try {
+      if ((await ask) !== 'granted') throw new Error(t('folderDenied'));
+      await writeFiles(gameDir, await bundleFiles(list));
+      if (list.length > 1) $('toast').hidden = true;
+    } catch (e) { toast(t('folderFailed', e.message || e), 6000); }
+  }
+  async function writeFiles(dir, files) {
+    for (const f of files) {
+      const parts = f.path.split('/'), name = parts.pop();
+      let d = dir; for (const part of parts) d = await d.getDirectoryHandle(part, { create: true });
+      const w = await (await d.getFileHandle(name, { create: true })).createWritable();
+      await w.write(f.bytes); await w.close();
+    }
+  }
+  // What the folder already has, read like an import: the spec at its top and sound files below, skipping hidden
+  // folders (.godot, .git) and node_modules.
+  async function readFolder(dir, path = '', out = [], budget = { n: 5000 }) {
+    for await (const [name, h] of dir.entries()) {
+      if (--budget.n < 0) break;
+      const at = path ? `${path}/${name}` : name;
+      if (h.kind === 'directory') { if (!/^\.|^node_modules$/.test(name)) await readFolder(h, at, out, budget); continue; }
+      if (AUDIO.test(name) || (!path && name === SPEC)) out.push(fileEntry(await h.getFile(), at));
+    }
+    return out;
+  }
+  async function linkFolder() {
+    let dir;
+    try { dir = await window.showDirectoryPicker({ id: 'olmuse-game', mode: 'readwrite' }); }
+    catch (e) { if (e?.name !== 'AbortError') toast(t('folderFailed', e.message || e), 6000); return; }
+    gameDir = dir; keepDir(dir);
+    // A board still on the stand-in samples starts from what the folder has; a board with work in it fills the folder.
+    if (demo) {
+      const found = await readFolder(dir).catch(() => []);
+      if (found.length) { if (dlg.open) dlg.close(); await intake(found); } else exportDialog();
+      return;
+    }
+    exportDialog();
+    toFolder(assets.filter((a) => a.status === 'approved'));
   }
 
   /* ---------- dynamic sounds: layers of existing sounds driven by game parameters ---------- */
@@ -2391,6 +2483,7 @@ ${p.form}`,
       const d = await Promise.race([idb(), new Promise((_, no) => setTimeout(() => no(new Error('slow')), 3000))]);
       const q = d.transaction(['board', 'audio']);
       data = await asked(q.objectStore('board').get('board'));
+      gameDir = (await asked(q.objectStore('board').get('gameDir'))) || null;
       const keys = await asked(q.objectStore('audio').getAllKeys()), values = await asked(q.objectStore('audio').getAll());
       keys.forEach((k, i) => blobs.set(k, values[i]));
     } catch { return false; }
