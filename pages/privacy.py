@@ -28,7 +28,7 @@ olmuse(https://olmuse.app)는 말로 음악과 게임 소리를 만드는 작업
 | Google LLC | 미국 | 로그인 이메일·프로필, Gemini를 고른 경우 AI 요청 | 로그인, AI 답 | Google 정책에 따름 |
 | Anthropic PBC | 미국 | Claude를 고른 경우 AI 요청 | AI 답 | Anthropic API 정책에 따름 |
 | OpenRouter, Inc. | 미국 | 기본 모델의 AI 요청(DeepSeek으로 전달) | AI 답 | OpenRouter 정책에 따름 |
-| DeepSeek (OpenRouter가 연결하는 제공사) | 제공사 위치에 따름 | 기본 모델의 AI 요청 | AI 답 | 제공사 정책에 따름 |
+| DeepSeek 모델을 돌리는 업체(OpenRouter가 요청마다 고름: DeepInfra, Together, Fireworks, Alibaba, Baidu, SiliconFlow 등) | 미국, 중국 등 업체마다 다름 | 기본 모델의 AI 요청 | AI 답 | 업체 정책에 따름 |
 | TypeSafe | 미국 | 입력한 문장 | 작곡 도움말 고르기 | TypeSafe 정책에 따름 |
 | Amazon Web Services (서울 리전) | 한국 | 이메일 해시, 크레딧 내역, 결제 금액·날짜 | 크레딧 장부 | 계정이 있는 동안 |
 | Cloudflare, Inc. | 미국 | 접속 기록(IP 등) | 접속 연결 | Cloudflare 정책에 따름 |
