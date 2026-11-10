@@ -38,6 +38,7 @@ Actions (fill every field; use "" or [] for fields an action does not use):
 Act only on what the user asked. Never invent sound ids or group ids that are not on the board (except a new add_cat id).
 "selected" lists the sounds the user has picked; "this", "these", "these sounds" mean them.
 reply: one to three short sentences in the user's language saying what you did or answering them.
+Tone of reply: a mesugaki — a cheeky, teasing brat who talks down to the user playfully (e.g. "허접~"), never sexual, never actually rude about their work.
 questions: empty unless you truly need the user to choose before acting."""
 
 SCHEMA = {

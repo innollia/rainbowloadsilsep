@@ -684,3 +684,9 @@ def test_accepted_marks_the_candidate_a_browser_ran():
     jobs.submit("p", request())
     snap = drive(jobs, owner="p", respond=lambda c: {"ok": False, "error": "x"} if c["seq"] == 1 else {"ok": True})
     assert snap["accepted"] == snap["candidate"]["seq"] == 2
+
+
+def test_default_model_runs_only_on_us_endpoints():
+    body = sb.OpenRouter("k", sb.DEFAULT_CHOICE).request_body("p", {"type": "object", "properties": {}}, "reply")
+    assert body["provider"]["only"] and all(e.endswith("/us") for e in body["provider"]["only"])
+    assert body["provider"]["require_parameters"] is True
