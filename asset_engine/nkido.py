@@ -30,18 +30,19 @@ MEMORY_LIMIT = 1024 * 1024 * 1024
 # Everything in Akkado that reaches outside the patch. A match anywhere (comments included) refuses the source.
 FORBIDDEN = (
     (r"\bsamples\s*\(", "samples()"),
-    (r"\bsample\s*\(", "sample()"),
+    (r"\bsample(?:_loop)?\s*\(", "sample()"),
     (r"\bsoundfont\s*\(", "soundfont()"),
     (r"\bsf_voice\s*\(", "sf_voice()"),
-    (r"\bwavetable\s*\(", "wavetable()"),
-    (r"\bwt_load\s*\(", "wt_load()"),
-    (r"\.bank\s*\(", ".bank()"),
+    (r"\b(?:wavetable|wt|wt_load|smooch)\s*\(", "a wavetable"),
+    (r"\b(?:bank|variant)\s*\(", ".bank()"),
     (r"\bs\"", 's"..." sample pattern'),
     (r"\bin\s*\(", "in()"),
     (r"\bmidi\w*\s*\(", "midi()"),
     (r"\bcc\s*\(", "cc()"),
+    (r"\btune\s*\(", "tune()"),
     (r"\bimport\b", "import"),
     (r"\binclude\b", "include"),
+    (r"\$", "a $ directive"),
     (r"://|\b(?:file|github|bundled|blob|idb|https?):", "a URI"),
     (r"[A-Za-z]:[\\/]|\.\.[\\/]", "a file path"),
 )
@@ -50,7 +51,10 @@ ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
 class RenderError(Exception):
-    """kind: forbidden | limit | compile | timeout | crashed | missing-engine."""
+    """kind: forbidden | limit | compile | warning | timeout | crashed | missing-engine.
+
+    warning: nkido rendered but complained (a delay silently bypassed, a sample not found), so the file is not
+    what the patch says."""
 
     def __init__(self, kind: str, message: str, line: int = 0):
         super().__init__(message)
@@ -109,6 +113,8 @@ def render(source: str, seconds: float, bpm: float | None = None, exe: str = "",
                 line = min(int(found.group(1)), len(source.splitlines()))
                 raise RenderError("compile", found.group(4).strip()[:400] or "compile error", line)
             raise RenderError("crashed", (text.strip() or f"nkido stopped with code {code}")[:400])
+        if text.strip():
+            raise RenderError("warning", ANSI.sub("", text).strip()[:400])
         wav = out.read_bytes()
         rate, channels, length = wav_facts(wav)
         stems = {}
@@ -119,19 +125,48 @@ def render(source: str, seconds: float, bpm: float | None = None, exe: str = "",
         shutil.rmtree(folder, ignore_errors=True)
 
 
+TAKEN = re.compile(r"Cannot (?:reassign immutable variable|assign to read-only builtin variable) '(\w+)'")
+MENDS = 4
+
+
+def rename_taken(source: str, name: str) -> str:
+    """Rename a variable that collides with a built-in name; calls, methods, named arguments and strings stay."""
+    fresh = name + "_v"
+    while re.search(rf"\b{fresh}\b", source):
+        fresh += "v"
+    parts = re.split(r'("(?:[^"\\]|\\.)*")', source)
+    word = re.compile(rf"(?<![\w.]){re.escape(name)}(?!\w|\s*[(:])")
+    return "".join(part if i % 2 else word.sub(fresh, part) for i, part in enumerate(parts))
+
+
+def render_mended(source: str, seconds: float, bpm: float | None = None, **limits) -> tuple[Rendered, str]:
+    """render(), but the model's most common slip (a variable named like a built-in) is fixed here instead of
+    costing another model call. Returns the render and the source that produced it."""
+    for _ in range(MENDS):
+        try:
+            return render(source, seconds, bpm, **limits), source
+        except RenderError as exc:
+            taken = TAKEN.search(exc.message) if exc.kind == "compile" else None
+            mended = rename_taken(source, taken.group(1)) if taken else source
+            if mended == source:
+                raise
+            source = mended
+    return render(source, seconds, bpm, **limits), source
+
+
 def run_caged(cmd: list[str], cwd: str, time_limit: float, memory_limit: int) -> tuple[int, str]:
-    """Run with a bare environment, a wall-clock limit and (Windows) a job object. Returns (exit code, output)."""
+    """Run with a bare environment, a wall-clock limit and (Windows) a job object. Returns (exit code, stderr)."""
     env = {k: os.environ[k] for k in ("SYSTEMROOT", "WINDIR", "PATH") if k in os.environ}
     env.update(TEMP=cwd, TMP=cwd, HOME=cwd, USERPROFILE=cwd, APPDATA=cwd, LOCALAPPDATA=cwd, XDG_CACHE_HOME=cwd,
                NO_COLOR="1")
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    proc = subprocess.Popen(cmd, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT, creationflags=flags)
+    proc = subprocess.Popen(cmd, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.PIPE, creationflags=flags)
     job = None
     try:
         if sys.platform == "win32":
             job = cage(proc, memory_limit)
-        out, _ = proc.communicate(timeout=time_limit)
+        _, out = proc.communicate(timeout=time_limit)
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.communicate()

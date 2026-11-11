@@ -111,14 +111,19 @@ def run(model, kind: str, name: str, text: str, seconds: float, out: Path) -> di
         try:
             reply = model.ask(prompt, SCHEMA, "akkado_patch")
         except sb.ModelError as exc:
-            row["tries"].append({"fault": f"model: {exc}"})
-            break
+            # A cut-off or broken reply spends a try like a failed render does; the same request is asked again.
+            row["cost"] += float(model.last_usage.get("cost") or 0)
+            row["tries"].append({"faults": [f"model: {exc}"], "seconds": 0, "stems": []})
+            continue
         row["cost"] += float(model.last_usage.get("cost") or 0)
         source = str(reply.get("source") or "")
         length = min(max(float(reply.get("seconds") or seconds), 0.1), 30.0)
         (out / f"{name}.{attempt}.akkado").write_text(source, encoding="utf-8")
         try:
-            made = nkido.render(source, length, float(reply.get("bpm") or 0) or None)
+            made, used = nkido.render_mended(source, length, float(reply.get("bpm") or 0) or None)
+            if used != source:
+                row["mended"] = row.get("mended", 0) + 1
+                (out / f"{name}.{attempt}.akkado").write_text(used, encoding="utf-8")
             faults = judge(kind, made)
         except nkido.RenderError as exc:
             made, faults = None, [f"{exc.kind}: line {exc.line}: {exc.message}"]
@@ -141,12 +146,13 @@ def main():
     args.add_argument("--model", default=sb.DEFAULT_CHOICE)
     args.add_argument("--only", default="")
     args.add_argument("--limit", type=int, default=0)
+    args.add_argument("--effort", default="")
     opts = args.parse_args()
     secret = key()
     if not secret:
         sys.exit("no OpenRouter key")
     guide = (ROOT / "asset_engine" / "akkado_guide.md").read_text(encoding="utf-8")
-    model = sb.OpenRouter(secret, opts.model, system=guide, timeout=180)
+    model = sb.OpenRouter(secret, opts.model, effort=opts.effort, system=guide, timeout=180)
     out = Path(opts.out)
     out.mkdir(parents=True, exist_ok=True)
     todo = [r for r in REQUESTS if not opts.only or r[0] == opts.only]
@@ -158,9 +164,9 @@ def main():
         why = "" if row["passed"] else " | " + "; ".join((row["tries"][-1] if row["tries"] else {}).get("faults", ["?"]))[:160]
         print(f"{kind:9}{name:12}{'pass' if row['passed'] else 'FAIL'} tries={len(row['tries'])}{why}", flush=True)
     total = len(rows) or 1
-    summary = {"model": opts.model, "requests": len(rows),
+    summary = {"model": opts.model, "effort": opts.effort, "requests": len(rows),
                "first_try": sum(r["first_try"] for r in rows), "after_repair": sum(r["passed"] for r in rows),
-               "cost_usd": round(sum(r["cost"] for r in rows), 4), "seconds": round(time.time() - started)}
+               "cost_usd": round(sum(r["cost"] for r in rows), 4), "mended": sum(r.get("mended", 0) for r in rows), "seconds": round(time.time() - started)}
     for kind in ("sfx", "ambience", "music"):
         some = [r for r in rows if r["kind"] == kind]
         if some:

@@ -82,3 +82,25 @@ def test_cage_stops_memory_children_and_long_runs(tmp_path):
     with pytest.raises(nkido.RenderError) as caught:
         nkido.run_caged([sys.executable, "-c", "import time; time.sleep(30)"], str(tmp_path), 1, 1024 ** 3)
     assert caught.value.kind == "timeout"
+
+
+def test_rename_taken_leaves_calls_methods_named_arguments_and_strings():
+    lines = ["drop = 3", "x = drop * 2 + drop(4) |> lp(@, 800, drop: 1)", 'y = n"drop c4".drop(1)']
+    mended = ["drop_v = 3", "x = drop_v * 2 + drop(4) |> lp(@, 800, drop: 1)", 'y = n"drop c4".drop(1)']
+    assert nkido.rename_taken(chr(10).join(lines), "drop") == chr(10).join(mended)
+
+
+@needs_engine
+def test_a_variable_named_like_a_builtin_is_mended_without_the_model():
+    source = chr(10).join(["snap = sine(440) * 0.3", "snap |> out(%, %)"])
+    with pytest.raises(nkido.RenderError):
+        nkido.render(source, 0.2)
+    made, used = nkido.render_mended(source, 0.2)
+    assert made.wav[:4] == b'RIFF' and 'snap_v' in used
+
+
+@needs_engine
+def test_other_compile_errors_are_not_mended():
+    with pytest.raises(nkido.RenderError) as caught:
+        nkido.render_mended('c = = 3', 0.2)
+    assert caught.value.kind == 'compile'
