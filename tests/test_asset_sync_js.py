@@ -614,6 +614,20 @@ def test_the_pointer_lost_the_newest_database_of_the_account_is_found_by_listing
     assert got["names"] == ["olmuse-asset-board.c0ffee00c0ffee00.bbbbbbbbbbbb", True, True, True]
 
 
+def test_the_first_computers_board_in_the_default_database_is_found_again_after_signing_back_in():
+    got = run(r"""
+    const dbs = new Map();
+    const idb = { open: (name) => { if (!dbs.has(name)) dbs.set(name, fakeIdb()); return dbs.get(name).indexedDB.open(name); }, databases: async () => [...dbs.keys()].map((name) => ({ name, version: 1 })) };
+    const put = async (name, sync) => { const f = fakeIdb(); dbs.set(name, f); const st = S.create({ indexedDB: f.indexedDB, name, snapshot: () => ({ v: 2, assets: [] }), apply: () => {}, extra: () => (sync ? { sync } : {}) }); await st.lock(); await st.restore(); await st.saveBoard(); };
+    // bindHere(who, null) kept the account's first board in the database the page always had
+    await put('olmuse-asset-board', { v: 1, who: WHO, at: 7 });
+    await put('olmuse-asset-board.anon0a0b0c', null);
+    await put('olmuse-asset-boardx', { v: 1, who: WHO, at: 99 });
+    out.found = (await Y.scan(idb, WHO)).map((x) => x.name);
+    """)
+    assert got["found"] == ["olmuse-asset-board"]
+
+
 def test_work_is_picked_up_only_after_the_first_receiving_and_a_record_without_dev_or_of_another_computer_is_left_alone():
     got = run(r"""
     const srv = fakeServer(), a = await started(srv), id = a.engine.record.board;

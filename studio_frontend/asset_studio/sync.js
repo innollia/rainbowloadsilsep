@@ -54,7 +54,7 @@
     read(ls) { try { const x = JSON.parse(ls.getItem('asset-sync')); return x && x.v === 1 && typeof x === 'object' ? x : null; } catch { return null; } },
     write(ls, x) { try { ls.setItem('asset-sync', JSON.stringify({ v: 1, anon: x.anon ?? null, accts: x.accts || {} })); return true; } catch { return false; } },
   };
-  // Every account database of who in this browser, newest sync first: [{ name, sync }]. null where the browser cannot
+  // Every account database of who in this browser (the default one too: the first computer's board stays there), newest sync first: [{ name, sync }]. null where the browser cannot
   // list its databases (the page then asks the server for home).
   async function scan(indexedDB, who) {
     if (!indexedDB || typeof indexedDB.databases !== 'function') return null;
@@ -62,7 +62,7 @@
     try { all = await indexedDB.databases(); } catch { return null; }
     const out = [];
     for (const { name } of all || []) {
-      if (typeof name !== 'string' || !name.startsWith(DB + '.')) continue;
+      if (typeof name !== 'string' || (name !== DB && !name.startsWith(DB + '.'))) continue;
       const sync = await new Promise((ok) => {
         let r;
         try { r = indexedDB.open(name); } catch { ok(null); return; }

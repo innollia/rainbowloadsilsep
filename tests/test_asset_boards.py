@@ -374,6 +374,20 @@ def test_board_account_part_and_folder_byte_caps(tmp_path):
     s.close()
 
 
+def test_stalled_part_files_make_room_for_a_new_sound_but_a_moving_one_does_not(tmp_path):
+    s = open_store(tmp_path, PARTS_PER_ACCOUNT=2, PART_STALL=600)
+    s.make(A, BOARD)
+    big = [bytes([65 + i]) * 10 for i in range(2)]
+    for data in big:  # two uploads cut short after their first chunk
+        s.chunk(A, BOARD, sha(data), 0, 10, data[:3])
+    assert refused(s.chunk, A, BOARD, sha(b"new"), 0, 3, b"new")[:2] == (503, "busy")  # both still moving
+    old = time.time() - 3600
+    os.utime(s._part(BOARD, sha(big[0])), (old, old))
+    assert s.chunk(A, BOARD, sha(b"new"), 0, 3, b"new")["done"]  # the stalled one went, the new sound is in
+    assert not s._part(BOARD, sha(big[0])).exists() and s._part(BOARD, sha(big[1])).exists()
+    s.close()
+
+
 def test_with_little_free_room_writes_and_uploads_wait_but_reading_goes_on(tmp_path):
     room = [100 * ab.GB]
     s = open_store(tmp_path, free=lambda: room[0])

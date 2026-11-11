@@ -120,6 +120,7 @@ class Limits:
     FREE_MIN: int = 4 * GB
     BOARDS_PER_ACCOUNT: int = 20
     PART_AGE: int = 86_400
+    PART_STALL: int = 600
     PEER_GONE: int = 90
 
     @classmethod
@@ -613,6 +614,10 @@ class BoardStore:
         parts = [p for p in self.parts.glob("*.part")]
         own_parts = [p for p in parts if p.name[:32] in own]
         if len(own_parts) >= limits.PARTS_PER_ACCOUNT:
+            gone = self._drop_stalled(own_parts)
+            own_parts = [p for p in own_parts if p not in gone]
+            parts = [p for p in parts if p not in gone]
+        if len(own_parts) >= limits.PARTS_PER_ACCOUNT:
             raise GenError(503, "busy", retry_after=30)
         if board_bytes + size > limits.BOARD_BYTES:
             raise GenError(409, "board_full", limit=limits.BOARD_BYTES)
@@ -620,6 +625,25 @@ class BoardStore:
             raise GenError(409, "board_full", limit=limits.ACCOUNT_BYTES)
         if stored + sum(self._size(p) for p in parts) + size > limits.ALL_BYTES:
             raise GenError(503, "busy", retry_after=60)
+
+    def _drop_stalled(self, parts) -> set:
+        """Of an account's part files at its ceiling: the ones untouched for PART_STALL seconds and not being
+        appended to now go, so a cut-short upload nobody resumes does not hold the account's new bytes back."""
+        now, gone = time.time(), set()
+        for part in parts:
+            board, _, sha = part.stem.partition("-")
+            held = self._part_lock(board, sha)
+            if not held.acquire(blocking=False):
+                continue
+            try:
+                if now - part.stat().st_mtime > self.limits.PART_STALL:
+                    part.unlink()
+                    gone.add(part)
+            except OSError:
+                pass
+            finally:
+                held.release()
+        return gone
 
     def _has(self, owner: str, board: str, sha: str) -> bool:
         with self.lock:

@@ -2397,3 +2397,78 @@ def test_the_unreal_export_is_chosen_written_under_its_folder_read_back_and_neve
     assert [p for p in z if p.endswith(".py")] and [p for p in z if p.endswith(".uplugin")]
     assert "Skipped" not in got["reopened"] and "Linked" in got["reopened"]
     assert got["noLib"] == ["Export failed: unreal.js", 1]
+
+
+# ---------- the linked game folder: its engine is this computer's, and an Unreal project's top stays clean ----------
+
+FOLDER_PRELUDE = UNREAL_STORY.split("    const log = [];")[0] + r"""
+    const enc = (x) => new TextEncoder().encode(typeof x === 'string' ? x : JSON.stringify(x));
+    const bundle = async (engine, status, id = 'ui_x') => {
+      const spec = { game: `Linked ${engine} ${status}`, export: { engine }, categories: [{ id: 'ui', name: 'UI', kind: 'sfx' }],
+        assets: [{ id, name: id, category: 'ui', file: `audio/ui/${id}.wav`, status, loop: false }] };
+      const z = window.importer.zip([{ path: 'game-audio.spec.json', bytes: enc(spec) }, { path: `audio/ui/${id}.wav`, bytes: wav(500) }]);
+      $('importFiles').files = [new File([z], 'Linked-audio.zip')];
+      $('importFiles').fire('change');
+      await until2(() => tiles().some((t) => t.dataset.id === id) && (said() || '').includes(`Linked ${engine} ${status}`));
+    };
+    const writes = (log) => log.filter((x) => x.startsWith('write ')).map((x) => x.slice(6)).sort();
+    const link = async (tree, log, done) => {
+      own('showDirectoryPicker', async () => dirOf(tree, '', log));
+      $('exportBtn').click(); $('folderLink').click();
+      await until2(done);
+      $('dialog').close();
+    };
+"""
+
+FOLDER_ENGINE_STORY = FOLDER_PRELUDE + r"""
+    // An Unreal project linked while the board's engine is 'none': nothing lands at the project's top.
+    await bundle('none', 'approved');
+    const ulog = [], uproj = { 'Moon.uproject': enc('{}'), Content: {} };
+    await link(uproj, ulog, () => ulog.some((x) => x.endsWith('olmuse_build.json')) || (said() || '').includes('game folder'));
+    out.unreal = writes(ulog);
+    $('exportBtn').click(); $('folderLink').click(); $('dialog').close(); // unlink
+
+    // A plain folder linked with Godot chosen here. The board's engine then changes without this computer choosing it
+    // (as a teammate's change comes in): the folder still gets what it was linked with.
+    await bundle('godot', 'approved');
+    const glog = [], plain = {};
+    await link(plain, glog, () => glog.some((x) => x.endsWith('.gd')));
+    await bundle('none', 'draft', 'ui_y');
+    glog.length = 0;
+    $('approveAll').click();
+    await until2(() => glog.some((x) => x.endsWith('ui_y.wav')));
+    await advance(500);
+    out.godot = writes(glog);
+"""
+
+
+def test_the_linked_folder_keeps_this_computers_engine_and_an_unreal_projects_top_gets_nothing():
+    got = run_page("const importer = window.assetImporter;\n" + FOLDER_ENGINE_STORY)
+    u = got["unreal"]
+    assert "Plugins/OlmuseAudio/olmuse_build.json" in u and "OlmuseAudio/game-audio.spec.json" in u
+    assert not [p for p in u if not (p.startswith("OlmuseAudio/") or p.startswith("Plugins/OlmuseAudio/"))]
+    g = got["godot"]
+    assert "audio/ui_y.wav" in g and [p for p in g if p.endswith(".gd")]
+
+
+FOLDER_CUT_STORY = FOLDER_PRELUDE + r"""
+    // A first Unreal write cut short: the plugin descriptor and a script are there, the build file is not.
+    await bundle('unreal', 'approved');
+    const uplugin = enc({ FileVersion: 3, FriendlyName: 'Olmuse Audio', CreatedBy: 'Olmuse' });
+    const log = [], tree = { 'Moon.uproject': enc('{}'), OlmuseAudio: { 'game-audio.spec.json': enc('{}') },
+      Plugins: { OlmuseAudio: { 'OlmuseAudio.uplugin': uplugin, Content: { Python: { 'init_unreal.py': enc('#') } } } } };
+    await link(tree, log, () => log.some((x) => x.endsWith('olmuse_build.json')) || (said() || '').includes('game folder'));
+    out.resumed = [writes(log).includes('Plugins/OlmuseAudio/olmuse_build.json'), said()];
+    $('exportBtn').click(); $('folderLink').click(); $('dialog').close(); // unlink
+
+    // A plugin of that name somebody else made is still not written over.
+    const flog = [], foreign = { 'Moon.uproject': enc('{}'), Plugins: { OlmuseAudio: { 'OlmuseAudio.uplugin': enc({ FileVersion: 3, CreatedBy: 'Someone' }) } } };
+    await link(foreign, flog, () => (said() || '').includes('game folder'));
+    out.foreign = [said(), writes(flog).length];
+"""
+
+
+def test_a_cut_short_first_unreal_write_is_resumed_by_the_plugin_descriptor_and_a_foreign_plugin_is_not():
+    got = run_page("const importer = window.assetImporter;\n" + FOLDER_CUT_STORY)
+    assert got["resumed"][0] is True, got["resumed"]
+    assert got["foreign"] == ["Could not write to the game folder: Plugins/OlmuseAudio", 0]

@@ -1927,7 +1927,11 @@ ${p.form}`,
     const opt = (label, key, choices) => {
       const s = el('select'); s.setAttribute('aria-label', label);
       choices.forEach(([v, l]) => s.add(new Option(l, v))); s.value = String(exportOpts[key]);
-      s.onchange = () => { exportOpts[key] = /^\d+$/.test(s.value) ? +s.value : s.value; autosave(); exportDialog(); };
+      s.onchange = () => {
+        exportOpts[key] = /^\d+$/.test(s.value) ? +s.value : s.value;
+        if (key === 'engine' && gameDir) { folderEngine = s.value; keepDir(gameDir); } // chosen here: this computer's folder follows
+        autosave(); exportDialog();
+      };
       const r = el('label', 'lineItem'); r.append(el('span', 'grow', label), s); dlg.append(r);
     };
     opt(t('fmt'), 'format', [['wav', 'WAV'], ['ogg', 'OGG Vorbis'], ['mp3', 'MP3']]);
@@ -1940,7 +1944,7 @@ ${p.form}`,
     // A view-only tab does not link or write: the tab that has the board does.
     if ('showDirectoryPicker' in window && store.ready) {
       const r = el('div', 'lineItem'), b = el('button', gameDir ? 'ghost' : '', gameDir ? t('unlinkFolder') : t('linkFolder'));
-      b.id = 'folderLink'; b.onclick = gameDir ? () => { gameDir = null; keepDir(null); exportDialog(); } : linkFolder;
+      b.id = 'folderLink'; b.onclick = gameDir ? () => { gameDir = null; folderEngine = null; keepDir(null); exportDialog(); } : linkFolder;
       r.append(el('span', 'grow', gameDir ? t('folderLinked', gameDir.name) : t('folderHelp')), b);
       dlg.append(el('h3', '', t('gameFolder')), r);
     }
@@ -2609,14 +2613,15 @@ ${p.form}`,
     return out;
   }
   // Spec, credits and lint for every approved sound, the audio of `list`, and the engine files (Godot or Unreal) when
-  // they are asked for. For Unreal the files that are not the engine's go in its folder beside the .uproject.
-  async function bundleFiles(list) {
+  // they are asked for. For Unreal the files that are not the engine's go in its folder beside the .uproject. engine: the
+  // board's choice for a bundle, the linked folder's own (this computer's) for a write into it.
+  async function bundleFiles(list, engine = exportOpts.engine) {
     const going = assets.filter((a) => a.status === 'approved' && a.versions.length), utf8 = (s) => new TextEncoder().encode(s);
     const spec = {
       game: tx(game), platform, style: tx(brief) || '',
       references: projectRefs.map(refSpec),
       categories: cats.map((c) => ({ id: c.id, name: tx(c.name), kind: c.kind, parent: c.parent, folder: folderOf(c), color: c.hue.startsWith('#') ? c.hue : undefined, ...(c.refs?.length ? { references: c.refs.map(refSpec) } : {}) })),
-      id_rule: idRule, export: exportOpts,
+      id_rule: idRule, export: { ...exportOpts, engine },
       dynamics: dynamics.map(dynToSpec),
       assets: assets.map((a) => {
         const v = a.versions.length ? heard(a) : null, prompt = (v && v.prompt) || a.prompt; // what the sound was made from
@@ -2635,10 +2640,10 @@ ${p.form}`,
       if (list.length > 1) { toast(t('encoding', ++n, list.length), 0); await breathe(); }
       files.push({ path: exportPath(a), bytes: await exportBytes(a) });
     }
-    const lib = { godot: 'godotExport', unreal: 'unrealExport' }[exportOpts.engine];
+    const lib = { godot: 'godotExport', unreal: 'unrealExport' }[engine];
     if (lib) {
-      if (!window[lib]) throw new Error(exportOpts.engine + '.js');
-      if (exportOpts.engine === 'unreal') for (const f of files) f.path = window.unrealExport.ROOT + f.path;
+      if (!window[lib]) throw new Error(engine + '.js');
+      if (engine === 'unreal') for (const f of files) f.path = window.unrealExport.ROOT + f.path;
       const project = { game: tx(game), assets: going.map((a) => ({ id: a.id, name: nm(a), category: a.cat, loop: !!a.loop, file: exportPath(a), seconds: heard(a).measure.seconds })), dynamics: dynamics.map(dynToSpec) };
       for (const f of window[lib].build(project)) files.push({ path: f.path, bytes: utf8(f.text) });
     }
@@ -2656,11 +2661,26 @@ ${p.form}`,
   /* ---------- game folder: approved sounds written straight into the game (File System Access, Chrome and Edge) ---------- */
   // The folder is linked once from the export dialog and kept in the board's IndexedDB. Approving writes the sound at
   // its export path and rewrites the spec, CREDITS and lint report beside it; nothing is ever deleted there.
-  let gameDir = null, folderAsk = null, folderTimer = 0, folderChain = Promise.resolve();
+  // folderEngine: the engine the folder was linked with, kept with the link on this computer only. The board's own
+  // choice (exportOpts.engine) travels with the board, so a teammate's change does not reach this folder; choosing
+  // the engine here does.
+  let gameDir = null, folderEngine = null, folderAsk = null, folderTimer = 0, folderChain = Promise.resolve();
   const folderWaiting = new Set();
   async function keepDir(dir) {
-    try { await (dir ? store.put('gameDir', dir) : store.del('gameDir')); }
+    try { await (dir ? store.put('gameDir', { dir, engine: folderEngine }) : store.del('gameDir')); }
     catch { /* the link lasts this visit only */ }
+  }
+  // What was kept: { dir, engine }, or a folder handle alone (kept before the engine was).
+  function takeDir(kept) {
+    const dir = kept && kept.kind === 'directory' ? kept : kept && kept.dir ? kept.dir : null;
+    gameDir = dir; folderEngine = dir && kept.dir && typeof kept.engine === 'string' ? kept.engine : null;
+  }
+  // The folder's engine. An Unreal project (a .uproject at its top) always gets the Unreal layout: Olmuse's files never
+  // go to a project's top.
+  async function engineOf(dir) {
+    try { for await (const [name, h] of dir.entries()) if (h.kind === 'file' && /\.uproject$/i.test(name)) return 'unreal'; }
+    catch { /* read as linked */ }
+    return folderEngine || exportOpts.engine;
   }
   function toFolder(list) {
     if (!gameDir || !list.length) return;
@@ -2675,19 +2695,27 @@ ${p.form}`,
     if (!gameDir || !list.length) return;
     try {
       if ((await ask) !== 'granted') throw new Error(t('folderDenied'));
-      if (exportOpts.engine === 'unreal') { const taken = await notOurs(gameDir); if (taken) throw new Error(taken); }
-      await writeFiles(gameDir, await bundleFiles(list));
+      const engine = await engineOf(gameDir);
+      if (engine === 'unreal') { const taken = await notOurs(gameDir); if (taken) throw new Error(taken); }
+      await writeFiles(gameDir, await bundleFiles(list, engine));
       if (list.length > 1) $('toast').hidden = true;
     } catch (e) { toast(t('folderFailed', e.message || e), 6000); }
   }
-  // Unreal: Olmuse's folders that hold something Olmuse did not write (no spec, no build file) are not written over.
-  // Answers the name of such a folder, or ''.
+  // Unreal: Olmuse's folders that hold something Olmuse did not write are not written over. Olmuse's marks: the spec
+  // in OlmuseAudio/; in Plugins/OlmuseAudio/ the build file or the plugin descriptor Olmuse made (written first, so a
+  // first write cut short is picked up again). An empty folder holds nothing of anyone's. Answers the name of such a
+  // folder, or ''.
   async function notOurs(dir) {
     const sub = async (d, name) => { try { return await d.getDirectoryHandle(name); } catch { return null; } };
     const has = async (d, name) => { try { await d.getFileHandle(name); return true; } catch { return false; } };
+    const empty = async (d) => { try { for await (const _ of d.entries()) return false; return true; } catch { return false; } };
+    const made = async (d) => {
+      try { return JSON.parse(await (await (await d.getFileHandle('OlmuseAudio.uplugin')).getFile()).text()).CreatedBy === 'Olmuse'; }
+      catch { return false; }
+    };
     const root = await sub(dir, 'OlmuseAudio'), plugins = await sub(dir, 'Plugins'), plugin = plugins && (await sub(plugins, 'OlmuseAudio'));
-    if (root && !(await has(root, SPEC))) return 'OlmuseAudio';
-    if (plugin && !(await has(plugin, 'olmuse_build.json'))) return 'Plugins/OlmuseAudio';
+    if (root && !(await has(root, SPEC)) && !(await empty(root))) return 'OlmuseAudio';
+    if (plugin && !(await has(plugin, 'olmuse_build.json')) && !(await made(plugin)) && !(await empty(plugin))) return 'Plugins/OlmuseAudio';
     return '';
   }
   async function writeFiles(dir, files) {
@@ -2717,11 +2745,11 @@ ${p.form}`,
     let dir;
     try { dir = await window.showDirectoryPicker({ id: 'olmuse-game', mode: 'readwrite' }); }
     catch (e) { if (e?.name !== 'AbortError') toast(t('folderFailed', e.message || e), 6000); return; }
-    gameDir = dir; keepDir(dir);
+    gameDir = dir; folderEngine = exportOpts.engine; keepDir(dir);
     // A board still on the stand-in samples starts from what the folder has; a board with work in it fills the folder.
     if (demo) {
       const found = await readFolder(dir).catch(() => []);
-      if (found.length) { if (dlg.open) dlg.close(); await intake(found); } else exportDialog();
+      if (found.length) { if (dlg.open) dlg.close(); await intake(found); folderEngine = exportOpts.engine; keepDir(dir); } else exportDialog();
       return;
     }
     exportDialog();
@@ -2979,7 +3007,7 @@ ${p.form}`,
     agentLog = Array.isArray(data.agentLog) ? data.agentLog : [];
     refBlobs.clear(); files.forEach((bytes, k) => refBlobs.set(k, bytes));
     if (Array.isArray(data.dynamics)) dynamics = data.dynamics;
-    gameDir = info?.gameDir || null;
+    takeDir(info?.gameDir);
     if (info && 'sync' in info) syncRead = info.sync;
     assets.length = 0; assets.push(...live); trash = binned;
   }
@@ -3004,7 +3032,7 @@ ${p.form}`,
   // After a read. A board that could not be opened is never written over on this visit (tellFailed says so).
   async function afterRestore(result) {
     if (result === 'failed') return;
-    if (result === 'empty') gameDir = (await store.get('gameDir')) || null; // a folder linked before anything was saved
+    if (result === 'empty') takeDir(await store.get('gameDir')); // a folder linked before anything was saved
     shown = result;
   }
   // The first visit opens the tutorial, also when the saved board could not be opened or the browser keeps nothing.
@@ -3245,7 +3273,9 @@ ${p.form}`,
   }
   // The first account token in a browser without that account's board (the table of E5).
   async function firstLink(who) {
-    const found = ((await SYNC.scan(ownDb, who)) || []).filter((x) => !x.sync.apart);
+    const listed = await SYNC.scan(ownDb, who), kept = pointer.accts[who]?.db;
+    // A browser that cannot list its databases goes back to the one the pointer last named for who.
+    const found = listed ? listed.filter((x) => !x.sync.apart) : kept ? [{ name: String(kept) }] : [];
     if (found.length) { setPointer(who, found[0].name); reloadSync(); return; }
     const r = await SYNC.list(gen.call);
     if (r.status !== 200 || !r.data || !Array.isArray(r.data.boards)) return; // boards are off: this page stays as it is

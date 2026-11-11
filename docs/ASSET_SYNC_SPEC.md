@@ -46,11 +46,12 @@
 | `BLOB_MAX` | 60 MB(바이트 하나) |
 | `BOARD_BYTES` | 2 GB |
 | `ACCOUNT_BYTES` | 4 GB(계정이 구성원인 보드들의 `bytes` 합 + 그 계정의 part 파일. 넘으면 409 `board_full`) |
-| `PARTS_PER_ACCOUNT` | 4(동시에 있는 part 파일. 넘는 새 바이트는 503 `busy`) |
+| `PARTS_PER_ACCOUNT` | 4(동시에 있는 part 파일. 상한에 닿으면 먼저 그 계정의 part 중 `PART_STALL` 동안 안 바뀌었고 지금 덧붙이는 중이 아닌 것을 지운다. 그래도 넘는 새 바이트는 503 `busy`) |
 | `ALL_BYTES` | 20 GB(`asset-blobs` 전체, part 포함) |
 | `FREE_MIN` | 4 GB. 볼륨 여유가 이보다 적으면 올리기와 레코드를 쓰는 sync를 503 `busy`로 거절(받기만 하는 sync는 받는다. 생성이 쉬는 2 GB보다 먼저 멈춘다) |
 | `BOARDS_PER_ACCOUNT` | 20 |
 | `PART_AGE` | 86 400초. 이보다 오래된 part 파일은 다음 `blobs` 확인 요청 때와 시작할 때 지운다 |
+| `PART_STALL` | 600초. 이만큼 안 바뀐 part는 계정이 `PARTS_PER_ACCOUNT`에 닿았을 때 지운다(끊긴 뒤 아무도 잇지 않는 업로드가 새 소리를 막지 않게) |
 | `PEER_GONE` | 90초. 이만큼 sync가 없는 기기는 '없음'으로 본다 |
 | `BOARD_RATES` | `board` 600/60초, `blob` 900/60초(계정 합산, 기존 `RATES`와 따로 센다. `RATES`는 그대로) |
 
@@ -158,7 +159,7 @@ create index if not exists uses_sha on uses (sha);
 에셋 data: `{id, name, cat, music, loop, loud, when, description, length, prompt, tempo, sample, layers, imported, file, license, holder, guessed, autoCat, ref, trashedAt|null, status, cur(현재 버전 id|null), work|null, versions:[버전 레코드], drafts:[버전 레코드], chat, refs(from이 'asset'인 것만)}`.
 - 버전 레코드는 `assetStore.record(v)`에서 `at`을 수(`+v.at`)로 바꾼 것이다. 모든 문자열은 `gen.js`의 `paired`로 짝 없는 서로게이트를 바꾼 뒤 싣는다.
 - `work` = `{request, kind, who, dev, mode, text, n, at, before, jobs:[{id, k}]}`. `jobs[].got`은 기기 값이라 싣지 않는다.
-- **기기 값(싣지 않음):** `progress`, `source`, `hasSource`, `current`(인덱스), `pick`, 프로젝트·분류에서 복사된 `refs`, `agentLog`, `dynamics[].params[].value`, `gameDir`, `req:` 본문, localStorage 값, 필터·선택·포커스.
+- **기기 값(싣지 않음):** `progress`, `source`, `hasSource`, `current`(인덱스), `pick`, 프로젝트·분류에서 복사된 `refs`, `agentLog`, `dynamics[].params[].value`, `gameDir`(`{dir, engine}`: 연결한 폴더와 그 폴더에 쓸 엔진. `exportOpts.engine`은 보드 값이라 동기화되지만 연결한 폴더 쓰기는 이 기기 값을 쓴다), `req:` 본문, localStorage 값, 필터·선택·포커스.
 - **허용 목록:** 에셋 data의 필드는 위 목록뿐이다. `snapshot()`의 에셋 항목에 위 목록에도 기기 값 목록에도 없는 필드가 있으면 시험이 실패한다.
 - `fit(data)`: 직렬화가 `RECORD_MAX`를 넘으면 `cur`가 아닌 버전의 `prompt`, 그다음 `source`를 오래된 것부터 뺀다. 결정적이다. 받는 쪽은 같은 id의 버전 객체를 이미 갖고 있으면 그것을 둔다.
 
@@ -201,7 +202,7 @@ create index if not exists uses_sha on uses (sha);
 
 - 계정 없는 보드 DB: localStorage `asset-sync.anon`이 가리키는 이름, 없으면 지금의 `olmuse-asset-board`.
 - 계정 보드 DB: `olmuse-asset-board.<who16>.<보드 id 앞 12자>`. 샘플 보드(아직 서버 보드가 아님): `olmuse-asset-board.<who16>.d<난수 6자>`. 잠금 이름은 DB 이름과 같다. `who16`은 토큰 `sub`의 SHA-256 앞 16 hex(`gen.js`의 who와 같은 값).
-- localStorage `asset-sync` = `{v:1, anon, accts:{<who16>:{db}}}`. 지금 열 DB를 가리키는 포인터일 뿐이다. 읽기·쓰기가 안 되거나 비면 부팅이 `indexedDB.databases()`로 `olmuse-asset-board` 로 시작하는 DB의 `sync` 키를 읽어 그 계정의 것 중 `sync.at`이 가장 큰 DB를 연다. `databases()`가 없으면 서버 home을 받는다.
+- localStorage `asset-sync` = `{v:1, anon, accts:{<who16>:{db}}}`. 지금 열 DB를 가리키는 포인터일 뿐이다. 읽기·쓰기가 안 되거나 비면 부팅이 `indexedDB.databases()`로 `olmuse-asset-board`와 `olmuse-asset-board.`로 시작하는 DB의 `sync` 키를 읽어 그 계정의 것 중 `sync.at`이 가장 큰 DB를 연다(첫 컴퓨터의 계정 보드는 기본 DB `olmuse-asset-board`에 남는다). 계정 토큰이 처음 온 방문(E5)도 이 목록에서 그 계정 DB를 먼저 찾는다. `databases()`가 없으면 포인터가 그 계정에 적어 둔 `db`를 열고, 그것도 없으면 서버 home을 받는다.
 - `board` 저장소의 키 `sync`(계정 DB에만): `{v:1, who, board, made, make:{first, home}, epoch, cursor, dev, pulled, seed, shadow:{"<kind>/<uid>":{rev, born, dev, at, gone, json}}, purge:[key], at}`. `made`는 `POST /boards`가 성공했는가, `make`는 그 POST에 보낼 값, `purge`는 아직 gone을 못 보낸 영구 삭제 key, `pulled`는 첫 내려받기를 끝냈는가, `seed`는 'blank'|'sample'|null.
 - **`sync` 키는 보드 레코드와 같은 트랜잭션에 쓴다**(`writeBoard`가 `deps.extra()`의 키를 함께 put). 따로 쓰이면 shadow만 앞선 상태가 '내가 되돌렸다'로 읽힌다.
 - 보낼 큐는 두지 않는다. 보낼 것은 매번 `toRecords(snapshot())`과 shadow의 차이로 다시 계산한다.
@@ -347,12 +348,12 @@ create index if not exists uses_sha on uses (sha);
 
 키 없이, 가짜 시계와 임시 폴더로 돈다.
 
-- **`tests/test_asset_boards.py`(S1):** CAS(맞는 base만 쓴다), 내용이 같은 재시도는 rev를 올리지 않는다, 이력이 쌓이고 `HISTORY_PER_RECORD`에서 잘린다, 삭제 표식과 데이터 보존, 삭제된 레코드에 대한 낡은 편집은 conflict, 버전이 줄어드는 asset 쓰기 거절, 휴지통 밖 asset의 gone 거절(`s_`는 통과), `born` 순서, `CHANGES_MAX`를 넘는 내려받기의 `more`·`next`로 빠짐없이 받기, 채번과 커밋 사이에 주입한 hook에서 다른 요청의 내려받기가 그 행을 건너뛰지 않음, 구성원 아님과 없는 보드가 같은 404, `POST /boards`의 `first`가 두 번째 보드를 만들지 않음과 멱등, 조각의 순서·`offset`·이어 하기·틀린 sha·다른 보드 sha를 '있다'고 안 함·`need`, 상한들, 두 번째 프로세스 `StoreTaken`, DB만 옛것으로 바꾸면 epoch 변경, 트랜잭션 중간과 파일 옮기기·행 쓰기 사이에서 하위 프로세스를 죽여도 rev에 구멍이 없고 다시 올리면 끝남(`tests/test_hard_kill_refund.py` 방식), `server_ops.backup_sqlite`가 잠금·표식 파일을 잡지 않고 잠금을 쥔 채로도 다른 DB를 백업함, 파일 없는 blob의 자가 치유 뒤 그 소리의 글 편집이 `need` 없이 써짐, 모양이 틀린 board·sha(`../`, 대문자, 길이)가 파일을 만들지 않음, 같은 part에 동시 조각 둘이면 하나는 `offset`, `TEXT_PER_BOARD`·`ACCOUNT_BYTES`·`PARTS_PER_ACCOUNT`, 여유 부족 때 받기 전용 sync는 통과, 정규 직렬화 크기가 `board.canon` 바이트 수와 같음(한글·수).
+- **`tests/test_asset_boards.py`(S1):** CAS(맞는 base만 쓴다), 내용이 같은 재시도는 rev를 올리지 않는다, 이력이 쌓이고 `HISTORY_PER_RECORD`에서 잘린다, 삭제 표식과 데이터 보존, 삭제된 레코드에 대한 낡은 편집은 conflict, 버전이 줄어드는 asset 쓰기 거절, 휴지통 밖 asset의 gone 거절(`s_`는 통과), `born` 순서, `CHANGES_MAX`를 넘는 내려받기의 `more`·`next`로 빠짐없이 받기, 채번과 커밋 사이에 주입한 hook에서 다른 요청의 내려받기가 그 행을 건너뛰지 않음, 구성원 아님과 없는 보드가 같은 404, `POST /boards`의 `first`가 두 번째 보드를 만들지 않음과 멱등, 조각의 순서·`offset`·이어 하기·틀린 sha·다른 보드 sha를 '있다'고 안 함·`need`, 상한들, 두 번째 프로세스 `StoreTaken`, DB만 옛것으로 바꾸면 epoch 변경, 트랜잭션 중간과 파일 옮기기·행 쓰기 사이에서 하위 프로세스를 죽여도 rev에 구멍이 없고 다시 올리면 끝남(`tests/test_hard_kill_refund.py` 방식), `server_ops.backup_sqlite`가 잠금·표식 파일을 잡지 않고 잠금을 쥔 채로도 다른 DB를 백업함, 파일 없는 blob의 자가 치유 뒤 그 소리의 글 편집이 `need` 없이 써짐, 모양이 틀린 board·sha(`../`, 대문자, 길이)가 파일을 만들지 않음, 같은 part에 동시 조각 둘이면 하나는 `offset`, `TEXT_PER_BOARD`·`ACCOUNT_BYTES`·`PARTS_PER_ACCOUNT`, 상한에서 `PART_STALL`보다 오래 멈춘 part는 지워지고 새 소리가 들어오며 움직이는 part는 남음, 여유 부족 때 받기 전용 sync는 통과, 정규 직렬화 크기가 `board.canon` 바이트 수와 같음(한글·수).
 - **`tests/test_asset_board_api.py`(S2, `Bench`):** 검사 순서 불변, POST의 Origin, `pw` 403 `acct_only`, `sync_off`(스위치, 허용 목록), `board`·`blob` 통이 기존 통과 따로 429, 조각 본문 `CHUNK_MAX` 초과 413과 생성 라우트 상한 유지, 날 바이트 라우트가 JSON을 요구하지 않음, no-store·ETag·nosniff, 오류 모양과 언어, `v` 불일치 409, `Deps.boards` 없으면 404, `real_deps`가 로컬 실행을 `.studio-data/local`로 보냄, `job` 복사는 남의 작업·sha 불일치에 404, 보드 Lane이 찼을 때 503이고 그동안 `/jobs/status`가 답함.
 - **`tests/test_asset_board_js.py`(C1, Node):** `toRecords → patch` 왕복이 같은 스냅샷을 만들고 객체 동일성이 유지됨, 허용 목록 밖 필드가 있으면 실패, `fit`의 결정성, `merge3`의 G절 표 줄마다와 `mineWins`, `sane`, `fixIds`가 기기 둘에서 같은 결과, `revertFields`, `pristine`, Date인 `at`, `shasOf`.
 - **`tests/test_asset_store_js.py`(C2 추가):** 이름 인자로 DB와 잠금이 갈림, `extra`가 보드와 한 트랜잭션(쓰기 실패 때 둘 다 없음), `remote` 키는 `mend`가 떼지 않음, 없는 키를 `fetch`로 받아 저장, `pending` 동안 쓰기·입력 없음, 계정 DB에서 `prune` 없음. 인자 없는 기존 시험은 고치지 않고 통과.
 - **`tests/test_asset_gen_js.py`(C3 추가):** `work.dev`가 다른 기록은 폴링·취소·되돌리기에서 빠짐, `claim` 거절이면 POST 없음, `claim`이 없으면 요청 순서가 지금 그대로, 넘겨받기 조건(접속 중인 만든 기기는 넘겨받지 않음, `up` 유예, 진 기기는 취소 없음).
-- **`tests/test_asset_sync_js.py`(C4, Node, 주입한 call·가짜 IndexedDB):** 받은 뒤 보내기, 응답 유실 뒤 같은 필드 재편집(내 새 값이 남음), 저장 전 종료 뒤 재방문, n번째 요청 떨어뜨리기, 바이트가 올라가기 전에는 레코드가 나가지 않음, `need` 뒤 다시 올림, 사라진 asset이 휴지통으로 돌아옴, `purge`만 gone을 보냄, 연산 순서와 나누기에서 gone이 마지막, 수리는 `more` 거짓일 때만, epoch 변경, 첫 내려받기 전 쓰기 없음, 보드 레코드 없이 `sync`만 있으면 아무것도 안 보냄, 글 입력 중 보류, 되울림은 알림 없음, 진 변경 알림, `upgrade`·`sync_off` 처리, 올리기 전용 엔진, 포인터가 지워졌을 때 `databases()`로 다시 찾기, `fit`이 줄인 레코드가 다음 바퀴에 dirty가 아님, `bad:'versions'` 뒤 버전이 돌아오고 다른 필드 편집이 남음, 다른 `bad`는 값을 되돌리지 않고 다시 보내지 않음, 손대지 않은 `seed:'sample'` DB는 POST하지 않음, 보낼 것이 남으면 보드를 옮기지 않음, 첫 받기 전 `gen.attach` 없음, `dev` 없는 `work`는 남의 것. 고장 주입 모의실험(응답 유실, 요청 유실, 마지막 원자 저장에서 다시 시작)을 무작위로 3000회 돌려 두 기기와 서버가 같고 수렴 뒤 보낼 것이 0. 같은 파일에 엔진 둘을 메모리 가짜 서버 하나에 붙여 아래 X 장면 중 라이브러리만으로 되는 것(1~11, 13, 14, 16~18, 20, 21, 23)을 도는 시험이 있다. 화면이 있어야 하는 12·15·19·22·24와 11의 POST·시안 도착은 X가 맡는다.
+- **`tests/test_asset_sync_js.py`(C4, Node, 주입한 call·가짜 IndexedDB):** 받은 뒤 보내기, 응답 유실 뒤 같은 필드 재편집(내 새 값이 남음), 저장 전 종료 뒤 재방문, n번째 요청 떨어뜨리기, 바이트가 올라가기 전에는 레코드가 나가지 않음, `need` 뒤 다시 올림, 사라진 asset이 휴지통으로 돌아옴, `purge`만 gone을 보냄, 연산 순서와 나누기에서 gone이 마지막, 수리는 `more` 거짓일 때만, epoch 변경, 첫 내려받기 전 쓰기 없음, 보드 레코드 없이 `sync`만 있으면 아무것도 안 보냄, 글 입력 중 보류, 되울림은 알림 없음, 진 변경 알림, `upgrade`·`sync_off` 처리, 올리기 전용 엔진, 포인터가 지워졌을 때 `databases()`로 다시 찾기(기본 DB `olmuse-asset-board`에 남은 계정 보드 포함), `fit`이 줄인 레코드가 다음 바퀴에 dirty가 아님, `bad:'versions'` 뒤 버전이 돌아오고 다른 필드 편집이 남음, 다른 `bad`는 값을 되돌리지 않고 다시 보내지 않음, 손대지 않은 `seed:'sample'` DB는 POST하지 않음, 보낼 것이 남으면 보드를 옮기지 않음, 첫 받기 전 `gen.attach` 없음, `dev` 없는 `work`는 남의 것. 고장 주입 모의실험(응답 유실, 요청 유실, 마지막 원자 저장에서 다시 시작)을 무작위로 3000회 돌려 두 기기와 서버가 같고 수렴 뒤 보낼 것이 0. 같은 파일에 엔진 둘을 메모리 가짜 서버 하나에 붙여 아래 X 장면 중 라이브러리만으로 되는 것(1~11, 13, 14, 16~18, 20, 21, 23)을 도는 시험이 있다. 화면이 있어야 하는 12·15·19·22·24와 11의 POST·시안 도착은 X가 맡는다.
 - **`tests/test_asset_sync_two.py` + `tests/js/sync_two.js`(X):** 파이썬이 `OLMUSE_GEN_FAKE=1`·`OLMUSE_BOARD_SYNC=1`인 실제 API를 임시 DB·빈 포트의 uvicorn으로 띄우고(`tests/e2e_asset_import.py` 방식) 토큰을 서명해 Node에 넘긴다. Node가 실제 `store.js`·`board.js`·`gen.js`·`sync.js`를 가짜 IndexedDB 위에 기기 A·B(필요하면 C)로 올리고 전역 `fetch`로 붙는다. `tick`은 스크립트가 손으로 돌린다. 공개 서비스의 포트와 DB는 쓰지 않는다. 장면:
   1. A가 실제 보드를 올리고 B(손대지 않은 샘플)가 합류. 합류가 `head`를 올리지 않음.
   2. 새 기기 둘이 동시에 첫 보드를 만들려 함 → 보드 하나.
