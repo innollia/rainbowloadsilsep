@@ -209,7 +209,8 @@ ${p.form}`,
       gameFolder: 'Game folder', folderHelp: 'Link it and every approval is written straight into the game with these settings.', linkFolder: 'Link folder',
       folderLinked: (n) => `Linked to ${n}. Approving writes there.`, unlinkFolder: 'Unlink', folderFailed: (m) => `Could not write to the game folder: ${m}`, folderDenied: 'No permission to write to the folder.',
       inBundle: 'In the bundle', bundleItems: ['Approved sound files audio/*.wav', 'Spec game-audio.spec.json, which Import reads back', 'CREDITS.md and lint-report.json'], licenses: 'Licenses',
-      exportBundle: 'Export bundle', exported: (n) => `Bundled ${n} sounds`, restart: 'Start again from samples',
+      exportBundle: 'Export bundle', exported: (n) => `Bundled ${n} sounds`, restart: 'Start again from samples', startBlank: 'Start with an empty board', blankGame: 'New game',
+      confirmBlank: (n) => `This deletes the ${n === 1 ? 'sound' : n + ' sounds'} you have here, the trash included. This cannot be undone.`,
       importShort: 'Import', importTitle: 'Bring in what you already have', importIntro: 'Already made sounds, or have a list of what the game needs? Start from there.',
       dropHere: 'Drop sound files, a folder or an exported bundle',
       importFilesHead: 'Sound files', importFilesHelp: 'wav, mp3 or ogg, several at once. You can also drop a whole folder anywhere on this screen. Name and category are guessed from the file and folder names; fix them right here.',
@@ -359,7 +360,8 @@ ${p.form}`,
       gameFolder: '게임 폴더', folderHelp: '연결해 두면 승인할 때마다 이 설정대로 게임 폴더에 바로 써 줄게~', linkFolder: '폴더 연결',
       folderLinked: (n) => `${n} 폴더에 연결됨. 승인하면 바로 저장돼~`, unlinkFolder: '연결 끊기', folderFailed: (m) => `게임 폴더에 못 썼어: ${m}`, folderDenied: '폴더에 쓸 권한이 없어~',
       inBundle: '묶음에 들어가는 것', bundleItems: ['승인한 소리 파일 audio/*.wav', '명세 game-audio.spec.json (가져오기로 다시 읽음)', 'CREDITS.md와 lint-report.json'], licenses: '저작권',
-      exportBundle: '묶음 내보내기', exported: (n) => `소리 ${n}개 묶어 줬어~`, restart: '샘플 단계부터 다시',
+      exportBundle: '묶음 내보내기', exported: (n) => `소리 ${n}개 묶어 줬어~`, restart: '샘플 단계부터 다시', startBlank: '빈 보드로 처음부터', blankGame: '새 게임',
+      confirmBlank: (n) => `지금 있는 소리 ${n}개가 휴지통까지 다 지워져~ 되돌리지도 못하는데 진짜 할 거야?`,
       importShort: '가져오기', importTitle: '이미 만든 작업 가져오기', importIntro: '만들어 둔 소리나 게임에 필요한 소리 목록 있으면 거기서 시작해 봐~',
       dropHere: '소리 파일이나 폴더, 내보낸 묶음을 여기다 놔 봐~',
       importFilesHead: '소리 파일', importFilesHelp: 'wav, mp3, ogg 여러 개를 한 번에! 폴더째 이 화면 아무 데나 끌어다 놔도 돼~ 이름이랑 분류는 파일·폴더 이름으로 대충 짐작하니까 여기서 바로 고치라고♡',
@@ -1895,7 +1897,9 @@ ${p.form}`,
   function gameDialog() {
     openDialog(tx(game)); reopen = gameDialog;
     dlg.append(el('p', '', tx(brief)));
-    const b = el('button', '', t('restart')); b.onclick = async () => { await forget(); location.reload(); }; dlg.append(b);
+    const b = el('button', '', t('restart')); b.onclick = async () => { takeBlank(); await forget(); location.reload(); };
+    const e = el('button', '', t('startBlank')); e.id = 'startBlank'; e.onclick = startBlank;
+    dlg.append(b, ' ', e);
     dlg.showModal();
   }
 
@@ -1957,7 +1961,8 @@ ${p.form}`,
     for (const [what, how] of t('steps')) { const li = el('li'); li.append(el('b', '', what), el('span', '', how)); list.append(li); }
     const row = el('div', 'dlgRow'), b = el('button', 'primary', t('importShort')); b.id = 'tutorialImport';
     b.onclick = () => { dlg.close(); importDialog(); };
-    row.append(b); dlg.append(list, row); dlg.showModal();
+    const e = el('button', '', t('startBlank')); e.id = 'tutorialBlank'; e.onclick = startBlank;
+    row.append(e, b); dlg.append(list, row); dlg.showModal();
   }
 
   /* ---------- bringing existing work in ---------- */
@@ -1985,7 +1990,7 @@ ${p.form}`,
   }
   // Leaves the stand-in board the first time the user's own work comes in.
   function leaveDemo(name) {
-    if (!demo) return;
+    if (!demo) { if (name && unnamed()) game = name; return; } // an empty board takes the name of the first folder brought in
     demo = false; stopSound(); queue = null; selected.clear(); filter = { cat: null, status: null, imported: false };
     clearBoard(); stage = 'expand';
     if (name) { game = name; brief = ''; }
@@ -2940,7 +2945,25 @@ ${p.form}`,
   }
   // "Start again from samples" really starts again. Sounds still being made, on the board or in the trash, are
   // cancelled first; the cancel is sent so that it outlives the page, and is not waited for.
-  async function forget() { clearTimeout(saveTimer); gen.cancel([...assets, ...trash]); await store.clear(); }
+  async function forget() { clearTimeout(saveTimer); gen.cancel([...assets, ...trash]); return await store.clear(); }
+  // "Start with an empty board" is the same reset, and the visit after it opens with nothing on the board: no
+  // stand-in sounds, the categories as they come. The word for that crosses the reload in this tab only. Sounds
+  // of the user's own (made here, or brought in) go for good, trash included, so that is asked first.
+  const own = (a) => a.imported || [...a.versions, ...a.drafts].some((v) => v.engine === 'nkido');
+  async function startBlank() {
+    const n = [...assets, ...trash].filter(own).length;
+    if (n && !confirm(t('confirmBlank', n))) return;
+    if (await forget()) { try { sessionStorage.setItem('asset-blank', '1'); } catch { /* the samples come back instead */ } }
+    location.reload();
+  }
+  // Read once by the tab that has the board, whatever it found there: over a saved board the word means nothing.
+  function takeBlank() { try { const on = !!sessionStorage.getItem('asset-blank'); sessionStorage.removeItem('asset-blank'); return on; } catch { return false; } }
+  const unnamed = () => typeof game === 'object' && LANGS.every((l) => game[l] === TEXT[l].blankGame);
+  function openBlank() {
+    assets.length = 0; demo = false; stage = 'expand'; brief = '';
+    game = Object.fromEntries(LANGS.map((l) => [l, TEXT[l].blankGame]));
+    autosave();
+  }
 
   /* ---------- host page ---------- */
   const inHost = window.parent !== window;
@@ -2978,6 +3001,7 @@ ${p.form}`,
     await store.lock();
     const result = await store.restore();
     await afterRestore(result);
+    if (store.writable && takeBlank() && result === 'empty') openBlank();
     renderBoard(); liveLoop();
     gen.attach(); // work a reload interrupted is picked up once the token is here too
     greet();

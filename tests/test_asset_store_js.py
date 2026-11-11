@@ -1015,6 +1015,13 @@ def test_the_page_keeps_what_the_storage_changes_must_not_take_away():
     forget = app[app.index("async function forget() {"):app.index("/* ---------- host page")]
     assert "await store.clear()" in forget and forget.index("clearTimeout(saveTimer)") < forget.index("store.clear()")
     assert forget.index("gen.cancel(") < forget.index("store.clear()")
+    # "start with an empty board" is that reset: what is the user's own is asked about first, the word for the next
+    # visit is left only when the store was emptied, and only the tab that has the board reads it, over nothing saved
+    blank = forget[forget.index("async function startBlank() {"):]
+    assert blank.index("confirm(t('confirmBlank', n))") < blank.index("await forget()") < blank.index("location.reload()")
+    assert "if (await forget()) { try { sessionStorage.setItem('asset-blank', '1'); }" in blank
+    assert "if (store.writable && takeBlank() && result === 'empty') openBlank();" in app
+    assert "takeBlank(); await forget(); location.reload();" in app  # "start again from samples" drops a word left over
     # a generated sound always shows its tracks: with no stems the master is the one track, and one track can be turned
     assert "const hasTracks = (v) => v.engine === 'nkido' || (v.sound ? v.sound.stems.length : (v.stems || []).length) > 1;" in app
     assert "const multi = hasTracks(v)" in app and "stemsTouched = (a, v) => openAsset === a && hasTracks(v) &&" in app

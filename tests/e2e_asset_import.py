@@ -126,6 +126,18 @@ ON_DISK = """async (n) => {
   return false;
 }"""
 
+BOARD_ON_DISK = """async () => {
+  for (const d of await indexedDB.databases()) {
+    const db = await new Promise((res, rej) => { const o = indexedDB.open(d.name); o.onsuccess = () => res(o.result); o.onerror = () => rej(o.error); });
+    try {
+      if (![...db.objectStoreNames].includes('board')) continue;
+      const rec = await new Promise((res) => { const q = db.transaction('board').objectStore('board').get('board'); q.onsuccess = () => res(q.result); });
+      if (rec) return true;
+    } finally { db.close(); }
+  }
+  return false;
+}"""
+
 
 def groups(page):
     return page.evaluate("""() => Object.fromEntries([...document.querySelectorAll('#board .group')].map((g) =>
@@ -298,6 +310,41 @@ def main():
         tile = hot_page.locator(".tile.imported")
         shown, told = (tile.get_attribute("data-issues") or "").split(), lint_ids(hot, tile.get_attribute("data-id"))
         check("a rule-breaking sound shows what asset_lint.js finds", shown == told and {"peak", "lic"} <= set(shown), f"board {shown}, command line {told}")
+
+        # Starting over with nothing: the game window offers an empty board beside the samples. The one sound here is
+        # the user's own, so the page asks before it goes; after the reset the board is empty and stays empty.
+        asked = []
+        hot_page.on("dialog", lambda d: (asked.append(d.message), d.accept()))
+        hot_page.keyboard.press("Escape")  # the report of the import is still up
+        hot_page.wait_for_selector("#dialog", state="hidden")
+        hot_page.click("#menuBtn")
+        hot_page.click("#menu [data-act=game]")
+        hot_page.wait_for_selector("#dialog[open] #startBlank")
+        with hot_page.expect_navigation():
+            hot_page.click("#startBlank")
+        hot_page.wait_for_function("document.querySelector('#gameTitle').textContent === '새 게임'", timeout=15000)
+        check("an empty board asks before the user's own sound goes", len(asked) == 1 and "1" in asked[0], asked)
+        check("an empty board opens with no sound and no window in the way",
+              hot_page.locator(".tile").count() == 0 and not hot_page.is_visible("#dialog[open]"), hot_page.inner_text("#board")[:200])
+        deadline = time.time() + 10
+        while not hot_page.evaluate(BOARD_ON_DISK) and time.time() < deadline:
+            hot_page.wait_for_timeout(50)
+        hot_page.reload()
+        hot_page.wait_for_function("document.querySelector('#gameTitle').textContent === '새 게임'", timeout=15000)
+        check("the empty board is what comes back, not the samples", hot_page.locator(".tile").count() == 0)
+        # The first screen offers the same start: nothing of the user's is there yet, so nothing is asked.
+        first = browser.new_page(viewport={"width": 1440, "height": 900})
+        first.on("pageerror", lambda e: errors.append(str(e)))
+        first.on("dialog", lambda d: (asked.append(d.message), d.accept()))
+        first.goto(url)
+        first.wait_for_selector("#dialog[open] #tutorialBlank")
+        with first.expect_navigation():
+            first.click("#tutorialBlank")
+        first.wait_for_function("document.querySelector('#gameTitle').textContent === '새 게임'", timeout=15000)
+        check("the first screen starts on an empty board without asking", first.locator(".tile").count() == 0 and len(asked) == 1, asked)
+        first.set_input_files("#importFolder", str(game))
+        first.wait_for_function("document.querySelectorAll('.tile.imported').length === 4", timeout=15000)
+        check("an empty board takes its name from the first folder", first.inner_text("#gameTitle") == "MyGame", first.inner_text("#gameTitle"))
         check("no page errors", not errors, errors)
         browser.close()
     api.stop()
