@@ -3,8 +3,10 @@
 Nothing here calls a model or the ledger, so it stays testable without Streamlit."""
 from __future__ import annotations
 
+import contextlib
 import datetime
 import logging
+import os
 import logging.handlers
 import re
 import shutil
@@ -123,34 +125,72 @@ def data_files(folder) -> list[Path]:
 
 def backup_sqlite(folder, dest, keep: int = 14, day: str = "") -> Path:
     """Copies every database in folder to dest/<day>/ with SQLite's backup API (a plain file copy can miss what is
-    still in the -wal file), then keeps only the newest `keep` day folders. Returns the day folder."""
+    still in the -wal file), then keeps only the newest `keep` day folders. Returns the day folder.
+
+    A file that cannot be copied (one that only looks like a database, one another program holds) is written to the
+    log and left out; the files after it are still copied."""
     day = day or datetime.date.today().isoformat()
     out = Path(dest) / day
     out.mkdir(parents=True, exist_ok=True)
     for src in data_files(folder):
         target = out / src.name
         part = target.with_name(target.name + ".part")
-        a, b = sqlite3.connect(src), sqlite3.connect(part)
         try:
-            a.backup(b)
-            b.execute("pragma journal_mode=delete")  # the copy is one self-contained file
-        finally:
-            a.close()
-            b.close()
-        part.replace(target)
+            a, b = sqlite3.connect(src), sqlite3.connect(part)
+            try:
+                a.backup(b)
+                b.execute("pragma journal_mode=delete")  # the copy is one self-contained file
+            finally:
+                a.close()
+                b.close()
+            part.replace(target)
+        except (sqlite3.Error, OSError) as exc:
+            log.error("ALERT backup of %s failed: %s", src.name, type(exc).__name__)
+            with contextlib.suppress(OSError):
+                part.unlink()
     days = sorted(p for p in Path(dest).iterdir() if p.is_dir() and re.fullmatch(r"\d{4}-\d{2}-\d{2}", p.name))
     for old in days[:-keep] if keep > 0 else []:
         shutil.rmtree(old, ignore_errors=True)
     return out
 
 
+BLOBS = "asset-blobs"  # the boards' sound files (asset_boards.BLOBS_NAME), beside the databases
+
+
+def backup_blobs(src, dest) -> int:
+    """Copies the board sound files in src that dest does not have yet. A file is named by the sha256 of its bytes
+    and never changes once it is in place, so a file that is there is the same file. The upload folder (part) is
+    left out. Each copy is written beside its place and then moved there. Returns how many were copied."""
+    src, dest, copied = Path(src), Path(dest), 0
+    if not src.is_dir():
+        return 0
+    for shard in sorted(p for p in src.iterdir() if p.is_dir() and re.fullmatch(r"[0-9a-f]{2}", p.name)):
+        for file in shard.iterdir():
+            target = dest / shard.name / file.name
+            if not re.fullmatch(r"[0-9a-f]{64}", file.name) or not file.is_file() or target.is_file():
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            part = target.with_name(target.name + ".part")
+            try:
+                shutil.copyfile(file, part)
+                os.replace(part, target)
+                copied += 1
+            except OSError as exc:
+                log.error("ALERT backup of a board sound failed: %s", type(exc).__name__)
+                with contextlib.suppress(OSError):
+                    part.unlink()
+    return copied
+
+
 def start_daily_backup(folder, dest, keep: int = 14, every: float = 3600) -> threading.Thread:
-    """Makes today's copy if it is missing, then checks again every `every` seconds."""
+    """Makes today's copy if it is missing, then checks again every `every` seconds. The board sound files in
+    folder/asset-blobs go to dest/asset-blobs with it, the ones not there yet."""
     def loop():
         while True:
             try:
                 if not (Path(dest) / datetime.date.today().isoformat()).exists():
                     log.info("backup written to %s", backup_sqlite(folder, dest, keep))
+                    log.info("backup copied %d board sound file(s)", backup_blobs(Path(folder) / BLOBS, Path(dest) / BLOBS))
             except Exception:
                 log.exception("backup failed")
             time.sleep(every)

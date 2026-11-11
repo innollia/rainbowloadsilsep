@@ -14,6 +14,13 @@
 //   toast(text, ms), toastBusy() -> a toast with a button in it is up, post(type) -> a message to the host page,
 //   hidden() -> the tab is in the background, render(list) -> the sounds in list changed and are drawn again,
 //   progress(asset), done(asset, { made, mode, text, n }), onQuote() -> the price of a draft is known or has changed.
+//   On a board kept in step with the server (docs/ASSET_SYNC_SPEC.md H), all left out otherwise:
+//   dev (a string, or a function giving it) -> this computer's id: a job record is this page's only when its dev is
+//   this one, and one without a dev is someone else's; ready() -> a promise that resolves once this visit's first
+//   receiving of the board is over (picking work up, polling and taking work over wait for it); claim(list) ->
+//   true once the records of the sounds about to be asked for are on the server as this computer's (false: nothing is
+//   sent); handover { info() -> { up, now, peers: [{ dev, age }], at(asset) -> server seconds of its record },
+//   take(list) -> the sounds whose job record the server now holds as this computer's }.
 // The generator it returns:
 //   token({ token, ttl, api }) -> true when it was taken, generate(list, { mode, text, drafts }) -> { ok, reason }
 //   (text: the words for every sound of the list, or a function that gives each sound its own; the list goes out
@@ -24,9 +31,12 @@
 //   asked for, check() (after a save: drafts whose sound reached the disk late), why() -> '' or the reason nothing
 //   new is taken now, refuse() -> says that reason, and the flags ready, paused, identity, unit and unreached (the
 //   price was asked for three times running and no answer of the API came back).
+//   call(method, path, body, { bytes, raw, as, keepalive }) is the one way to the API with the token and its 401 rule
+//   (raw: body is bytes, sent as application/octet-stream). stamp(list) writes this computer's dev on job records that
+//   have none (the moment a board is tied to an account), handover() runs one look for work to take over now.
 //
 // A sound being made carries its job record, written before anything is sent:
-//   a.work = { request, kind, who, mode, text, n, at, before, jobs: [{ id, k, got }] }
+//   a.work = { request, kind, who, mode, text, n, at, before, jobs: [{ id, k, got }] }, and dev when deps.dev is set
 // kind and who say whose work it is (the token's kind, and the first 16 hex of the SHA-256 of its sub). Only records
 // of the token in hand are touched: an account's by kind and who, a password session's by kind alone.
 (function (factory) {
@@ -46,6 +56,9 @@
   const QUOTE_RETRY_MS = 10000; // how often the price of a draft is read again while it is not known
   const QUOTE_MISSES = 3; // reads of the price in a row without an answer of the API, after which it counts as not reached
   const MAX_ITEMS = 64, MAX_DRAFTS = 4, MAX_IDS = 256, MAX_REFS = 8, MAX_EXAMPLES = 3, PEAKS = 200;
+  // Taking over another computer's work: looked for this often, when that computer has not been seen for PEER_GONE
+  // seconds and the API has been up that long, and for a request without job ids only once it is ORPHAN_S old.
+  const HANDOVER_MS = 60000, PEER_GONE = 90, ORPHAN_S = 600, ENDED = ['done', 'failed', 'cancelled', 'gone'];
   // What the API takes (asset_generate.clean_request): a longer text is refused there, never cut, so it is cut here.
   const CAPS = { ref: 40, id: 64, name: 80, when: 300, description: 2000, change: 2000, game: 200, style: 1000, source: 20000, example: 4000 };
   const REF_CAPS = [['name', 120], ['url', 300], ['note', 600], ['summary', 400]];
@@ -139,6 +152,7 @@
     const post = (type) => { if (d.post) d.post(type); };
     const render = (list) => { if (d.render && list.length) d.render(list); };
     const live = () => (d.assets ? d.assets() : []);
+    const devOf = () => { const v = typeof d.dev === 'function' ? d.dev() : d.dev; return typeof v === 'string' && v ? v : null; };
 
     // token: { token, api, kind, sub, who, at, ttl }. unit: { unit, free }, the price of one draft for that token.
     // paused: a 401 that another token did not cure. Nothing is asked or sent until a token with another string comes.
@@ -159,12 +173,16 @@
     // not known. unitRest: nothing asks for the price before this moment (a 429 said how long). unitMisses: reads in
     // a row that brought no answer the API wrote (nothing at all, or another server's page).
     let quoting = null, unitTimer = 0, unitRest = 0, unitMisses = 0;
+    // readied: this visit's first receiving of the board is over (always, without deps.ready). handTimer: the next look
+    // for work to take over.
+    let readied = !d.ready, readying = null, handTimer = 0;
     // What the downloads of one look were told: fetchWait, the wait (ms) a 503 or a 429 named, and fetchLimited, a 429.
     let fetchWait = 0, fetchLimited = false;
 
     // Whose a record is: an account's by kind and who, a password session's by kind alone.
     const owns = (tok, w) => !!w && !!tok && w.kind === tok.kind && (w.kind !== 'acct' || w.who === tok.who);
-    const mine = (w) => owns(state.token, w);
+    // On a synced board a record is also this computer's: its dev is this one (none is someone else's).
+    const mine = (w) => owns(state.token, w) && (!devOf() || w.dev === devOf());
     const usable = () => !!state.token && !state.paused && !!store && !!store.writable;
     const isOpen = (j) => !j.got && !fetched.has(j.id) && !skipped.has(j.id) && !barred.has(j.id);
     // Whether the sound's record still names the job: it does not once the sound was put back or taken off the board.
@@ -198,7 +216,7 @@
       else if (!state.unit && !state.paused && mono() >= unitRest) loadUnit();
       // A cancel is the canceller's to send: one still owed is let go when the token is someone else's.
       if (was && !owns(next, was)) { unsent.ids.clear(); unsent.requests.clear(); }
-      attach(); kick();
+      attach(); kick(); handLater();
       return true;
     }
     // A token whose string is not `held`: the one in hand if it already differs, else the host is asked and waited for.
@@ -231,7 +249,7 @@
       const o = opts || {};
       const once = async (tok) => {
         const headers = { Authorization: 'Bearer ' + tok.token }, init = { method, headers, cache: 'no-store' };
-        if (body !== undefined) { headers['Content-Type'] = 'application/json'; init.body = body; }
+        if (body !== undefined) { headers['Content-Type'] = o.raw ? 'application/octet-stream' : 'application/json'; init.body = body; }
         if (o.keepalive) init.keepalive = true;
         let res;
         try { res = await fetcher(tok.api + path, init); } catch { return { status: 0 }; }
@@ -355,7 +373,8 @@
         const request = clip(uuid(), 64);
         for (const a of todo.slice(i, i + MAX_ITEMS)) {
           if (!a.key) a.key = newKey();
-          a.work = { request, kind: tok.kind, who: tok.who, mode, text: wordsOf(a), n, at, before: a.status, jobs: [] };
+          const dev = devOf();
+          a.work = { request, kind: tok.kind, who: tok.who, ...(dev ? { dev } : {}), mode, text: wordsOf(a), n, at, before: a.status, jobs: [] };
           a.status = 'working'; a.progress = 0;
         }
         flying.add(request); batches.push(request);
@@ -414,6 +433,13 @@
       const kept = (await store.put('req:' + request, body)) && (await store.saveBoard());
       if (dropped.length) tell({ failed: dropped.length * o.n, refunded: 0, lost: 0 });
       if (!kept) { back(say('saveFull'), 8000); store.del('req:' + request); return { ok: false, reason: 'saveFull' }; }
+      // On a synced board the sounds are this computer's on the server before anything is paid for. Refused (another
+      // computer is making them) or not reached: nothing is sent, and what the claim said is the sync's to tell.
+      if (d.claim) {
+        let ok = false;
+        try { ok = !!(await d.claim(asked(request))); } catch { ok = false; }
+        if (!ok) { const list = asked(request); list.forEach(undo); store.del('req:' + request); render(list); await store.saveBoard(); return { ok: false, reason: 'claim' }; }
+      }
       return send(request, body);
     }
     // POSTs the stored words as they are, as the person the records name. Only an answer the API wrote says what became
@@ -473,7 +499,15 @@
     }
 
     /* ---------- the poller: one for the page ---------- */
+    // Nothing of this page's work is picked up, polled or taken over before this visit has received the board once:
+    // a record another computer took over meanwhile must not be acted on from the copy this computer had.
+    function gate() {
+      if (readied) return true;
+      if (!readying) readying = Promise.resolve().then(() => d.ready()).catch(() => {}).then(() => { readied = true; readying = null; attach(); kick(); });
+      return false;
+    }
     function kick() {
+      if (!gate()) return;
       if (ticking) { pollAgain = true; return; }
       if (pollTimer || !usable()) return;
       pollTimer = later(tick, 0);
@@ -725,6 +759,7 @@
       attachTimer = later(() => { attachTimer = 0; attach(); }, wait);
     }
     function attach() {
+      if (!gate()) return Promise.resolve();
       if (attaching) { attachAgain = true; return attaching; }
       attaching = (async () => {
         try { do { attachAgain = false; await reattach(); } while (attachAgain); } catch { retryLater(); } finally { attaching = null; }
@@ -823,8 +858,61 @@
       for (const a of assets || []) if (a && mine(a.work) && a.status !== 'working') { unhold(a.work); delete a.work; }
     }
 
+    /* ---------- a board kept in step with the server ---------- */
+    // The moment a board is tied to an account its job records without a dev are this computer's: they were made here.
+    function stamp(list) {
+      const me = devOf();
+      let n = 0;
+      if (me) for (const a of list || live()) if (a && a.work && !a.work.dev) { a.work.dev = me; n++; }
+      return n;
+    }
+    function handLater() {
+      if (!d.handover || handTimer) return;
+      handTimer = later(() => { handTimer = 0; handover().catch(() => []).then(handLater); }, HANDOVER_MS);
+    }
+    // Work of this account that another computer started and left: taken over when that computer has not been seen
+    // for PEER_GONE seconds, the API has been up at least that long (it knows who is there), and every job of it has
+    // ended. A record without job ids waits until it is ORPHAN_S old on the server's clock and is asked about by its
+    // request. The records are changed to this computer's dev on the server (a conditional write): only the ones it
+    // won are picked up here, the way a reload picks work up. Nothing is cancelled for one it lost.
+    async function handover() {
+      const me = devOf();
+      if (!d.handover || !me || !usable() || !gate()) return [];
+      const info = d.handover.info() || {};
+      if (!(num(info.up) > PEER_GONE)) return [];
+      const peers = new Map((Array.isArray(info.peers) ? info.peers : []).map((x) => [x.dev, x.age]));
+      const away = (dev) => !peers.has(dev) || !(num(peers.get(dev)) <= PEER_GONE);
+      const list = live().filter((a) => a && a.work && owns(state.token, a.work) && a.work.dev !== me && away(a.work.dev));
+      if (!list.length) return [];
+      const views = new Map(), ids = list.flatMap((a) => a.work.jobs.map((j) => j.id)), ok = [];
+      for (let i = 0; i < ids.length; i += MAX_IDS) {
+        const r = await call('POST', '/jobs/status', JSON.stringify({ ids: ids.slice(i, i + MAX_IDS) }));
+        if (r.status !== 200 || !r.data || !Array.isArray(r.data.jobs)) return [];
+        for (const v of r.data.jobs) if (v && typeof v.id === 'string') views.set(v.id, v);
+      }
+      for (const a of list) {
+        const w = a.work;
+        if (w.jobs.length) { if (w.jobs.every((j) => ENDED.includes((views.get(j.id) || {}).status))) ok.push(a); continue; }
+        const at = info.at ? num(info.at(a)) : null;
+        if (at == null || num(info.now) == null || info.now - at <= ORPHAN_S) continue;
+        const r = await call('POST', '/jobs/status', JSON.stringify({ request_id: w.request }));
+        if (r.status !== 200 || !r.data) continue;
+        const jobs = Array.isArray(r.data.jobs) ? r.data.jobs : [];
+        if (!r.data.known || r.data.cancelled || jobs.every((v) => v && ENDED.includes(v.status))) ok.push(a);
+      }
+      if (!ok.length) return [];
+      const was = new Map(ok.map((a) => [a, a.work.dev]));
+      for (const a of ok) a.work.dev = me;
+      let won = [];
+      try { won = [...((await d.handover.take(ok)) || [])]; } catch { won = []; }
+      // Not written on the server: the record goes back to its maker's here as well.
+      for (const a of ok) if (!won.includes(a) && a.work && a.work.dev === me) { if (was.get(a) === undefined) delete a.work.dev; else a.work.dev = was.get(a); }
+      if (won.length) { await store.saveBoard(); attach(); kick(); }
+      return won;
+    }
+
     return {
-      token: takeToken, generate, quoteOf, attach, cancel, drop, free, check, why, refuse,
+      token: takeToken, generate, quoteOf, attach, cancel, drop, free, check, why, refuse, call, stamp, handover,
       get ready() { return !!state.token && !state.paused; }, get paused() { return state.paused; },
       get identity() { return state.token ? { kind: state.token.kind, who: state.token.who } : null; },
       get unit() { return state.unit ? { ...state.unit } : null; },
@@ -832,5 +920,5 @@
     };
   }
 
-  return { create, fromHost, readToken, clip, factsOf, shapeItem, shapeProject, shapeExamples, MAX_DRAFTS, POLL_MS, HIDDEN_MS, FAR_MS, RESEND_MS, TOKEN_WAIT_MS };
+  return { create, fromHost, readToken, clip, paired, factsOf, shapeItem, shapeProject, shapeExamples, MAX_DRAFTS, POLL_MS, HIDDEN_MS, FAR_MS, RESEND_MS, TOKEN_WAIT_MS, HANDOVER_MS, PEER_GONE };
 });

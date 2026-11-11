@@ -839,7 +839,7 @@ def test_a_view_only_tab_whose_first_read_failed_stays_unsaved_after_taking_over
     # so the page must not show that board as one that can be worked on: it starts over as a new visit that has the board
     app = (ROOT / "app.js").read_text(encoding="utf-8")
     took = app[app.index("function tookOver(result) {"):app.index("async function forget()")]
-    assert "if (store.paused || (result === 'empty' && shown !== 'empty')) { location.reload(); return; }" in took
+    assert "if (acct || store.paused || (result === 'empty' && shown !== 'empty')) { location.reload(); return; }" in took
     assert took.index("store.paused") < took.index("renderBoard()") and took.index("store.paused") < took.index("$('toast').hidden")
 
 
@@ -1025,3 +1025,132 @@ def test_the_page_keeps_what_the_storage_changes_must_not_take_away():
     # a generated sound always shows its tracks: with no stems the master is the one track, and one track can be turned
     assert "const hasTracks = (v) => v.engine === 'nkido' || (v.sound ? v.sound.stems.length : (v.stems || []).length) > 1;" in app
     assert "const multi = hasTracks(v)" in app and "stemsTouched = (a, v) => openAsset === a && hasTracks(v) &&" in app
+
+
+# ---------- a board kept in step with the server (docs/ASSET_SYNC_SPEC.md E2, E4) ----------
+
+def test_a_named_store_opens_its_own_database_and_lock():
+    got = run(r"""
+    const opened = [], asked = [], fakes = new Map(), lines = new Map();
+    // one IndexedDB and one lock per name, as a browser keeps them
+    const idb = { open: (name, v) => { opened.push(name); if (!fakes.has(name)) fakes.set(name, fakeIdb()); return fakes.get(name).indexedDB.open(name, v); } };
+    const locks = { request: (name, a, b) => { asked.push(name); if (!lines.has(name)) lines.set(name, fakeLocks()); return lines.get(name).request(name, a, b); } };
+    const plainFake = { indexedDB: idb }, named = 'olmuse-asset-board.0123456789abcdef.0123456789ab';
+    const one = await open(plainFake, locks), two = await open(plainFake, locks, { name: named });
+    out.got = [one.got, two.got, one.store.name, two.store.name];
+    out.names = [opened.slice(), asked.slice()];
+    one.game = 'anon'; two.game = 'account';
+    await one.store.save(); await two.store.save();
+    out.apart = [fakes.get('olmuse-asset-board').board().game, fakes.get(named).board().game];
+    // a second tab on the named board waits for that board only
+    const three = await open(plainFake, locks, { name: named });
+    out.third = [three.got, three.store.readOnly];
+    """)
+    named = "olmuse-asset-board.0123456789abcdef.0123456789ab"
+    assert got["got"] == [True, True, "olmuse-asset-board", named]
+    assert got["names"] == [["olmuse-asset-board", named], ["olmuse-asset-board", named]]
+    assert got["apart"] == ["anon", "account"]
+    assert got["third"] == [False, True]
+
+
+def test_extra_keys_are_written_in_the_board_records_transaction_and_land_with_it_or_not_at_all():
+    got = run(r"""
+    const fake = fakeIdb(), locks = fakeLocks();
+    let sync = { v: 1, cursor: 3 };
+    const p = await open(fake, locks, { extra: () => ({ sync }) });
+    p.game = 'one';
+    out.first = [await p.store.saveBoard(), fake.log.map((t) => t.ops), fake.board('sync')];
+    fake.fail.commit = () => new Error('disk');
+    p.game = 'two'; sync = { v: 1, cursor: 9 };
+    out.failed = [await p.store.save(), fake.board().game, fake.board('sync').cursor];
+    fake.fail = {};
+    out.after = [await p.store.save(), fake.board().game, fake.board('sync').cursor];
+    // what was read comes back to the page with the record
+    locks.release();
+    const q = await open(fake, locks, { extra: () => ({ sync }) });
+    out.info = q.info.sync;
+    // a store without extra or remote hands nothing more to the page
+    locks.release();
+    const r = await open(fake, locks);
+    out.plain = Object.keys(r.info).sort();
+    """)
+    assert got["first"] == [True, [["put board/board", "put board/sync"]], {"v": 1, "cursor": 3}]
+    assert got["failed"] == [False, "one", 3]
+    assert got["after"] == [True, "two", 9]
+    assert got["info"] == {"v": 1, "cursor": 9}
+    assert got["plain"] == ["dropped", "gameDir", "refetch"]
+
+
+def test_sounds_the_server_holds_stay_without_local_bytes_and_are_fetched_and_kept_when_heard():
+    got = run(r"""
+    const seed = (fake) => fake.seed({ board: { v: 2, game: 'G', assets: [row('a', { versions: [nkido('x'), nkido('y')], current: 1 })], trash: [] }, sync: { v: 1, shadow: { 'asset/k': {} } } }, { 'ver:y': new Blob([wav([tone(480)])]) });
+    // without remote: the version whose bytes are not here is taken off, as before
+    const f1 = fakeIdb(); seed(f1);
+    const p1 = await open(f1, fakeLocks());
+    out.plain = [p1.assets[0].versions.map((v) => v.id), p1.info.dropped];
+    // with remote: it stays, and the sync record it was judged by is the stored one
+    const f2 = fakeIdb(), seen = [], fetched = [];
+    seed(f2);
+    const bytes = wav([tone(480, 220)]);
+    const p2 = await open(f2, fakeLocks(), { remote: (sync) => { seen.push(sync); return new Set(['ver:x']); }, fetch: async (key) => { fetched.push(key); return key === 'ver:x' ? bytes : null; } });
+    out.remote = [p2.assets[0].versions.map((v) => v.id), p2.info.dropped, seen];
+    // heard: fetched once, kept on disk, and played
+    const [one, two] = await Promise.all([p2.store.bytes('ver:x'), p2.store.bytes('ver:x')]);
+    await settle(20);
+    out.fetched = [fetched.slice(), one.length === bytes.length, two.length === bytes.length, f2.audioKeys(), p2.store.saved.has('ver:x')];
+    out.again = [(await p2.store.bytes('ver:x')).length === bytes.length, fetched.length];
+    out.sound = (await p2.store.ensureSound(p2.assets[0].versions[0], p2.assets[0])).channels;
+    // local only, and a key the server does not have either
+    const why = async (fn) => { try { await fn(); return 'ok'; } catch (e) { return 'thrown'; } };
+    out.local = [await why(() => p2.store.bytes('ver:zz', { local: true })), await why(() => p2.store.bytes('ver:zz')), fetched.slice()];
+    """)
+    assert got["plain"] == [["y"], [{"asset": "a", "id": "x"}]]
+    assert got["remote"] == [["x", "y"], [], [{"v": 1, "shadow": {"asset/k": {}}}]]
+    assert got["fetched"] == [["ver:x"], True, True, ["ver:x", "ver:y"], True]
+    assert got["again"] == [True, 1]
+    assert got["sound"] == 1
+    assert got["local"] == ["thrown", "thrown", ["ver:x", "ver:zz"]]
+
+
+def test_while_pending_the_page_writes_nothing_and_takes_no_input_but_the_sync_engine_can_save():
+    got = run(r"""
+    const fake = fakeIdb(), locks = fakeLocks();
+    let pending = true, sync = { pulled: false };
+    const p = await open(fake, locks, { pending: () => pending, extra: () => ({ sync }) });
+    p.game = 'page';
+    out.page = [p.store.pending, p.store.writable, await p.store.save(), await p.store.saveBoard(), await p.store.put('gameDir', {}), await p.store.saveBlob('ver:a', new Blob(['a'])), fake.log.length];
+    const heard = {}, blocked = [];
+    p.store.guard({ addEventListener: (type, fn) => { heard[type] = fn; } }, { blocked: (e) => blocked.push(e.type) });
+    const e = { type: 'click', target: { closest: () => null }, preventDefault() { this.prevented = true; }, stopImmediatePropagation() { this.halted = true; } };
+    heard.click(e);
+    out.input = [!!e.prevented, blocked];
+    // the engine writes what it received, with its record
+    p.game = 'received'; sync = { pulled: true };
+    out.engine = [await p.store.saveBoard({ sync: true }), fake.board().game, fake.board('sync')];
+    pending = false;
+    const e2 = { type: 'click', target: { closest: () => null }, preventDefault() { this.prevented = true; }, stopImmediatePropagation() { this.halted = true; } };
+    heard.click(e2);
+    p.game = 'typed';
+    out.after = [p.store.writable, !!e2.prevented, await p.store.save(), fake.board().game];
+    """)
+    assert got["page"] == [True, False, False, False, False, False, 0]
+    assert got["input"] == [True, ["click"]]
+    assert got["engine"] == [True, "received", {"pulled": True}]
+    assert got["after"] == [True, False, True, "typed"]
+
+
+def test_an_accounts_board_never_prunes_versions_for_room():
+    got = run(r"""
+    const make = () => [row('a', { current: 2, versions: [legacy('l1', 1), legacy('l2', 2), legacy('l3', 3)] })];
+    const count = (value) => value.assets.flatMap((x) => x.versions).length;
+    const tryOne = async (extra) => {
+      const fake = fakeIdb(), p = await open(fake, fakeLocks(), extra);
+      p.assets = make();
+      fake.fail.put = (store, key, value) => (key === 'board' && count(value) > 2 ? quota() : null);
+      return [await p.store.save(), p.notes.slice(), p.assets[0].versions.map((v) => v.id)];
+    };
+    out.anon = await tryOne({});
+    out.account = await tryOne({ extra: () => ({ sync: {} }) });
+    """)
+    assert got["anon"] == [True, ["pruned 1"], ["l2", "l3"]]
+    assert got["account"] == [False, ["saveFull"], ["l1", "l2", "l3"]]

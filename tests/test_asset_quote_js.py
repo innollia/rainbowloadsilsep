@@ -1075,7 +1075,7 @@ def test_sounds_that_could_not_be_asked_for_are_said_so_over_making_them_and_the
 def test_the_page_loads_quote_js_between_the_generator_and_the_page_and_keeps_the_stamps():
     html = read("index.html")
     names = scripts()
-    assert names == ["data.js", "synth.js", "importer.js", "godot.js", "refs.js", "measure.js", "store.js", "gen.js", "quote.js", "app.js"]
+    assert names == ["data.js", "synth.js", "importer.js", "godot.js", "unreal_py.js", "unreal.js", "refs.js", "measure.js", "store.js", "board.js", "gen.js", "sync.js", "quote.js", "app.js"]
     # every script is named once, in a whole tag. tools/stamp_assets.py writes a ?v= stamp into each; a tag is right
     # with one (ten hex digits) and without one, and so is the stylesheet's
     for name in names:
@@ -1111,7 +1111,7 @@ def test_the_words_are_in_both_languages_and_only_the_five_labels_are_priced():
     assert app.count("priced(t('drafts')") == 2 and "el('span', 'segLabel', priced(t('drafts')" in app
     # gen.js reads the price with the token and until it has it; the page draws the labels when the token is taken and
     # whenever gen.js says the price came or changed
-    assert "gen.token(e.data).then(drawQuotes)" in app and "onQuote: () => drawQuotes()" in app
+    assert "gen.token(e.data).then(() => { drawQuotes(); syncToken(); })" in app and "onQuote: () => drawQuotes()" in app
     # the picker is the one place the number of drafts is read from
     assert "function draftsWanted(text, box = 'dock') {" in app and "drafts: draftsWanted(" not in app
     # at a press the label's number is read before the words can move the picker, in the dock and in the open sound

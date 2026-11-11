@@ -232,6 +232,13 @@ ${p.form}`,
       genPaused: 'The AI connection has to be renewed, so no new sounds are asked for here. Sounds already being made carry on at the server. Reloading the page renews it too.',
       genFailed: (n) => `${n} draft${n === 1 ? '' : 's'} could not be made.`, genRefunded: (n) => `The credits for ${n} draft${n === 1 ? '' : 's'} are returned.`,
       genLost: (n) => `${n} draft${n === 1 ? ' was' : 's were'} already cleared from the server and could not be brought here.`,
+      syncLost: (n) => `Changed on another computer first: your change to "${n}" was not applied`, syncGone: (n) => `"${n}" was deleted on another computer`,
+      syncOff: 'Not connected. Changes stay on this computer and are sent when the connection is back', syncJoin: 'Loading the board',
+      syncFull: 'The board is out of space. New sounds stay on this computer only', syncOld: 'A new version is out. Reload to keep syncing',
+      genTaken: 'This sound is already being made on another computer', localKept: 'The board on this computer was added to the list in Game info',
+      bundleNeedsBlank: 'Open a bundle on an empty board', boardLimit: 'No more boards can be made', syncBusy: 'Still sending. You can switch once it is done',
+      boardsHead: 'Boards', boardOpen: 'Open', boardSounds: (n) => `${n} sound${n === 1 ? '' : 's'}`, boardSynced: 'Synced',
+      boardSending: (n, a, b) => `Sending · ${n} change${n === 1 ? '' : 's'} · ${a}/${b} sounds`, boardOffline: 'Offline · changes are kept on this computer',
       tutorialTitle: 'How to make game sounds',
       steps: [
         ['Bring in what you have', 'Already have sounds, a list of the sounds the game needs, or a bundle exported here? Import puts them on the board.'],
@@ -383,6 +390,13 @@ ${p.form}`,
       genPaused: 'AI 연결을 새로 받아야 해서 여기서는 새 소리를 못 맡겨~ 만들던 소리는 서버에서 계속 만들고 있어~ 새로고침해도 연결을 새로 받아~',
       genFailed: (n) => `시안 ${n}개는 만들지 못했어~`, genRefunded: (n) => `시안 ${n}개에 쓴 크레딧은 돌아와~`,
       genLost: (n) => `시안 ${n}개는 서버에서 이미 지워져서 못 받아 왔어~`,
+      syncLost: (n) => `다른 컴퓨터에서 먼저 바꿔 버려서 "${n}"에 고친 건 안 들어갔어~`, syncGone: (n) => `"${n}"은(는) 다른 컴퓨터에서 지워 버렸어~`,
+      syncOff: '서버랑 연결이 안 돼~ 고친 건 이 컴퓨터에 뒀다가 연결되면 보내 줄게~', syncJoin: '보드 받아 오는 중이야, 조금만 기다려~',
+      syncFull: '보드 저장 공간이 꽉 찼잖아~ 새 소리는 이 컴퓨터에만 있어~', syncOld: '새 버전이 나왔거든? 새로고침해야 동기화가 이어져~',
+      genTaken: '이 소리는 다른 컴퓨터에서 벌써 만들고 있거든~?', localKept: '이 컴퓨터에 있던 보드는 게임 정보의 보드 목록에 올려 뒀어~',
+      bundleNeedsBlank: '묶음은 빈 보드에서 열라고, 바보야~', boardLimit: '보드를 더는 못 만들어~', syncBusy: '아직 보내는 중이잖아~ 다 보내고 나서 옮겨~',
+      boardsHead: '보드', boardOpen: '열기', boardSounds: (n) => `소리 ${n}개`, boardSynced: '동기화됨',
+      boardSending: (n, a, b) => `보내는 중 · 변경 ${n} · 소리 ${a}/${b}`, boardOffline: '연결 끊김 · 변경은 이 컴퓨터에 있음',
       tutorialTitle: '게임 소리 만드는 법',
       steps: [
         ['가진 것 가져오기', '만들어 둔 소리나 게임에 필요한 소리 목록, 여기서 내보낸 묶음 있으면 가져오기로 보드에 올려 봐~'],
@@ -414,7 +428,9 @@ ${p.form}`,
   const stems = ['#E8AE72', '#87B9E8', '#8CCDB2', '#C7A0E8', '#F3C978'];
 
   /* ---------- state ---------- */
-  const assets = ASSETS.map((d) => ({ ...d, status: d.sample ? 'draft' : 'pending', versions: [], current: 0, drafts: [], pick: -1, chat: [], progress: 0 }));
+  // The stand-in sounds have fixed keys (s_<id>), and a sample's first version a fixed id and time, so every computer
+  // makes the same records of them (docs/ASSET_SYNC_SPEC.md E4).
+  const assets = ASSETS.map((d) => ({ ...d, key: 's_' + d.id, status: d.sample ? 'draft' : 'pending', versions: [], current: 0, drafts: [], pick: -1, chat: [], progress: 0 }));
   const byId = (id) => assets.find((a) => a.id === id);
   let stage = 'sample', filter = { cat: null, status: null, imported: false }, focused = null, anchor = null, openAsset = null, detailTab = 'chat';
   // The board starts on stand-in work. The first import of the user's own work replaces it.
@@ -429,8 +445,27 @@ ${p.form}`,
   /* ---------- storage (store.js): version records, saving, restoring, the tab lock, sound from stored bytes ---------- */
   let ownDb = null;
   try { ownDb = window.indexedDB; } catch { /* storage is off: the visit is not saved */ }
+  // Which board this visit opens (docs/ASSET_SYNC_SPEC.md E2, E5). Without an account named in this browser's pointer
+  // it is the board it has always been. A board kept in step with the server is an account's database of its own,
+  // opened when the pointer names the account last signed in here; the host's word and the token can still send the
+  // visit back to the board without an account. engine: the sync engine (sync.js), once the token is here.
+  const SYNC = window.assetSync, BOARD = window.assetBoard;
+  const syncLs = (() => { try { return window.localStorage; } catch { return null; } })();
+  const pointer = (SYNC && syncLs && SYNC.pointer.read(syncLs)) || { v: 1, anon: null, accts: {} };
+  pointer.accts = pointer.accts && typeof pointer.accts === 'object' ? pointer.accts : {};
+  const lastWho = (() => { try { return syncLs.getItem('asset-sync.who') || ''; } catch { return ''; } })();
+  const acct = SYNC && BOARD && ownDb && lastWho && pointer.accts[lastWho]?.db ? { who: lastWho, db: String(pointer.accts[lastWho].db) } : null;
+  let engine = null, record = null, syncRead = null, engineOk = null;
+  const engineP = new Promise((ok) => { engineOk = ok; });
+  const syncing = () => !!engine && engine.state !== 'off' && engine.state !== 'old';
   const store = assetStore.create({
     indexedDB: ownDb, locks: navigator.locks, synth,
+    ...(acct ? {
+      name: acct.db, extra: () => (engine ? engine.extra() : {}), remote: BOARD.remoteKeys, fetch: (k) => (engine ? engine.fetch(k) : null),
+      // A board that is on the server and was never received here takes no input until it is (the engine says so once
+      // it runs; a visit the server keeps local is not held).
+      pending: () => (engine ? engine.pending && syncing() : !!record && !!record.made && !record.pulled),
+    } : pointer.anon ? { name: String(pointer.anon) } : {}),
     snapshot: () => { syncRefs(); return snapshot(); },
     apply: (data, buffers, info) => applySnapshot(data, buffers, info),
     keys: () => audioKeys(), assets: () => assets,
@@ -439,7 +474,7 @@ ${p.form}`,
   });
   // While another tab has this board, this one only shows it: playing, export, going back and the menu button stay usable.
   // a[download] is the link exportBundle() presses to hand over the zip; nothing else on the page is one.
-  store.guard(window, { allow: '#playAll, #exportBtn, #backBtn, #menuBtn, #dialog.free, a[download]', blocked: (e) => { if (e.type === 'drop') dragEnd(); if (store.readOnly) toast(t('otherTab'), 5000); } });
+  store.guard(window, { allow: '#playAll, #exportBtn, #backBtn, #menuBtn, #dialog.free, a[download]', blocked: (e) => { if (e.type === 'drop') dragEnd(); if (store.readOnly) toast(t('otherTab'), 5000); else if (store.pending) toast(t('syncJoin'), 3000); } });
 
   /* ---------- checks: one table (measure.js) judges every sound, here as on the command line and at the server ---------- */
   // The loudness window music has to sit in: the platform's, unless a spec or the saved board says otherwise.
@@ -498,7 +533,7 @@ ${p.form}`,
   const hasSound = (a) => a.versions.length > 0 || (a.pick >= 0 && !!a.drafts[a.pick]);
   const issues = (a) => (hasSound(a) ? broken(a, heard(a)) : []);
   const approve = (a) => { a.status = 'approved'; toFolder([a]); };
-  assets.filter((a) => a.sample).forEach((a) => make(a));
+  assets.filter((a) => a.sample).forEach((a) => { make(a); a.versions[0].id = 'sv_' + a.key; a.versions[0].at = new Date(0); });
 
   /* ---------- generation (gen.js): asking the API for sounds, bringing them back, picking work up after a reload ---------- */
   const refBrief = (r) => ({ kind: r.kind, name: r.name || '', url: r.url || '', note: r.note || '', summary: r.summary || '' });
@@ -544,6 +579,13 @@ ${p.form}`,
     render: (list) => { if (openAsset && !list.includes(openAsset)) renderHeader(); else renderOpen(); },
     progress: (a) => tileOf(a)?.querySelector('.bar')?.style.setProperty('--p', a.progress),
     done: (a, info) => { if (info.made > 1) a.chat.push({ ai: 'drafts', n: info.made }); else if (info.made === 1 && info.mode === 'revise') a.chat.push({ ai: 'one' }); },
+    // An account's board (H): a job record is this computer's by its dev, work is picked up once the board was
+    // received, the sounds are claimed on the server before they are asked for, and work left by another computer is
+    // taken over.
+    ...(acct ? {
+      dev: () => (record ? record.dev : null), ready: () => engineP.then((e) => e.ready()), claim: (list) => engineP.then((e) => e.claim(list)),
+      handover: { info: () => (engine ? engine.peers() : { up: 0, now: 0, peers: [] }), take: (list) => (engine ? engine.push(list) : []) },
+    } : {}),
   });
   // Why the room takes no request for sounds right now, or ''. To the generator's own reasons (no token, another tab
   // has the board, no room to save) the page adds one: what a draft costs has not come (gen.js reads it with the
@@ -952,7 +994,12 @@ ${p.form}`,
     if (!list.length) return;
     if (list.some(sounding)) stopSound();
     gen.cancel(list); // a sound still being made is no longer wanted: its jobs are cancelled and it is as it was before
-    list.forEach((a) => { selected.delete(a.id); const i = assets.indexOf(a); if (i >= 0) assets.splice(i, 1); a.trashedAt = Date.now(); trash.push(a); });
+    list.forEach((a) => {
+      selected.delete(a.id); const i = assets.indexOf(a); if (i >= 0) assets.splice(i, 1);
+      // On an account's board drafts are not thrown away with the trash: they become versions of the sound (G).
+      if (acct && a.drafts.length) { a.versions.push(...a.drafts); a.drafts = []; a.pick = -1; if (a.status === 'review' || a.status === 'pending') a.status = 'draft'; }
+      a.trashedAt = Date.now(); trash.push(a);
+    });
   }
   function removeAssets(list) { toTrash(list); renderBoard(); toast(t('trashed', list.length), 4000); }
   function restoreFromTrash(list) {
@@ -970,14 +1017,14 @@ ${p.form}`,
     for (const a of [...trash].reverse()) {
       const r = el('div', 'lineItem'), back = el('button', '', t('restore')), gone = el('button', 'ghost', t('deleteForever'));
       back.onclick = () => { restoreFromTrash([a]); renderBoard(); trashDialog(); };
-      gone.onclick = () => { if (!confirm(t('confirmDelete', 1))) return; trash.splice(trash.indexOf(a), 1); renderBoard(); trashDialog(); };
+      gone.onclick = () => { if (!confirm(t('confirmDelete', 1))) return; trash.splice(trash.indexOf(a), 1); purgeKeys([a]); renderBoard(); trashDialog(); };
       r.append(el('span', 'grow', `${nm(a)} · ${tx(catOf(a.cat)?.name ?? a.cat)}${a.versions.length ? '' : ` · ${statusText('pending')}`}`), back, gone);
       dlg.append(r);
     }
     if (trash.length) {
       const foot = el('div', 'dlgRow'), all = el('button', '', t('restoreAll')), empty = el('button', 'ghost', t('emptyTrash'));
       all.onclick = () => { restoreFromTrash([...trash]); renderBoard(); dlg.close(); };
-      empty.onclick = () => { if (!confirm(t('confirmDelete', trash.length))) return; trash = []; renderBoard(); dlg.close(); };
+      empty.onclick = () => { if (!confirm(t('confirmDelete', trash.length))) return; purgeKeys(trash); trash = []; renderBoard(); dlg.close(); };
       foot.append(empty, all); dlg.append(foot);
     }
     if (!dlg.open) dlg.showModal();
@@ -1361,8 +1408,8 @@ ${p.form}`,
     if (e.source !== window.parent) return;
     // The token for the generation API. Only the host page's own message counts: from the parent, from this origin.
     // A token of another kind or person has no price yet: the numbers go until gen.js has read the new one (onQuote).
-    if (e.data?.type === 'asset:token') { if (assetGen.fromHost(e, window.parent, location.origin)) gen.token(e.data).then(drawQuotes); return; }
-    if (e.data?.type === 'asset:ai') agentOn = !!e.data.on;
+    if (e.data?.type === 'asset:token') { if (assetGen.fromHost(e, window.parent, location.origin)) gen.token(e.data).then(() => { drawQuotes(); syncToken(); }); return; }
+    if (e.data?.type === 'asset:ai') { agentOn = !!e.data.on; if (e.origin === location.origin) syncSigned(!!e.data.signed); }
     if (e.data?.type === 'asset:agent_reply') {
       const w = agentWaits.get(e.data.n);
       if (!w || e.data.status === 'working') return;
@@ -1419,6 +1466,7 @@ ${p.form}`,
       }
     } else if (!makeAsked(remakes, fills, asked.drafts)) turnedAway = true;
     if (!n) return null;
+    if (acct) return revertLater(before);
     // Putting things back leaves a sound that is being made (a.work) exactly as it is: its name, group, kind and
     // description are what its job was asked with, and its drafts come for a pick as they would have. A group the
     // answer made stays when such a sound was moved into it.
@@ -1506,7 +1554,15 @@ ${p.form}`,
     for (const [name, g] of Object.entries(player.gains)) g.gain.value = stemLevel(name);
   }
   const detailWait = new WeakSet(); // versions the detail view is waiting to hear decoded
-  const transition = (fn) => (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches ? document.startViewTransition(fn) : fn());
+  // A view transition in flight is not drawn over by what another computer sent (quiet()); one the browser gives up
+  // on (an invalid state while its snapshot is taken) only skips the animation.
+  let moving = 0;
+  const transition = (fn) => {
+    if (!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) return fn();
+    const v = document.startViewTransition(fn);
+    moving++; v.ready.catch(() => {}); v.finished.catch(() => {}).finally(() => { moving--; });
+    return v;
+  };
 
   function showDetail(on) {
     $('boardView').hidden = on; $('detailView').hidden = !on; $('dock').hidden = on;
@@ -1879,7 +1935,7 @@ ${p.form}`,
     const root = el('input'); root.value = exportOpts.root || 'audio'; root.setAttribute('aria-label', t('rootFolder'));
     root.onchange = () => { exportOpts.root = root.value.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') || 'audio'; autosave(); exportDialog(); };
     { const r = el('label', 'lineItem'); r.append(el('span', 'grow', t('rootFolder')), root); dlg.append(r); }
-    opt(t('engine'), 'engine', [['none', t('engineNone')], ['godot', 'Godot 4']]);
+    opt(t('engine'), 'engine', [['none', t('engineNone')], ['godot', 'Godot 4'], ['unreal', 'Unreal Engine 5']]);
     // Chrome and Edge can write straight into the game: linked once, every approval lands there with the settings above.
     // A view-only tab does not link or write: the tab that has the board does.
     if ('showDirectoryPicker' in window && store.ready) {
@@ -1904,7 +1960,8 @@ ${p.form}`,
   function gameDialog() {
     openDialog(tx(game)); reopen = gameDialog;
     dlg.append(el('p', '', tx(brief)));
-    const b = el('button', '', t('restart')); b.onclick = async () => { takeBlank(); await forget(); location.reload(); };
+    if (acct) boardList();
+    const b = el('button', '', t('restart')); b.onclick = acct ? newSample : async () => { takeBlank(); await forget(); location.reload(); };
     const e = el('button', '', t('startBlank')); e.id = 'startBlank'; e.onclick = startBlank;
     dlg.append(b, ' ', e);
     dlg.showModal();
@@ -1983,6 +2040,9 @@ ${p.form}`,
   // be put back. The trash keeps versions only: drafts still under review go there as versions of their sound.
   function clearBoard() {
     gen.cancel([...assets]);
+    // An account's board: the stand-in sounds nobody touched are deleted for good on every computer, everything else
+    // goes to the trash (another computer may have renamed a sample: it is kept).
+    if (acct) { const plain = assets.filter(untouched); purgeKeys(plain); toTrash(assets.filter((a) => !plain.includes(a))); assets.length = 0; return; }
     const made = assets.filter((a) => [...a.versions, ...a.drafts].some((v) => v.engine === 'nkido'));
     for (const a of made) {
       if (!a.drafts.length) continue;
@@ -2030,7 +2090,7 @@ ${p.form}`,
     let total = 0;
     for (const e of entries.filter((x) => !importer.junk(x.path))) {
       const zipped = /\.zip$/i.test(e.path), size = e.size || 0;
-      if (!zipped && !AUDIO.test(e.path) && !/\.json$/i.test(e.path)) { if (!/\.(md|txt|gd|tscn|tres|cfg)$/i.test(e.path)) sk.type++; continue; }
+      if (!zipped && !AUDIO.test(e.path) && !/\.json$/i.test(e.path)) { if (!/\.(md|txt|gd|tscn|tres|cfg|py|uplugin)$/i.test(e.path)) sk.type++; continue; }
       if (size > (zipped ? LIMITS.total : LIMITS.file) || total + size > LIMITS.total) { sk.big++; continue; }
       total += size;
       if (!zipped) { found.push(e); continue; }
@@ -2040,7 +2100,7 @@ ${p.form}`,
         for (const z of inside) {
           if (importer.junk(z.path)) continue;
           if (AUDIO.test(z.path) || /\.json$/i.test(z.path)) found.push({ path: z.path, size: z.size, bytes: async () => z.bytes });
-          else if (!/\.(md|txt|gd|tscn|tres|cfg)$/i.test(z.path)) sk.type++;
+          else if (!/\.(md|txt|gd|tscn|tres|cfg|py|uplugin)$/i.test(z.path)) sk.type++;
         }
       } catch { sk.bad++; }
     }
@@ -2081,17 +2141,19 @@ ${p.form}`,
   }
   // A bundle this screen exported: the spec says what each sound is, the audio files are the sounds.
   async function openBundle(spec, files, sk = tally()) {
+    // An account's board is not replaced by a bundle while it holds sounds: it opens on an empty board (G).
+    if (acct && assets.length) { toast(t('bundleNeedsBlank'), 5000); return; }
     leaveDemo();
     clearBoard(); selected.clear(); stopSound(); // the bundle replaces the board
     game = spec.game || game; brief = spec.style || '';
     const target = PROFILES.find((f) => f.id === spec.platform);
     if (target) { platform = target.id; loudRange = [...target.loud]; }
-    if (Array.isArray(spec.categories) && spec.categories.length) cats = spec.categories.filter((c) => c && c.id).map((c, i) => ({ id: c.id, name: c.name || c.id, kind: KINDS.includes(c.kind) ? c.kind : 'sfx', hue: c.color || CATEGORIES.find((d) => d.id === c.id)?.hue || HUES[i % HUES.length], ...(c.parent ? { parent: c.parent } : {}) }));
+    if (Array.isArray(spec.categories) && spec.categories.length) inPlace('cats', spec.categories.filter((c) => c && c.id).map((c, i) => ({ id: c.id, name: c.name || c.id, kind: KINDS.includes(c.kind) ? c.kind : 'sfx', hue: c.color || CATEGORIES.find((d) => d.id === c.id)?.hue || HUES[i % HUES.length], ...(c.parent ? { parent: c.parent } : {}) })));
     if (spec.id_rule?.pattern) idRule = { ...idRule, ...spec.id_rule, prefix: { ...idRule.prefix, ...spec.id_rule.prefix } };
     if (spec.export) exportOpts = { ...exportOpts, ...spec.export };
-    dynamics = Array.isArray(spec.dynamics) ? spec.dynamics.map(dynFromSpec) : [];
+    inPlace('dynamics', Array.isArray(spec.dynamics) ? spec.dynamics.map(dynFromSpec) : []);
     const backRefs = (list) => (Array.isArray(list) ? list : []).filter((r) => r && (r.kind === 'text' || r.kind === 'link')).map((r) => ({ id: newRefId(), kind: r.kind, name: String(r.name || ''), note: String(r.note || ''), url: String(r.url || ''), at: Date.now() }));
-    projectRefs = backRefs(spec.references);
+    inPlace('projectRefs', backRefs(spec.references));
     for (const c of spec.categories || []) if (c?.references && catOf(c.id)) catOf(c.id).refs = backRefs(c.references);
     let done = 0;
     for (const x of spec.assets) {
@@ -2196,7 +2258,9 @@ ${p.form}`,
   let refAudio = null;
   function playRef(r, button) {
     if (refAudio) { refAudio.pause(); URL.revokeObjectURL(refAudio.src); const was = refAudio.ref; refAudio = null; if (was === r.id) { setIcon(button, 'play'); return; } }
-    const bytes = refBlobs.get(r.key); if (!bytes) { toast(t('refGone'), 3000); return; }
+    const bytes = refBlobs.get(r.key);
+    if (!bytes && acct && r.key) { store.bytes(r.key).then((u8) => { refBlobs.set(r.key, u8); playRef(r, button); }, () => toast(t('refGone'), 3000)); return; }
+    if (!bytes) { toast(t('refGone'), 3000); return; }
     stopSound();
     refAudio = new Audio(URL.createObjectURL(new Blob([bytes]))); refAudio.ref = r.id;
     refAudio.onended = () => { setIcon(button, 'play'); refAudio = null; };
@@ -2544,7 +2608,8 @@ ${p.form}`,
     if (!had && !assetStore.isLegacy(v) && player?.version !== v && openAsset !== a) delete v.sound;
     return out;
   }
-  // Spec, credits and lint for every approved sound, the audio of `list`, and the Godot files when they are asked for.
+  // Spec, credits and lint for every approved sound, the audio of `list`, and the engine files (Godot or Unreal) when
+  // they are asked for. For Unreal the files that are not the engine's go in its folder beside the .uproject.
   async function bundleFiles(list) {
     const going = assets.filter((a) => a.status === 'approved' && a.versions.length), utf8 = (s) => new TextEncoder().encode(s);
     const spec = {
@@ -2570,10 +2635,12 @@ ${p.form}`,
       if (list.length > 1) { toast(t('encoding', ++n, list.length), 0); await breathe(); }
       files.push({ path: exportPath(a), bytes: await exportBytes(a) });
     }
-    if (exportOpts.engine === 'godot') {
-      if (!window.godotExport) throw new Error('godot.js');
+    const lib = { godot: 'godotExport', unreal: 'unrealExport' }[exportOpts.engine];
+    if (lib) {
+      if (!window[lib]) throw new Error(exportOpts.engine + '.js');
+      if (exportOpts.engine === 'unreal') for (const f of files) f.path = window.unrealExport.ROOT + f.path;
       const project = { game: tx(game), assets: going.map((a) => ({ id: a.id, name: nm(a), category: a.cat, loop: !!a.loop, file: exportPath(a), seconds: heard(a).measure.seconds })), dynamics: dynamics.map(dynToSpec) };
-      for (const f of window.godotExport.build(project)) files.push({ path: f.path, bytes: utf8(f.text) });
+      for (const f of window[lib].build(project)) files.push({ path: f.path, bytes: utf8(f.text) });
     }
     return files;
   }
@@ -2608,9 +2675,20 @@ ${p.form}`,
     if (!gameDir || !list.length) return;
     try {
       if ((await ask) !== 'granted') throw new Error(t('folderDenied'));
+      if (exportOpts.engine === 'unreal') { const taken = await notOurs(gameDir); if (taken) throw new Error(taken); }
       await writeFiles(gameDir, await bundleFiles(list));
       if (list.length > 1) $('toast').hidden = true;
     } catch (e) { toast(t('folderFailed', e.message || e), 6000); }
+  }
+  // Unreal: Olmuse's folders that hold something Olmuse did not write (no spec, no build file) are not written over.
+  // Answers the name of such a folder, or ''.
+  async function notOurs(dir) {
+    const sub = async (d, name) => { try { return await d.getDirectoryHandle(name); } catch { return null; } };
+    const has = async (d, name) => { try { await d.getFileHandle(name); return true; } catch { return false; } };
+    const root = await sub(dir, 'OlmuseAudio'), plugins = await sub(dir, 'Plugins'), plugin = plugins && (await sub(plugins, 'OlmuseAudio'));
+    if (root && !(await has(root, SPEC))) return 'OlmuseAudio';
+    if (plugin && !(await has(plugin, 'olmuse_build.json'))) return 'Plugins/OlmuseAudio';
+    return '';
   }
   async function writeFiles(dir, files) {
     for (const f of files) {
@@ -2620,16 +2698,20 @@ ${p.form}`,
       await w.write(f.bytes); await w.close();
     }
   }
-  // What the folder already has, read like an import: the spec at its top and sound files below, skipping hidden
-  // folders (.godot, .git) and node_modules.
+  // What the folder already has, read like an import: the spec at its top (or in OlmuseAudio/, where an Unreal export
+  // puts it) and sound files below, skipping hidden folders (.godot, .git) and node_modules, and at the top only the
+  // folders of an Unreal project (Content, Plugins, Config, Intermediate, Saved, DerivedDataCache, Binaries, Build).
+  // With the spec only in OlmuseAudio/, the paths under it lose that prefix, as the board's export paths have none.
+  const ENGINE_DIRS = /^(Content|Plugins|Config|Intermediate|Saved|DerivedDataCache|Binaries|Build)$/;
   async function readFolder(dir, path = '', out = [], budget = { n: 5000 }) {
     for await (const [name, h] of dir.entries()) {
       if (--budget.n < 0) break;
       const at = path ? `${path}/${name}` : name;
-      if (h.kind === 'directory') { if (!/^\.|^node_modules$/.test(name)) await readFolder(h, at, out, budget); continue; }
-      if (AUDIO.test(name) || (!path && name === SPEC)) out.push(fileEntry(await h.getFile(), at));
+      if (h.kind === 'directory') { if (!/^\.|^node_modules$/.test(name) && !(!path && ENGINE_DIRS.test(name))) await readFolder(h, at, out, budget); continue; }
+      if (AUDIO.test(name) || (name === SPEC && (!path || path === 'OlmuseAudio'))) out.push(fileEntry(await h.getFile(), at));
     }
-    return out;
+    if (path || out.some((e) => e.path === SPEC) || !out.some((e) => e.path === `OlmuseAudio/${SPEC}`)) return out;
+    return out.map((e) => (e.path.startsWith('OlmuseAudio/') ? { ...e, path: e.path.slice('OlmuseAudio/'.length) } : e));
   }
   async function linkFolder() {
     let dir;
@@ -2649,7 +2731,8 @@ ${p.form}`,
   /* ---------- dynamic sounds: layers of existing sounds driven by game parameters ---------- */
   let dynamics = [];
   const DB_FLOOR = -80;
-  const dynId = () => { const taken = new Set(dynamics.map((d) => d.id)); let k = dynamics.length + 1; while (taken.has(`dyn_${k}`)) k++; return `dyn_${k}`; };
+  // On an account's board two computers may add one at the same time: the id is random there (E4).
+  const dynId = () => { if (acct) return `dyn_${randomHex(6)}`; const taken = new Set(dynamics.map((d) => d.id)); let k = dynamics.length + 1; while (taken.has(`dyn_${k}`)) k++; return `dyn_${k}`; };
   // A layer is silent below on[0] and full from on[1] (reversed when on[0] > on[1]); its curve in dB is what engines get.
   const layerLevel = (l, d) => {
     const p = d.params.find((x) => x.id === l.param);
@@ -2849,11 +2932,13 @@ ${p.form}`,
     const status = (a.status === 'working' || a.status === 'review') && !kept ? (a.versions.length ? 'draft' : 'pending') : a.status;
     return { status, versions: a.versions, drafts: kept ? a.drafts : [], pick: kept ? a.pick : -1 };
   }
+  // One sound as the saved record holds it.
+  function snapAsset(a, binned) {
+    const { versions, drafts: options, source, progress, ...rest } = a, kept = keptOf(a, binned);
+    return { ...rest, key: source ? keyOf(a) : a.key, status: kept.status, versions: kept.versions.map(assetStore.record), drafts: kept.drafts.map(assetStore.record), pick: kept.pick, hasSource: !!source };
+  }
   function snapshot() {
-    const one = (binned) => (a) => {
-      const { versions, drafts: options, source, progress, ...rest } = a, kept = keptOf(a, binned);
-      return { ...rest, key: source ? keyOf(a) : a.key, status: kept.status, versions: kept.versions.map(assetStore.record), drafts: kept.drafts.map(assetStore.record), pick: kept.pick, hasSource: !!source };
-    };
+    const one = (binned) => (a) => snapAsset(a, binned);
     return {
       v: assetStore.SNAPSHOT, game, brief, platform, demo, stage, loud: [...loudRange], cats, idRule, exportOpts, projectRefs, agentLog: agentLog.slice(-30),
       trash: trash.map(one(true)),
@@ -2895,6 +2980,7 @@ ${p.form}`,
     refBlobs.clear(); files.forEach((bytes, k) => refBlobs.set(k, bytes));
     if (Array.isArray(data.dynamics)) dynamics = data.dynamics;
     gameDir = info?.gameDir || null;
+    if (info && 'sync' in info) syncRead = info.sync;
     assets.length = 0; assets.push(...live); trash = binned;
   }
   // The store writes the board record first, then each sound that is not on disk yet, and runs one save at a time, so
@@ -2911,7 +2997,7 @@ ${p.form}`,
       gen.check(); // a draft whose sound found room only now counts as received
     }).catch(() => {});
   }
-  function autosave() { if (!store.writable) return; clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 500); }
+  function autosave() { if (!store.writable) return; clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 500); if (engine) engine.nudge(); else if (sampleWatch) sampleSoon(); }
   addEventListener('pagehide', saveNow);
   document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(hoverTimer); queue = null; stopSound(); dynStop(); saveNow(); } });
   addEventListener('blur', () => { clearTimeout(hoverTimer); if (player?.hover || playWait?.hover) stopSound(); });
@@ -2942,7 +3028,7 @@ ${p.form}`,
     // worked: the tab would show the real board, take every change and keep none. So it starts over as a new visit
     // that has the board. It does the same when the other tab started again from the samples while this one still
     // shows the old board.
-    if (store.paused || (result === 'empty' && shown !== 'empty')) { location.reload(); return; }
+    if (acct || store.paused || (result === 'empty' && shown !== 'empty')) { location.reload(); return; } // an account's board starts its engine on a fresh visit
     $('toast').hidden = true;
     if (result === 'restored') {
       clearTimeout(hoverTimer); queue = null; stopSound(); dynStop();
@@ -2960,6 +3046,7 @@ ${p.form}`,
   // of the user's own (made here, or brought in) go for good, trash included, so that is asked first.
   const own = (a) => a.imported || [...a.versions, ...a.drafts].some((v) => v.engine === 'nkido');
   async function startBlank() {
+    if (acct) { newBlank(); return; } // an account's board is not deleted: this computer moves to a new one (I)
     const n = [...assets, ...trash].filter(own).length;
     if (n && !confirm(t('confirmBlank', n))) return;
     if (await forget()) { try { sessionStorage.setItem('asset-blank', '1'); } catch { /* the samples come back instead */ } }
@@ -2972,6 +3059,280 @@ ${p.form}`,
     assets.length = 0; demo = false; stage = 'expand'; brief = '';
     game = Object.fromEntries(LANGS.map((l) => [l, TEXT[l].blankGame]));
     autosave();
+  }
+
+  /* ---------- board sync (sync.js): one board in step between the computers of an account ---------- */
+  // docs/ASSET_SYNC_SPEC.md E5, G, H, I. Nothing here runs for a visit without an account in the pointer until the host
+  // says an account is signed in, its token is here and the server answers that boards are on for it.
+  const randomHex = (n) => Array.from(crypto.getRandomValues(new Uint8Array(n)), (b) => (b & 15).toString(16)).join('');
+  async function sha256hex(u8) { const h = await crypto.subtle.digest('SHA-256', u8); return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, '0')).join(''); }
+  let signedIn = null, booted = false, asked = '', sampleWatch = null, sampleTimer = 0, refetched = false;
+  // The page as records: every sound has its key first (toRecords leaves a sound without one out).
+  function syncSnapshot() { for (const a of assets) keyOf(a); for (const a of trash) keyOf(a); syncRefs(); return snapshot(); }
+  const VALUES = { game: () => game, brief: () => brief, platform: () => platform, loud: () => loudRange, demo: () => demo, stage: () => stage, idRule: () => idRule, exportOpts: () => exportOpts };
+  function setValue(k, v) {
+    if (k === 'game') game = v; else if (k === 'brief') brief = v; else if (k === 'platform') platform = v; else if (k === 'loud') { if (Array.isArray(v) && v.length === 2) loudRange = v; }
+    else if (k === 'demo') demo = v; else if (k === 'stage') stage = v; else if (k === 'idRule') { if (v && typeof v === 'object') idRule = v; } else if (k === 'exportOpts') { if (v && typeof v === 'object') exportOpts = { ...exportOpts, ...v }; }
+  }
+  // The live arrays and values board.js patches in place (read again on every call: a list may have been replaced).
+  const syncModel = () => ({ assets, trash, cats, refs: projectRefs, dynamics, get: (k) => VALUES[k]?.(), set: setValue, makeId, fitCat });
+  // A list replaced from outside (a bundle) is refilled where an account's board is open, so the objects others hold stay.
+  function inPlace(name, next) {
+    const now = { cats, dynamics, projectRefs }[name];
+    if (acct) { now.splice(0, now.length, ...next); return; }
+    if (name === 'cats') cats = next; else if (name === 'dynamics') dynamics = next; else projectRefs = next;
+  }
+  // The page may be drawn again: no text field held (but the request box), no IME, no pointer down, no tile menu.
+  let composing = false, pressing = false;
+  addEventListener('compositionstart', () => { composing = true; }, true); addEventListener('compositionend', () => { composing = false; }, true);
+  addEventListener('pointerdown', () => { pressing = true; }, true); for (const type of ['pointerup', 'pointercancel']) addEventListener(type, () => { pressing = false; }, true);
+  function quiet() {
+    const f = document.activeElement;
+    const typing = !!f && f.id !== 'ask' && (f.tagName === 'TEXTAREA' || f.tagName === 'SELECT' || f.isContentEditable || (f.tagName === 'INPUT' && !['checkbox', 'radio', 'range', 'button', 'file', 'submit'].includes(f.type)));
+    return !typing && !composing && !pressing && !moving && tileCtx.hidden;
+  }
+  // What came from another computer is drawn: the open sound when it is one of them, else the board. Dialogs stay.
+  function syncRedraw(list) {
+    syncRefs();
+    if (openAsset && !assets.includes(openAsset)) { openAsset = null; showDetail(false); renderBoard(); return; }
+    if (openAsset) { if (list.includes(openAsset)) renderDetail(); else renderHeader(); return; }
+    renderBoard();
+  }
+  function syncLost(x) { toast(t(x.what, x.name == null ? '' : tx(x.name)), x.what === 'syncLost' || x.what === 'syncGone' ? 5000 : 7000); }
+  // Sounds deleted for good: their delete goes to the server (the engine sends it; before it runs, the record keeps it).
+  function purgeKeys(list) {
+    const keys = list.map((a) => a && a.key).filter(Boolean);
+    if (!acct || !keys.length) return;
+    if (engine) engine.purge(keys);
+    else if (record) record.purge = [...new Set([...(record.purge || []), ...keys.map((k) => 'asset/' + k)])];
+  }
+  // A sound's record as the server would hold it, and the stand-in sounds' records as this page made them.
+  const recordOf = (a) => BOARD.canon(BOARD.toRecords({ assets: [snapAsset(a, false)] }).get('asset/' + a.key));
+  const sampleRecords = BOARD ? new Map(assets.map((a) => [a.key, recordOf(a)])) : new Map();
+  const untouched = (a) => !!a && String(a.key || '').startsWith('s_') && sampleRecords.get(a.key) === recordOf(a);
+  // The assistant's answer taken back where others edit too: only what still holds what the answer wrote (G).
+  function revertLater(before) {
+    const fieldsOf = (a) => ({ name: a.name, cat: a.cat, description: a.description, when: a.when, music: a.music, loop: a.loop, refs: JSON.stringify(ownRefs(a)) });
+    const was = { cats: new Map(JSON.parse(before.cats).map((c) => [c.id, c])), refs: new Map(JSON.parse(before.projectRefs).map((r) => [r.id, r])) };
+    const after = { brief, cats: new Map(cats.map((c) => [c.id, BOARD.copy(c)])), refs: new Map(projectRefs.map((r) => [r.id, BOARD.copy(r)])), assets: before.assets.map(([a]) => [a, fieldsOf(a)]) };
+    const prior = new Map(before.assets);
+    const put = (o, fields) => { for (const [k, v] of Object.entries(fields)) { if (v === undefined) delete o[k]; else o[k] = v; } };
+    return () => {
+      if (BOARD.same(brief, after.brief)) brief = before.brief;
+      for (const [id, made] of after.cats) {
+        const c = catOf(id), old = was.cats.get(id);
+        if (!c) continue;
+        if (old) { put(c, BOARD.revertFields(old, made, c)); continue; }
+        if (BOARD.same(c, made) && ![...assets, ...trash].some((a) => a.cat === id) && !cats.some((x) => x.parent === id)) cats.splice(cats.indexOf(c), 1);
+      }
+      for (const [id, made] of after.refs) if (!was.refs.has(id)) { const i = projectRefs.findIndex((r) => r.id === id); if (i >= 0 && BOARD.same(projectRefs[i], made)) projectRefs.splice(i, 1); }
+      for (const [id, old] of was.refs) if (!after.refs.has(id) && !projectRefs.some((r) => r.id === id)) projectRefs.push(old);
+      for (const [a, made] of after.assets) {
+        if (a.work) continue;
+        const back = BOARD.revertFields(prior.get(a), made, fieldsOf(a)), refs = back.refs;
+        delete back.refs; put(a, back);
+        if (refs !== undefined) a.refs = [...(a.refs || []).filter((r) => r.from !== 'asset'), ...JSON.parse(refs)];
+      }
+      selected.clear(); before.sel.forEach((id) => selected.add(id));
+      syncRefs(); renderBoard();
+    };
+  }
+
+  /* moving between databases: a new one gets its sync record first, then the pointer, then the frame reloads */
+  function setPointer(who, db) {
+    if (who) pointer.accts[who] = { ...(pointer.accts[who] || {}), db };
+    SYNC.pointer.write(syncLs, pointer);
+    try { syncLs.setItem('asset-sync.who', who || ''); } catch { /* the next visit opens the board without an account */ }
+  }
+  // Three reloads in ten seconds stop here: the visit stays as it is.
+  function reloadSync() {
+    let times = [];
+    try { times = JSON.parse(sessionStorage.getItem('asset-sync.reloads') || '[]').filter((x) => Date.now() - x < 10000); } catch { times = []; }
+    if (times.length >= 3) { if (engine) engine.stop(); return false; }
+    try { sessionStorage.setItem('asset-sync.reloads', JSON.stringify([...times, Date.now()])); } catch { /* counted on this visit only */ }
+    Promise.resolve(saveNow()).finally(() => location.reload());
+    return true;
+  }
+  function seedDb(name, rec) {
+    return new Promise((ok) => {
+      let r;
+      try { r = ownDb.open(name, 1); } catch { ok(false); return; }
+      r.onupgradeneeded = () => { r.result.createObjectStore('board'); r.result.createObjectStore('audio'); };
+      r.onerror = () => ok(false); r.onblocked = () => ok(false);
+      r.onsuccess = () => {
+        const db = r.result;
+        try {
+          const q = db.transaction('board', 'readwrite'); q.objectStore('board').put(rec, 'sync');
+          q.oncomplete = () => { db.close(); ok(true); }; q.onerror = q.onabort = () => { db.close(); ok(false); };
+        } catch { db.close(); ok(false); }
+      };
+    });
+  }
+  async function goTo(who, name, rec) { if (rec && !(await seedDb(name, rec))) { toast(t('saveFull'), 6000); return false; } setPointer(who, name); return reloadSync(); }
+  // The database of one board of the account in this browser, or a new one bound to it that receives it.
+  async function openHome(who, board) {
+    const have = ((await SYNC.scan(ownDb, who)) || []).find((x) => x.sync.board === board && !x.sync.apart);
+    if (have) return goTo(who, have.name);
+    return goTo(who, SYNC.dbName(who, board), SYNC.record({ who, board, made: true, make: { first: false, home: false } }));
+  }
+  // Before this computer goes to another board, everything is sent (I). A board never on the server waits for nothing.
+  async function leaving() {
+    if (!record) return true;
+    if (!engine) { if (!record.made && (record.seed === 'sample' ? BOARD.pristine(syncSnapshot()) : true)) return true; toast(t('syncOff'), 5000); return false; }
+    const r = await engine.flush(5000);
+    if (!r.ok) toast(t(r.reason || 'syncBusy'), 5000);
+    return r.ok;
+  }
+  async function newBlank() {
+    if (!(await leaving())) return;
+    const board = SYNC.newBoard();
+    goTo(acct.who, SYNC.dbName(acct.who, board), SYNC.record({ who: acct.who, board, made: false, make: { first: false, home: false }, seed: 'blank' }));
+  }
+  async function newSample() {
+    if (!(await leaving())) return;
+    goTo(acct.who, SYNC.sampleName(acct.who), SYNC.record({ who: acct.who, board: SYNC.newBoard(), made: false, make: { first: false, home: false }, seed: 'sample' }));
+  }
+  async function openBoard(id) {
+    if (!(await leaving())) return;
+    const r = await SYNC.open(gen.call, id);
+    if (r.status !== 200) { toast(t('syncOff'), 5000); return; }
+    openHome(acct.who, id);
+  }
+  // The boards of the account, in the game info dialog: this board's row says how far it is sent.
+  const ago = (sec) => {
+    const d = Math.round(sec - Date.now() / 1000), a = Math.abs(d);
+    const [n, unit] = a < 60 ? [d, 'second'] : a < 3600 ? [Math.round(d / 60), 'minute'] : a < 86400 ? [Math.round(d / 3600), 'hour'] : [Math.round(d / 86400), 'day'];
+    try { return new Intl.RelativeTimeFormat(lang, { numeric: 'auto' }).format(n, unit); } catch { return ''; }
+  };
+  function syncLine() {
+    const s = engine.status();
+    return s.state === 'synced' ? t('boardSynced') : s.state === 'sending' ? t('boardSending', s.changes, s.sounds[0], s.sounds[1]) : s.state === 'offline' ? t('boardOffline') : '';
+  }
+  function boardList() {
+    const box = el('div', 'boardList'); dlg.append(box);
+    if (!syncing() || !record) return;
+    SYNC.list(gen.call).then((r) => {
+      if (r.status !== 200 || !r.data || !Array.isArray(r.data.boards) || !box.isConnected) return;
+      const line = (name, n, at) => [tx(name) || t('blankGame'), t('boardSounds', n), typeof at === 'number' ? ago(at) : ''].filter(Boolean).join(' · ');
+      const here = r.data.boards.find((b) => b.id === record.board), cur = el('div', 'lineItem boardRow here'), state = el('span', 'boardState', syncLine());
+      cur.append(el('span', 'grow', line(game, assets.length, here?.changed)), state);
+      box.append(el('h3', '', t('boardsHead')), cur);
+      for (const b of r.data.boards.filter((x) => x.id !== record.board)) {
+        const row = el('div', 'lineItem boardRow'), go = el('button', '', t('boardOpen'));
+        go.onclick = () => openBoard(b.id);
+        row.append(el('span', 'grow', line(b.name, b.live, b.changed)), go); box.append(row);
+      }
+      const timer = setInterval(() => { if (!box.isConnected || !dlg.open) { clearInterval(timer); return; } state.textContent = syncLine(); }, 1000);
+    });
+  }
+
+  /* the host's word and the token decide which board this is (E5) */
+  function leaveAccount() { if (engine) engine.stop(); try { syncLs.setItem('asset-sync.who', ''); } catch { /* nothing kept */ } reloadSync(); }
+  function syncSigned(on) { signedIn = on; if (acct && !on) leaveAccount(); else syncToken(); }
+  function syncToken() {
+    const id = gen.identity;
+    if (!SYNC || !BOARD || !id || !booted) return;
+    if (acct) {
+      if (id.kind !== 'acct' || signedIn === false) { leaveAccount(); return; }
+      if (id.who !== acct.who) { try { syncLs.setItem('asset-sync.who', id.who); } catch { /* stays */ } reloadSync(); return; }
+      if (store.restored === 'failed') { receiveAgain(id.who); return; }
+      if (engine) engine.wake(); else startEngine();
+      return;
+    }
+    if (signedIn !== true || id.kind !== 'acct' || !store.writable || asked === id.who) return;
+    asked = id.who;
+    firstLink(id.who).catch(() => {});
+  }
+  // The first account token in a browser without that account's board (the table of E5).
+  async function firstLink(who) {
+    const found = ((await SYNC.scan(ownDb, who)) || []).filter((x) => !x.sync.apart);
+    if (found.length) { setPointer(who, found[0].name); reloadSync(); return; }
+    const r = await SYNC.list(gen.call);
+    if (r.status !== 200 || !r.data || !Array.isArray(r.data.boards)) return; // boards are off: this page stays as it is
+    const boards = r.data.boards, home = r.data.home || (boards[0] && boards[0].id) || null;
+    const sample = BOARD.pristine(syncSnapshot());
+    if (sample && !home) { sampleWatch = { who }; sampleTimer = setTimeout(sampleLook, 30000); return; }
+    if (sample) { openHome(who, home); return; }
+    bindHere(who, home);
+  }
+  // The board here becomes the account's: its first board (home), or, when the account has boards already, a board
+  // of its own that is sent up from here while the page opens the account's home (localKept).
+  async function bindHere(who, home) {
+    for (const a of [...assets, ...trash]) keyOf(a);
+    await saveNow();
+    const rec = SYNC.record({ who, board: SYNC.newBoard(), made: false, make: home ? { first: false, home: false } : { first: true, home: true } });
+    if (home) rec.apart = true;
+    if (!(await store.put('sync', rec))) return;
+    pointer.anon = `olmuse-asset-board.anon${randomHex(6)}`;
+    if (!home) { setPointer(who, store.name); reloadSync(); return; }
+    pointer.accts[who] = { ...(pointer.accts[who] || {}), apart: [...new Set([...(pointer.accts[who]?.apart || []), store.name])] };
+    try { sessionStorage.setItem('asset-sync.kept', '1'); } catch { /* said on no visit */ }
+    openHome(who, home);
+  }
+  // The sample board stays here until it is worked on (then it becomes the account's first board) or the account
+  // gets a board somewhere else (then that one opens).
+  function sampleSoon() { clearTimeout(sampleTimer); sampleTimer = setTimeout(sampleLook, 1500); }
+  async function sampleLook() {
+    const w = sampleWatch;
+    if (!w) return;
+    if (!quiet()) { sampleTimer = setTimeout(sampleLook, 1500); return; }
+    if (!BOARD.pristine(syncSnapshot())) { sampleWatch = null; bindHere(w.who, null); return; }
+    const r = await SYNC.list(gen.call);
+    if (sampleWatch !== w) return;
+    const home = r.status === 200 && r.data && Array.isArray(r.data.boards) ? r.data.home || (r.data.boards[0] && r.data.boards[0].id) : null;
+    if (home && BOARD.pristine(syncSnapshot()) && quiet()) { sampleWatch = null; openHome(w.who, home); return; }
+    sampleTimer = setTimeout(sampleLook, 30000);
+  }
+  // This account's database could not be read: a new one is bound to the same board and receives it again.
+  async function receiveAgain(who) {
+    if (refetched) return;
+    refetched = true;
+    const rec = await store.get('sync');
+    if (!rec || !rec.board || rec.who !== who) return;
+    goTo(who, `${SYNC.dbName(who, rec.board)}.r${randomHex(4)}`, SYNC.record({ who, board: rec.board, made: true, make: { first: false, home: false } }));
+  }
+  function keptSaid() { try { if (sessionStorage.getItem('asset-sync.kept')) { sessionStorage.removeItem('asset-sync.kept'); toast(t('localKept'), 6000); } } catch { /* not said */ } }
+  // POST /boards named another board (the account got one meanwhile): this board is kept apart and sent from here,
+  // and the account's home opens.
+  async function syncMoved(x) {
+    record.apart = true;
+    pointer.accts[acct.who] = { ...(pointer.accts[acct.who] || {}), apart: [...new Set([...(pointer.accts[acct.who]?.apart || []), store.name])] };
+    await store.saveBoard({ sync: true });
+    try { sessionStorage.setItem('asset-sync.kept', '1'); } catch { /* said on no visit */ }
+    openHome(acct.who, x.board);
+  }
+  function startEngine() {
+    if (!record || engine) return;
+    if (!record.made && !record.pulled) gen.stamp(); // job records made here before the board was the account's are this computer's
+    engine = SYNC.create({
+      store, call: gen.call, identity: () => gen.identity, sync: record, snapshot: syncSnapshot, model: syncModel, quiet, redraw: syncRedraw, lost: syncLost,
+      onTrash: (list) => gen.cancel(list), moved: syncMoved, hidden: () => document.hidden, sha256: sha256hex, now: () => Date.now(),
+    });
+    engineOk(engine);
+    engine.start();
+    sendApart().catch(() => {});
+  }
+  // Boards kept apart (E5, the fourth row) are sent up from this page, each by an engine that only sends.
+  async function sendApart() {
+    const who = acct.who, names = new Set(pointer.accts[who]?.apart || []);
+    for (const x of (await SYNC.scan(ownDb, who)) || []) if (x.sync.apart) names.add(x.name);
+    names.delete(store.name);
+    for (const name of names) {
+      let data = null, sync = null, up = null;
+      const one = assetStore.create({ indexedDB: ownDb, locks: navigator.locks, synth, name, snapshot: () => data, apply: (d, b, info) => { data = d; sync = info && info.sync; },
+        extra: () => (up ? up.extra() : {}), remote: BOARD.remoteKeys });
+      if (!(await one.lock()) || (await one.restore()) !== 'restored' || !sync || sync.who !== who || !sync.apart) continue;
+      const m = { assets: data.assets, trash: data.trash || [], cats: data.cats || [], refs: data.projectRefs || [], dynamics: data.dynamics || [], get: (k) => data[k], set: (k, v) => { data[k] = v; } };
+      up = SYNC.create({ store: one, call: gen.call, identity: () => gen.identity, sync, snapshot: () => data, model: () => m, upload: true, hidden: () => document.hidden, sha256: sha256hex, now: () => Date.now() });
+      up.start();
+      up.done().then(async () => {
+        up.record.apart = false;
+        await one.saveBoard({ sync: true });
+        const left = (pointer.accts[who]?.apart || []).filter((x) => x !== name);
+        pointer.accts[who] = { ...(pointer.accts[who] || {}), apart: left };
+        SYNC.pointer.write(syncLs, pointer);
+      });
+    }
   }
 
   /* ---------- host page ---------- */
@@ -3010,8 +3371,13 @@ ${p.form}`,
     await store.lock();
     const result = await store.restore();
     await afterRestore(result);
-    if (store.writable && takeBlank() && result === 'empty') openBlank();
+    if (acct) {
+      record = syncRead || (await store.get('sync')) || null;
+      if (!record || record.who !== acct.who) record = null;
+      if (store.writable && result === 'empty' && record && record.seed === 'blank') openBlank();
+    } else if (store.writable && takeBlank() && result === 'empty') openBlank();
     renderBoard(); liveLoop();
+    booted = true; syncToken(); keptSaid();
     gen.attach(); // work a reload interrupted is picked up once the token is here too
     greet();
     if (result === 'failed') tellFailed();

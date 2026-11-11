@@ -261,6 +261,9 @@ dialog textarea { width:100%; min-height:190px; background:var(--raised); border
 .lineItem .tag.del { color:var(--err); }
 .lineItem .tag.chg { color:var(--warn); }
 .lineItem button { min-height:34px; }
+.boardList h3 { margin:16px 0 4px; font-size:.95rem; }
+.boardList:empty { display:none; }
+.boardRow .boardState { font-size:.8rem; color:var(--text2); white-space:nowrap; }
 .note { font-size:.9rem; color:var(--text3); }
 .banner { padding:10px 12px; border-radius:11px; background:var(--raised); font-size:.9rem; }
 .note.err { color:var(--err); }

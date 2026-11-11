@@ -687,12 +687,32 @@ def test_host_sends_the_token_on_ready_on_a_new_token_and_when_asked():
     """)
     assert got["first"] == [{"type": "asset:token", "token": "A", "ttl": 900, "api": "/api/asset", "origin": "https://olmuse.example"}]
     assert got["same"] == []  # the string did not change
-    assert got["ready"] == [["asset:ai", "*", None], ["asset:token", "https://olmuse.example", 860]]
+    assert got["ready"] == [["asset:ai", "https://olmuse.example", None], ["asset:token", "https://olmuse.example", 860]]
     assert got["asked"] == [["A", 850]] and got["stranger"] == []
     assert got["changed"] == [["B", 900]]
     assert got["none"] == [] and got["closed"] == []  # no AI, or the asset room was never opened
     assert got["back"] == [["B", 870]]  # the frame loaded while there was none, so it does not hold B: the same string is sent
     assert got["opened"] == [["C", 900]]
+
+
+def test_host_tells_the_frame_whether_an_account_is_signed_in_on_its_own_origin_only():
+    """The asset room picks its board by `signed` (docs/ASSET_SYNC_SPEC.md E5): a signed-in account's board is kept
+    apart and synced, and a sign-out shows the board without an account. It comes with asset:ai, which goes to this
+    page's own origin, on the frame's ready and on every render that changes either value."""
+    got = host("""
+      fromFrame('asset:ready'); out.out = posts.splice(0).filter((p) => p.type === 'asset:ai');
+      signedIn = true; fromFrame('asset:ready'); out.in = posts.splice(0).filter((p) => p.type === 'asset:ai');
+    """)
+    assert got["out"] == [{"type": "asset:ai", "on": True, "signed": False, "origin": "https://olmuse.example"}]
+    assert got["in"] == [{"type": "asset:ai", "on": True, "signed": True, "origin": "https://olmuse.example"}]
+    source = host_source()
+    sends = [line for line in source.splitlines() if "'asset:ai'" in line]
+    assert sends and all(line.rstrip().endswith("}, location.origin);") for line in sends)
+    on_render = source[source.index("  function onRender(args) {"):source.index("  let aiEnabled = false")]
+    assert "signedIn = !!args.signed_in;" in on_render
+    assert "if (`${aiEnabled}:${signedIn}` !== aiSent && frame.getAttribute('src')) sendAi();" in on_render
+    render = next(n for n in app_tree().body if isinstance(n, ast.FunctionDef) and n.name == "render")
+    assert "signed_in=bool(email)" in ast.unparse(render)  # what app.py hands the host for it
 
 
 def test_host_keeps_the_tokens_clock_and_sends_no_token_that_only_makes_the_frame_ask_again():

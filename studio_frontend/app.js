@@ -424,13 +424,20 @@
     if (first) guardStorage();
   }
 
-  let classifySeen, agentSeen, aiSent;
+  let classifySeen, agentSeen;
 
   /* ---------- asset room token and balance ---------- */
   // The asset room's key to the generation API. Unlike the other asset messages it goes to this page's own origin only.
   // ttl is counted down from the render that brought it, so a token sent later never claims more time than it has left.
   // tokenSent is the one the frame holds; a frame that has just loaded holds none.
   let assetToken = null, tokenSent = '';
+  // Whether AI is on, and whether an account is signed in: the asset room keeps a signed-in account's board apart
+  // and syncs it, and shows the board without an account after a sign-out. Sent again whenever either changes.
+  let aiSent = '', signedIn = false;
+  function sendAi() {
+    aiSent = `${aiEnabled}:${signedIn}`;
+    frame.contentWindow?.postMessage({ type: 'asset:ai', on: aiEnabled, signed: signedIn }, location.origin);
+  }
   // asked: the frame wants a newer token than the one it holds. One that has run out is never sent, and the same one
   // with a minute or less left is no answer: the frame would ask again at once. It waits for the next render instead.
   function sendToken(asked) {
@@ -460,12 +467,12 @@
     if (args.lang === pendingLang) pendingLang = '';
     if (!pendingLang && i18n.pick(args.lang) && args.lang !== i18n.lang) setLang(args.lang);
     useStore(args);
-    aiEnabled = !!args.ai_enabled; engineName = args.engine || '';
+    aiEnabled = !!args.ai_enabled; signedIn = !!args.signed_in; engineName = args.engine || '';
     fillChoices(args.choices);
     account = args.account || null; showCredits();
     if (args.server_error && args.server_error !== lastServerError) { say('error', args.server_error); if (findWaiting != null) findAnswer(args.server_error); if (couponWaiting != null) couponAnswer(args.server_error); }
     lastServerError = args.server_error || '';
-    if (aiEnabled !== aiSent && frame.getAttribute('src')) { aiSent = aiEnabled; frame.contentWindow?.postMessage({ type: 'asset:ai', on: aiEnabled }, '*'); }
+    if (`${aiEnabled}:${signedIn}` !== aiSent && frame.getAttribute('src')) sendAi();
     const ag = args.asset_agent, agKey = ag && `${ag.n}:${ag.status}`;
     if (ag && agKey !== agentSeen) { agentSeen = agKey; frame.contentWindow?.postMessage({ type: 'asset:agent_reply', ...ag }, '*'); }
     if (args.classify && args.classify.n !== classifySeen) { classifySeen = args.classify.n; frame.contentWindow?.postMessage({ type: 'asset:classified', ...args.classify }, '*'); }
@@ -1350,7 +1357,7 @@
     // Imported files sorted by Jev on the server; the answer comes back through the render args (args.classify).
     if (e.data?.type === 'asset:classify' && e.source === frame.contentWindow) send('classify', e.data.payload);
     // The asset board's assistant runs on the music screen's model choice; its answer comes back as args.asset_agent.
-    if (e.data?.type === 'asset:ready' && e.source === frame.contentWindow) { frame.contentWindow.postMessage({ type: 'asset:ai', on: aiEnabled }, '*'); tokenSent = ''; sendToken(); }
+    if (e.data?.type === 'asset:ready' && e.source === frame.contentWindow) { sendAi(); tokenSent = ''; sendToken(); }
     if (e.data?.type === 'asset:agent' && e.source === frame.contentWindow) send('asset_agent', { ...e.data.payload, model: $('modelPick').value, effort: $('effortPick').value });
     // The frame asks again a minute before its token runs out and after a 401: the newest one Streamlit rendered goes back.
     if (e.data?.type === 'asset:token?' && e.source === frame.contentWindow) sendToken(true);

@@ -3,7 +3,7 @@
 에셋 작업실(`studio_frontend/asset_studio/`)의 소리 생성, 전송, 요금, 측정을 정한다. 일의 순서와 끝난 기준은 [GAME_ASSET_PLAN](GAME_ASSET_PLAN.md) 8절의 순서 4~6, 화면 규칙은 [UI_LESSONS](UI_LESSONS.md)를 따른다.
 
 전제:
-- 보드, 버전, 소리 바이트는 브라우저 IndexedDB에만 있다. 서버는 보드를 갖지 않고 생성 결과만 만료 때까지 둔다. 만료 뒤에는 다시 받을 수 없다.
+- 계정 없는 사용에서 보드, 버전, 소리 바이트는 브라우저 IndexedDB에만 있다. 로그인 계정의 보드는 동기화가 켜져 있으면 서버도 보관한다([ASSET_SYNC_SPEC](ASSET_SYNC_SPEC.md)). 생성 결과는 만료 때까지만 두고, 만료 뒤에는 다시 받을 수 없다(보드에 복사된 것은 보드 보관소에서 받는다).
 - 생성과 소리 전송은 FastAPI HTTP로만 한다. Streamlit은 서명 토큰을 에셋 작업실 iframe에 넘기는 일만 한다.
 - 에이전트 호출(`asset_agent.py`)은 그대로 두고 생성 작업과 분리한다. 생성 작업 하나는 소리 하나의 시안 하나다.
 - `game-audio.spec.json`은 지금 화면이 내보내는 모양 그대로다. 버전 레코드는 보드 스냅샷에만 있다.

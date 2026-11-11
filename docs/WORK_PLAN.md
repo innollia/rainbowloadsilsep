@@ -63,7 +63,8 @@
   - 내보내기 형식: WAV 16/24비트, OGG, MP3(wasm-media-encoders를 `asset_studio/vendor/`에 둠). 샘플레이트, 한 폴더/분류별 폴더를 고른다.
   - 동적 소리(층 환경음, 변하는 음악)는 기존 소리를 층으로 쌓고 게임 값으로 크기를 조절한다. 작업실에서 값을 움직이며 들어 본다.
   - Godot 4 내보내기는 `asset_studio/godot.js`가 만든다(플러그인 GDScript와 동적 소리마다 .tscn). Godot 4.7.2 headless로 22개 항목을 확인했다. 귀로 들어 보는 확인은 아직 안 했다.
-- [ ] 6-6 다른 게임 엔진 내보내기(나중에 할 일): Unity, Unreal, Roblox, GameMaker, Defold, FMOD/Wwise 프로젝트, 웹(Web Audio). Godot과 같은 데이터(`dynamics`)를 엔진별 재생기로 옮긴다.
+- [ ] 6-6 다른 게임 엔진 내보내기(나중에 할 일): Unity, Roblox, GameMaker, Defold, FMOD/Wwise 프로젝트, 웹(Web Audio). Godot과 같은 데이터(`dynamics`)를 엔진별 재생기로 옮긴다.
+  - Unreal Engine 5: 내보내기 칸의 엔진 선택에 있다. 플러그인(`Plugins/OlmuseAudio`)과 `OlmuseAudio/` 아래 파일을 쓰고 에디터가 MetaSound를 짓는다(`docs/ASSET_UNREAL_SPEC.md`). 사람 귀·눈 확인(I3)은 남았다.
 
 ## 8. 공개와 로그인
 

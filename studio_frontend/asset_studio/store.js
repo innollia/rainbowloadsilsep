@@ -8,6 +8,12 @@
 //   keys() -> Map(key -> null | () => Blob) of every audio key the board uses now, assets() -> the live asset list,
 //   notify(what, n) for 'saveFull' and 'pruned', onLock(result) when a waiting tab takes the board over,
 //   synth, measure (assetMeasure), decode(bytes) for sound that is not WAV, sha256(bytes).
+//   For a board kept in step with the server (docs/ASSET_SYNC_SPEC.md E2, E4), all left out otherwise:
+//   name (the database and the lock, default olmuse-asset-board), extra() -> { key: value } written in the same
+//   transaction as the board record (the sync record), remote(sync) -> audio keys the server holds (mend keeps them
+//   without local bytes), fetch(key) -> Uint8Array | null for a sound that is not on this computer, pending() -> true
+//   while nothing may be written or pressed (the board is still being received). With extra or remote the store is an
+//   account's: a full disk does not prune old versions there.
 // The store it returns:
 //   lock() -> true when this tab has the board, restore() -> 'empty' | 'restored' | 'failed',
 //   save() (the board record, then every sound not on disk yet, then the clean-up), saveBoard() and saveBlob(key, blob)
@@ -16,6 +22,8 @@
 //   view-only tab), guard(target, { allow, blocked }), bytes(key), ensureSound(version) (a legacy version is rendered
 //   from its asset: ensureSound(version, asset)), importVersion(bytes, { note, sources }), filled(asset, version),
 //   newId(), saved (the Set of keys on disk), and the flags locked, ready, readOnly, paused, blobFull, writable, restored.
+//   saveBoard({ sync: true }) is the sync engine's own write: it also goes through while pending() holds the page.
+//   bytes(key, { local: true }) never asks fetch. restore() hands apply the stored sync record as info.sync (account).
 // blobFull is up while a sound that did not fit is still waiting to be written. It comes down when that sound is
 // written, or when the board no longer uses it.
 (function (factory) {
@@ -208,6 +216,7 @@
     const later = d.setTimeout || ((fn, ms) => setTimeout(fn, ms)), cancel = d.clearTimeout || ((t) => clearTimeout(t));
     const measurer = () => d.measure || root.assetMeasure, synthOf = () => d.synth || root.synth;
     const decodeOther = d.decode || browserDecode, digest = d.sha256 || sha256;
+    const name = d.name || DB, account = !!(d.extra || d.remote), pending = () => !!(d.pending && d.pending());
     // saved: keys the audio store holds. known: keys the board has used at some point (or that were there at restore),
     // the only ones a clean-up may delete. held: Blobs still to be written, which also play from here until they are.
     // stuck: keys whose Blob did not fit and is still waiting to be written. blobFull is "something is stuck".
@@ -222,7 +231,7 @@
     let queue = Promise.resolve(), restoring = Promise.resolve();
 
     const idb = () => (dbOpen ||= new Promise((ok, no) => {
-      const r = d.indexedDB.open(DB, 1);
+      const r = d.indexedDB.open(name, 1);
       r.onupgradeneeded = () => { r.result.createObjectStore('board'); r.result.createObjectStore('audio'); };
       r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error || new Error('open failed')); r.onblocked = () => no(new Error('blocked'));
     }).catch((e) => { dbOpen = null; throw e; }));
@@ -232,8 +241,9 @@
       const slow = new Promise((_, no) => { timer = later(() => no(new Error('the saved board took too long to open')), OPEN_MS); });
       return Promise.race([idb(), slow]).finally(() => cancel(timer));
     }
-    // This tab may write: it holds the board, has read it back since, and that read did not fail.
-    const writable = () => state.locked && state.ready && !state.paused && !state.closed;
+    // This tab may write: it holds the board, has read it back since, and that read did not fail. own: the sync
+    // engine's write, which goes through while the board is still being received (pending).
+    const writable = (own) => state.locked && state.ready && !state.paused && !state.closed && (own || !pending());
     // Writes run one after another, so an older snapshot never lands after a newer one.
     const enqueue = (fn) => { const p = queue.then(fn); queue = p.catch(() => {}); return p; };
     function tellFull(what) { const quiet = !told.board && !told.blob; told[what] = true; if (quiet) notify('saveFull'); }
@@ -242,17 +252,19 @@
 
     /* ---------- writes ---------- */
     // One snapshot in a transaction that opens the board store only. True when it is on disk.
-    async function writeBoard() {
-      if (!writable()) return false;
+    // extra(): keys written with the record, in the same transaction, so neither lands without the other.
+    async function writeBoard(own) {
+      if (!writable(own)) return false;
       try {
-        const data = d.snapshot();
+        const data = d.snapshot(), more = d.extra ? Object.entries(d.extra() || {}) : [];
         const q = (await idb()).transaction('board', 'readwrite'), s = q.objectStore('board');
+        const rest = () => { for (const [k, v] of more) s.put(v, k); };
         if (upgrading) {
           // The first v2 write keeps the record it replaces: read and copied to board.v1 in this same transaction, where
           // it stays until a later visit has read v2 back.
           const r = s.get('board');
-          r.onsuccess = () => { const was = r.result; if (was && typeof was === 'object' && (was.v ?? 1) < SNAPSHOT) s.put(was, 'board.v1'); s.put(data, 'board'); };
-        } else s.put(data, 'board');
+          r.onsuccess = () => { const was = r.result; if (was && typeof was === 'object' && (was.v ?? 1) < SNAPSHOT) s.put(was, 'board.v1'); s.put(data, 'board'); rest(); };
+        } else { s.put(data, 'board'); rest(); }
         await done(q);
         upgrading = false; lastError = null; told.board = false;
         return true;
@@ -260,8 +272,8 @@
     }
     // One Blob, one transaction: 'ok', 'full' (no room for it) or 'failed'. Only a key whose write finished counts as
     // saved. One that did not fit is stuck, which is what blobFull tells, and the full-disk toast is said for it once.
-    async function writeBlob(key, blob) {
-      if (!writable()) return 'failed';
+    async function writeBlob(key, blob, own) {
+      if (!writable(own)) return 'failed';
       try {
         const q = (await idb()).transaction('audio', 'readwrite');
         q.objectStore('audio').put(blob, key);
@@ -292,8 +304,9 @@
       if (!writable()) return false;
       let ok = await writeBoard();
       if (!ok && isFull(lastError)) {
-        // The board record itself did not fit: old legacy versions go until it does.
-        const list = d.assets ? d.assets() : [];
+        // The board record itself did not fit: old legacy versions go until it does (never on an account's board,
+        // where the versions are everyone's).
+        const list = d.assets && !account ? d.assets() : [];
         let cleared = 0;
         while (!ok && isFull(lastError)) {
           const n = prune(list);
@@ -333,7 +346,7 @@
       for (const [key, make] of d.keys()) if (!saved.has(key) && !stuck.has(key) && (held.has(key) || make)) return true;
       return false;
     }
-    const saveBoard = () => { const wrote = enqueue(writeBoard); if (writable() && owed()) save(); return wrote; };
+    const saveBoard = (opts) => { const own = !!(opts && opts.sync), wrote = enqueue(() => writeBoard(own)); if (writable() && owed()) save(); return wrote; };
     // A Blob there was no room for stays in memory: it plays from there, and every save tries it again for as long as
     // the board uses its key.
     const saveBlob = (key, blob) => enqueue(async () => {
@@ -377,11 +390,14 @@
     async function read() {
       const db = await opened();
       const q = db.transaction(['board', 'audio']), board = q.objectStore('board');
-      const [raw, old, dir, keys] = await Promise.all([asked(board.get('board')), asked(board.getKey('board.v1')), asked(board.get('gameDir')), asked(q.objectStore('audio').getAllKeys())]);
+      const [raw, old, dir, keys, sync] = await Promise.all([asked(board.get('board')), asked(board.getKey('board.v1')), asked(board.get('gameDir')), asked(q.objectStore('audio').getAllKeys()),
+        account ? asked(board.get('sync')) : undefined]);
       const stored = new Set(keys.map(String));
       const took = () => { saved.clear(); known.clear(); held.clear(); stuck.clear(); told.blob = false; for (const k of stored) { saved.add(k); known.add(k); } };
       if (raw == null) { took(); upgrading = false; return 'empty'; }
       const data = upgradeSnapshot(raw), present = new Set(stored);
+      // A sound the server holds is not taken off for want of local bytes: it is fetched when it is heard.
+      if (d.remote) for (const k of d.remote(sync) || []) present.add(k);
       // Read now: reference files, and the Float32 sources legacy versions are rendered from. ver: Blobs wait until heard.
       const need = [...stored].filter((k) => k.startsWith('ref:'));
       for (const a of [...data.assets, ...(data.trash || [])]) if (a.hasSource && stored.has(a.key) && !need.includes(a.key)) need.push(a.key);
@@ -398,7 +414,7 @@
         }
       }
       const fixed = mend(data, present);
-      d.apply(data, buffers, { gameDir: dir || null, dropped: fixed.dropped, refetch: fixed.refetch });
+      d.apply(data, buffers, account ? { gameDir: dir || null, dropped: fixed.dropped, refetch: fixed.refetch, sync: sync ?? null } : { gameDir: dir || null, dropped: fixed.dropped, refetch: fixed.refetch });
       took();
       upgrading = (raw.v ?? 1) < SNAPSHOT;
       // The copy of the old record has done its job once a v2 record has been read back.
@@ -429,10 +445,10 @@
         if (!locks || typeof locks.request !== 'function') { answer(ok, true); return; }
         let asking;
         try {
-          asking = locks.request(LOCK, { ifAvailable: true }, (got) => {
+          asking = locks.request(name, { ifAvailable: true }, (got) => {
             if (got) { answer(ok, true); return kept(); }
             answer(ok, false);
-            Promise.resolve().then(() => locks.request(LOCK, () => { takeOver(); return kept(); })).catch(() => {});
+            Promise.resolve().then(() => locks.request(name, () => { takeOver(); return kept(); })).catch(() => {});
             return undefined;
           });
         } catch (e) { asking = Promise.reject(e); }
@@ -445,13 +461,30 @@
       state.locked = true; state.ready = false;
       restore().then((result) => { if (d.onLock) d.onLock(result); }).catch(() => {});
     }
-    // Input is taken once this tab has the board and has read it back.
-    const guardHere = (target, opts) => guard(target, { ...(opts || {}), open: () => state.ready });
+    // Input is taken once this tab has the board and has read it back, and the board is not still being received.
+    const guardHere = (target, opts) => guard(target, { ...(opts || {}), open: () => state.ready && !pending() });
 
     /* ---------- sound ---------- */
-    async function bytes(key) {
+    // A sound not on this computer comes from fetch (the board's server), one fetch at a time per key, and is kept.
+    const fetching = new Map();
+    function fetchOnce(key) {
+      let p = fetching.get(key);
+      if (!p) {
+        p = Promise.resolve().then(() => d.fetch(key)).then((u8) => {
+          if (!u8) return null;
+          const blob = new Blob([u8]);
+          held.set(key, blob);
+          enqueue(() => writeBlob(key, blob, true));
+          return u8;
+        }, () => null).finally(() => fetching.delete(key));
+        fetching.set(key, p);
+      }
+      return p;
+    }
+    async function bytes(key, opts) {
       let blob = held.get(key);
-      if (!blob) blob = await asked((await idb()).transaction('audio').objectStore('audio').get(key));
+      if (!blob) blob = (await asked((await idb()).transaction('audio').objectStore('audio').get(key))) || held.get(key); // fetched meanwhile
+      if (!blob && d.fetch && !(opts && opts.local)) { const u8 = await fetchOnce(key); if (u8) return new Uint8Array(u8); }
       if (!blob) throw new Error(`sound ${key} is not stored`);
       return new Uint8Array(await blob.arrayBuffer());
     }
@@ -503,7 +536,8 @@
 
     return {
       lock, restore, save, saveBoard, saveBlob, hold, put, get, del, clear, guard: guardHere, bytes, ensureSound, importVersion,
-      filled: (a, v) => filled(a, v, synthOf()), newId: () => newId(now(), random()), saved,
+      filled: (a, v) => filled(a, v, synthOf()), newId: () => newId(now(), random()), saved, name, account,
+      get pending() { return pending(); },
       get locked() { return state.locked; }, get ready() { return state.ready; }, get paused() { return state.paused; },
       get blobFull() { return stuck.size > 0; }, get writable() { return writable(); }, get restored() { return state.restored; },
       // Another tab has the board, so this one only shows it.

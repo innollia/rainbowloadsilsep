@@ -342,7 +342,7 @@ own('clearTimeout', clearT);
   }
 })(INDEX_HTML);
 """
-PAGE_FILES = ("data.js", "synth.js", "importer.js", "godot.js", "refs.js", "measure.js", "store.js", "gen.js", "quote.js")
+PAGE_FILES = ("data.js", "synth.js", "importer.js", "godot.js", "unreal_py.js", "unreal.js", "refs.js", "measure.js", "store.js", "board.js", "gen.js", "sync.js", "quote.js")
 
 
 def run_page(body, before=""):
@@ -2141,7 +2141,7 @@ def test_what_only_the_page_can_do_with_drafts_and_boards_is_written_as_the_spec
     # a board that is replaced (the sample board left, a bundle opened) is emptied in one place: what was being made
     # for it is cancelled first, and what the generator made goes to the trash before the rest goes
     clear = app[app.index("function clearBoard() {"):app.index("function leaveDemo(name) {")]
-    assert clear.index("gen.cancel([...assets]);") < clear.index("toTrash(made);") < clear.index("assets.length = 0;")
+    assert clear.index("gen.cancel([...assets]);") < clear.index("toTrash(made);") < clear.rindex("assets.length = 0;")
     leave = app[app.index("function leaveDemo(name) {"):app.index("async function decode(bytes)")]
     bundle = app[app.index("async function openBundle(spec, files"):app.index("function addSlots(list) {")]
     for body in (leave, bundle):
@@ -2151,3 +2151,249 @@ def test_what_only_the_page_can_do_with_drafts_and_boards_is_written_as_the_spec
     forget = app[app.index("async function forget() {"):app.index("/* ---------- host page")]
     assert forget.index("gen.cancel([...assets, ...trash])") < forget.index("store.clear()")
     assert "await forget(); location.reload();" in app
+
+
+# ---------- a board kept in step with the server (docs/ASSET_SYNC_SPEC.md H) ----------
+
+def test_on_a_synced_board_only_this_computers_job_records_are_polled_cancelled_or_put_back():
+    got = run(r"""
+    const ME = 'a'.repeat(16), OTHER = 'b'.repeat(16), who = whoOf('acct:me');
+    const record = (dev, id) => ({ request: 'r-' + id, kind: 'acct', who, ...(dev ? { dev } : {}), mode: 'make', text: '', n: 1, at: 1, before: 'pending', jobs: [{ id, k: 1, got: false }] });
+    const make = (deps) => {
+      const mine = slot('sfx_mine', { status: 'working', work: record(ME, 'jm') }), other = slot('sfx_other', { status: 'working', work: record(OTHER, 'jo') }), bare = slot('sfx_bare', { status: 'working', work: record(null, 'jb') });
+      const p = page({ assets: [mine, other, bare], deps });
+      for (const [id, ref] of [['jm', 'k-sfx_mine'], ['jo', 'k-sfx_other'], ['jb', 'k-sfx_bare']]) p.api.jobs.set(id, { id, ref, k: 1, n: 1, status: 'running', refund: 'none', stems: [] });
+      return { p, mine, other, bare };
+    };
+    const look = async (deps) => {
+      const { p, mine, other, bare } = make(deps);
+      await p.token(); await advance(2000);
+      const polled = [...new Set(p.api.posted('/jobs/status').flatMap((b) => b.ids || []))].sort();
+      const free = [p.gen.free(mine), p.gen.free(other), p.gen.free(bare)];
+      await p.gen.cancel([mine, other, bare]); await settle();
+      const cancelled = p.api.posted('/jobs/cancel').flatMap((b) => b.ids || []).sort();
+      return { polled, cancelled, left: [mine, other, bare].map((a) => [a.status, !!a.work]), free };
+    };
+    out.synced = await look({ dev: ME });
+    out.plain = await look({});
+    // a sound asked for here carries this computer's dev
+    const s = slot('sfx_new'), q = page({ assets: [s], deps: { dev: () => ME } });
+    await q.token(); await q.gen.generate([s], { mode: 'make', text: '', drafts: 1 });
+    out.dev = s.work.dev;
+    // the moment the board is tied to an account, the records without a dev are this computer's
+    const { p, bare, other } = make({ dev: ME });
+    out.stamped = [p.gen.stamp(), bare.work.dev, other.work.dev, p.gen.stamp()];
+    """)
+    assert got["synced"]["polled"] == ["jm"] and got["synced"]["cancelled"] == ["jm"]
+    assert got["synced"]["left"] == [["pending", False], ["working", True], ["working", True]]
+    assert got["plain"]["polled"] == ["jb", "jm", "jo"]  # no dev given: as before, every record of the account
+    assert got["dev"] == "a" * 16
+    assert got["stamped"] == [1, "a" * 16, "b" * 16, 0]
+
+
+def test_a_claim_refused_or_not_reached_sends_nothing_and_without_claim_the_order_is_as_before():
+    got = run(r"""
+    const ME = 'a'.repeat(16);
+    for (const answer of [false, 'throws', true]) {
+      const a = slot('sfx_a'), claimed = [], p = page({ assets: [a], deps: { dev: ME, claim: async (list) => {
+        claimed.push(list.map((x) => [x.id, x.status, x.work.dev])); p.log.push('claim'); if (answer === 'throws') throw new Error('offline'); return answer; } } });
+      await p.token();
+      const r = await p.gen.generate([a], { mode: 'make', text: '', drafts: 1 });
+      out[String(answer)] = { r, claimed, order: p.log.filter((x) => /^(put|board|del|claim|POST \/jobs$)/.test(x)).map((x) => x.replace(/req-\d+/, 'req-1')), after: brief(a), posts: p.api.paths().filter((x) => x === 'POST /jobs').length };
+    }
+    """)
+    for no in ("false", "throws"):
+        o = got[no]
+        assert o["r"] == {"ok": False, "reason": "claim"} and o["posts"] == 0, no
+        assert o["claimed"] == [[["sfx_a", "working", "a" * 16]]], no
+        assert o["order"] == ["put req:req-1", "board", "claim", "del req:req-1", "board"], no
+        assert o["after"] == {"status": "pending", "versions": [], "drafts": [], "pick": -1, "work": False}, no
+    assert got["true"]["r"] == {"ok": True} and got["true"]["posts"] == 1
+    assert got["true"]["order"] == ["put req:req-1", "board", "claim", "POST /jobs", "board", "del req:req-1"]
+
+
+def test_work_is_not_picked_up_or_polled_before_the_first_receiving_of_the_board():
+    got = run(r"""
+    const ME = 'a'.repeat(16), who = whoOf('acct:me');
+    let open = null;
+    const gate = new Promise((ok) => { open = ok; });
+    const a = slot('sfx_a', { status: 'working', work: { request: 'r1', kind: 'acct', who, dev: ME, mode: 'make', text: '', n: 1, at: 1, before: 'pending', jobs: [{ id: 'j1', k: 1, got: false }] } });
+    const b = slot('sfx_b', { status: 'working', work: { request: 'r2', kind: 'acct', who, dev: ME, mode: 'make', text: '', n: 1, at: T.wall, before: 'pending', jobs: [] } });
+    let asked = 0;
+    const p = page({ assets: [a, b], deps: { dev: ME, ready: () => { asked++; return gate; } } });
+    p.api.jobs.set('j1', { id: 'j1', ref: 'k-sfx_a', k: 1, n: 1, status: 'running', refund: 'none', stems: [] });
+    await p.token(); await advance(5000);
+    out.before = [p.api.paths().filter((x) => x.startsWith('POST /jobs')), asked];
+    open(); await advance(3000);
+    out.after = [...new Set(p.api.paths().filter((x) => x.startsWith('POST /jobs')))].sort();
+    """)
+    assert got["before"] == [[], 1]
+    assert got["after"] == ["POST /jobs/cancel", "POST /jobs/status"]  # the request without ids was never seen by the server
+
+
+def test_work_left_by_another_computer_is_taken_over_only_when_it_is_away_the_api_knows_and_every_job_ended():
+    got = run(r"""
+    const ME = 'a'.repeat(16), GONE = 'c'.repeat(16), who = whoOf('acct:me');
+    const setup = (status, info, won = true) => {
+      const a = slot('sfx_a', { status: 'working', work: { request: 'r1', kind: 'acct', who, dev: GONE, mode: 'make', text: '', n: 1, at: 1, before: 'pending', jobs: [{ id: 'j1', k: 1, got: false }] } });
+      const taken = [];
+      const p = page({ assets: [a], deps: { dev: ME, handover: { info: () => info, take: async (list) => { taken.push(list.map((x) => x.work.dev)); return won ? list : []; } } } });
+      p.api.jobs.set('j1', { id: 'j1', ref: 'k-sfx_a', k: 1, n: 1, status, refund: 'none', stems: [] });
+      if (status === 'done') p.api.finish('j1');
+      return { a, p, taken };
+    };
+    const away = { up: 500, now: 10000, peers: [], at: () => 0 };
+    const tryOne = async (status, info, won) => {
+      const { a, p, taken } = setup(status, info, won);
+      await p.token();
+      const r = await p.gen.handover();
+      return { won: r.length, dev: a.work && a.work.dev, taken, cancels: p.api.posted('/jobs/cancel').length, p, a };
+    };
+    const strip = ({ p, a, ...rest }) => rest;
+    out.here = strip(await tryOne('done', { ...away, peers: [{ dev: GONE, age: 10 }] }));
+    out.justUp = strip(await tryOne('done', { ...away, up: 30 }));
+    out.running = strip(await tryOne('running', away));
+    out.lost = strip(await tryOne('done', away, false));
+    const won = await tryOne('done', { ...away, peers: [{ dev: GONE, age: 120 }] });
+    await advance(3000);
+    out.won = { ...strip(won), status: won.a.status, versions: won.a.versions.length, saved: won.p.log.includes('board') };
+    // a request that never got its job ids: only once it is ten minutes old on the server's clock
+    const orphan = async (at) => {
+      const a = slot('sfx_o', { status: 'working', work: { request: 'r9', kind: 'acct', who, dev: GONE, mode: 'make', text: '', n: 1, at: 1, before: 'pending', jobs: [] } });
+      const p = page({ assets: [a], deps: { dev: ME, handover: { info: () => ({ up: 500, now: 10000, peers: [], at: () => at }), take: async (list) => list } } });
+      await p.token();
+      const r = await p.gen.handover();
+      return [r.length, p.api.posted('/jobs/status').filter((b) => b.request_id).length];
+    };
+    out.orphan = [await orphan(9700), await orphan(9000)];
+    """)
+    assert got["here"] == {"won": 0, "dev": "c" * 16, "taken": [], "cancels": 0}  # its maker is still here
+    assert got["justUp"] == {"won": 0, "dev": "c" * 16, "taken": [], "cancels": 0}  # the API has not been up long enough to know
+    assert got["running"] == {"won": 0, "dev": "c" * 16, "taken": [], "cancels": 0}
+    assert got["lost"] == {"won": 0, "dev": "c" * 16, "taken": [["a" * 16]], "cancels": 0}  # lost: back to its maker, nothing cancelled
+    assert got["won"] == {"won": 1, "dev": "a" * 16, "taken": [["a" * 16]], "cancels": 0, "status": "draft", "versions": 1, "saved": True}
+    assert got["orphan"] == [[0, 0], [1, 2]]  # asked once to take it over, once more as the winner picks it up
+
+
+def test_call_sends_bytes_as_they_are():
+    got = run(r"""
+    const types = [];
+    let p = null;
+    p = page({ deps: { fetch: (url, init) => { types.push([init.headers['Content-Type'], init.body instanceof Uint8Array]); return p.api.fetch(url, init); } } });
+    p.api.hook = (call, { res }) => (call.path.startsWith('/boards/') ? res(200, { at: 3 }) : null);
+    await p.token();
+    const r = await p.gen.call('POST', '/boards/' + 'a'.repeat(32) + '/blobs/' + 'b'.repeat(64) + '?at=0&size=3', new Uint8Array([1, 2, 3]), { raw: true });
+    out.r = [r.status, r.data];
+    out.types = types.filter(([t]) => t);
+    """)
+    assert got["r"] == [200, {"at": 3}]
+    assert got["types"] == [["application/octet-stream", True]]
+
+
+# ---------- the Unreal export on the page (docs/ASSET_UNREAL_SPEC.md B, I1) ----------
+
+UNREAL_STORY = r"""
+    T.slow = 10;
+    await settle(); await advance(0);
+    const $ = (id) => document.getElementById(id), tiles = () => document.querySelectorAll('.tile');
+    const said = () => ($('toast').hidden ? null : $('toast').textContent);
+    const until2 = async (done, steps = 400) => { for (let i = 0; i < steps && !done(); i++) await advance(50); };
+    // A short WAV, 16-bit mono 48 kHz.
+    const wav = (freq = 440, secs = 0.2) => {
+      const n = Math.round(48000 * secs), b = new DataView(new ArrayBuffer(44 + n * 2)), s = (o, t) => [...t].forEach((c, i) => b.setUint8(o + i, c.charCodeAt(0)));
+      s(0, 'RIFF'); b.setUint32(4, 36 + n * 2, true); s(8, 'WAVEfmt '); b.setUint32(16, 16, true); b.setUint16(20, 1, true); b.setUint16(22, 1, true);
+      b.setUint32(24, 48000, true); b.setUint32(28, 96000, true); b.setUint16(32, 2, true); b.setUint16(34, 16, true); s(36, 'data'); b.setUint32(40, n * 2, true);
+      for (let i = 0; i < n; i++) b.setInt16(44 + i * 2, Math.round(8000 * Math.sin(2 * Math.PI * freq * i / 48000) * Math.min(1, i / 200, (n - i) / 200)), true);
+      return new Uint8Array(b.buffer);
+    };
+    // A folder handle of the File System Access API over a plain tree ({ name: bytes | {subtree} }). Reads and writes
+    // are written down by path.
+    const isDir = (v) => v && typeof v === 'object' && !(v instanceof Uint8Array);
+    const missing = () => Object.assign(new Error('not found'), { name: 'NotFoundError' });
+    function dirOf(tree, path, log) {
+      const at = (n) => (path ? path + '/' + n : n);
+      const file = (n) => ({ kind: 'file', name: n,
+        getFile: async () => { log.push('read ' + at(n)); return new File([tree[n]], n); },
+        createWritable: async () => ({ write: async (b) => { tree[n] = b; log.push('write ' + at(n)); }, close: async () => {} }) });
+      return { kind: 'directory', name: path.split('/').pop() || 'Game',
+        async *entries() { for (const [n, v] of Object.entries(tree)) yield [n, isDir(v) ? dirOf(v, at(n), log) : file(n)]; },
+        async getDirectoryHandle(n, o = {}) { if (!(n in tree)) { if (!o.create) throw missing(); tree[n] = {}; } if (!isDir(tree[n])) throw missing(); return dirOf(tree[n], at(n), log); },
+        async getFileHandle(n, o = {}) { if (!(n in tree)) { if (!o.create) throw missing(); tree[n] = new Uint8Array(0); } if (isDir(tree[n])) throw missing(); return file(n); },
+        requestPermission: async () => 'granted' };
+    }
+    const log = [];
+    const spec = { game: 'Linked', export: { engine: 'unreal' }, categories: [{ id: 'ui', name: 'UI', kind: 'sfx' }],
+      assets: [{ id: 'ui_x', name: 'X', category: 'ui', file: 'audio/ui/ui_x.wav', status: 'approved', loop: false }] };
+    const tree = {
+      Content: { 'c.wav': wav(300) }, Saved: { 's.wav': wav(310) }, Config: { 'g.wav': wav(320) },
+      Sub: { Content: { 'deep.wav': wav(330) } },
+      OlmuseAudio: { 'game-audio.spec.json': new TextEncoder().encode(JSON.stringify(spec)), audio: { ui: { 'ui_x.wav': wav(600) } } },
+      Plugins: { OlmuseAudio: { 'foreign.txt': new TextEncoder().encode('not ours') } },
+    };
+    own('showDirectoryPicker', async () => dirOf(tree, '', log));
+    const blobs = [];
+    URL.createObjectURL = (b) => { blobs.push(b); return 'blob:x'; }; URL.revokeObjectURL = () => {};
+
+    // The engine choice offers Unreal Engine 5.
+    $('exportBtn').click();
+    const engine = $('dialog').querySelectorAll('select').find((s) => s.children.some((o) => o.value === 'godot'));
+    out.options = engine.children.map((o) => [o.value, o.textContent]);
+
+    // Linking an Unreal project's folder: the engine's own top folders are not read, the same names deeper are, and
+    // the spec in OlmuseAudio/ opens with its sounds.
+    $('folderLink').click();
+    await until2(() => tiles().length === 1 && said() && !said().startsWith('Bringing'));
+    out.read = log.filter((x) => x.startsWith('read ')).map((x) => x.slice(5)).sort();
+    out.linked = [tiles().map((t) => t.dataset.id), tiles()[0] && tiles()[0].dataset.status];
+    $('dialog').close();
+
+    // A folder of the project that Olmuse did not write (Plugins/OlmuseAudio without its build file): nothing is written.
+    $('exportBtn').click(); $('folderLink').click(); $('folderLink').click(); // unlink, link again: approved sounds are written
+    await until2(() => (said() || '').includes('game folder'));
+    out.refused = [said(), log.filter((x) => x.startsWith('write ')).length];
+    $('dialog').close();
+
+    // With the build file there, the files go under OlmuseAudio/ and the plugin folder; nothing at the project top.
+    tree.Plugins.OlmuseAudio['olmuse_build.json'] = new TextEncoder().encode('{}');
+    $('exportBtn').click(); $('folderLink').click(); $('folderLink').click();
+    await until2(() => log.some((x) => x === 'write Plugins/OlmuseAudio/olmuse_build.json'));
+    out.written = log.filter((x) => x.startsWith('write ')).map((x) => x.slice(6)).sort();
+    $('dialog').close();
+
+    // The bundle: the same layout, and opened again nothing in it counts as skipped.
+    $('exportBtn').click(); $('exportGo').click();
+    await until2(() => blobs.length > 0);
+    const zipped = new Uint8Array(await blobs[0].arrayBuffer());
+    out.zip = (await window.importer.unzip(zipped, 1e9)).map((z) => z.path).sort();
+    $('importFiles').files = [new File([zipped], 'Linked-audio.zip')];
+    $('importFiles').fire('change');
+    await until2(() => (said() || '').includes('Linked'));
+    out.reopened = said();
+
+    // Without unreal.js the bundle says so and is not made without the engine's files.
+    const kept = window.unrealExport; delete window.unrealExport;
+    $('exportBtn').click(); $('exportGo').click();
+    await until2(() => (said() || '').startsWith('Export failed'));
+    out.noLib = [said(), blobs.length];
+    window.unrealExport = kept;
+"""
+
+
+def test_the_unreal_export_is_chosen_written_under_its_folder_read_back_and_never_written_over_a_folder_not_its_own():
+    """docs/ASSET_UNREAL_SPEC.md I1, the page's part (WP-D): the engine choice, the files of the bundle and of the linked
+    game folder, the no-overwrite check, reading an Unreal project's folder, and the bundle opened again."""
+    got = run_page("const importer = window.assetImporter;\n" + UNREAL_STORY)
+    assert got["options"] == [["none", "None (files only)"], ["godot", "Godot 4"], ["unreal", "Unreal Engine 5"]]
+    # Content/, Saved/, Config/ at the top are not read; Sub/Content/ is; the spec in OlmuseAudio/ is the board's spec
+    assert got["read"] == ["OlmuseAudio/audio/ui/ui_x.wav", "OlmuseAudio/game-audio.spec.json", "Sub/Content/deep.wav"]
+    assert got["linked"] == [["ui_x"], "approved"]
+    assert got["refused"][0] == "Could not write to the game folder: Plugins/OlmuseAudio" and got["refused"][1] == 0
+    w = got["written"]
+    assert "OlmuseAudio/game-audio.spec.json" in w and "OlmuseAudio/audio/ui_x.wav" in w and "Plugins/OlmuseAudio/olmuse_build.json" in w
+    assert not [p for p in w if not (p.startswith("OlmuseAudio/") or p.startswith("Plugins/OlmuseAudio/"))]
+    z = got["zip"]
+    assert "Plugins/OlmuseAudio/olmuse_build.json" in z and "OlmuseAudio/game-audio.spec.json" in z
+    assert "game-audio.spec.json" not in z and not [p for p in z if p.startswith("audio/")]
+    assert [p for p in z if p.endswith(".py")] and [p for p in z if p.endswith(".uplugin")]
+    assert "Skipped" not in got["reopened"] and "Linked" in got["reopened"]
+    assert got["noLib"] == ["Export failed: unreal.js", 1]
