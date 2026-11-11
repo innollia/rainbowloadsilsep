@@ -6,11 +6,13 @@ import json
 import logging
 import secrets
 import runpy
+import time
 import urllib.parse
 
 import streamlit as st
 import streamlit.components.v1 as components
 
+import asset_token
 from studio_backend import AgyCli, DailyUsd, Jobs, Router, in_app_browser, job_store, validate_request
 from asset_agent import Agents
 from asset_classify import classify as classify_files
@@ -156,6 +158,19 @@ def ledger_state():
 
 def ledger():
     return ledger_state()[0]
+
+
+@st.cache_resource(ttl=60, show_spinner=False)
+def asset_secret():
+    """The key that signs asset-room tokens. The API process reads the same one (env, then .studio-data), so it is
+    never taken from st.secrets. None when it can be neither read nor made: then no token is handed out.
+    Kept for a minute at a time: a key that could not be read is tried again, and a key the operator replaced is
+    followed (session_token signs again once the key differs)."""
+    try:
+        return asset_token.load_secret()
+    except OSError:
+        log.error("ALERT the asset token key can be neither read nor made; asset generation is off")
+        return None
 
 
 @st.cache_resource
@@ -305,15 +320,19 @@ if not email and not google and not teacher and LOCAL_AI:
     email = setting("STRUDEL_DEV_EMAIL").strip().lower()  # lets credits be tried locally
 
 
-def account_view(refresh=False, history=False):
-    """What the browser may know about the signed-in account. Never the ledger's keys."""
+def account_view(refresh=False, history=False, quiet=False):
+    """What the browser may know about the signed-in account. Never the ledger's keys.
+    quiet is for a read nobody asked for on the music screen (the asset room's balance): when the ledger fails,
+    the balance shown stays and no error line is written."""
     if not email or ledger() is None:
         return None
     if refresh or "studio_account" not in st.session_state:
         try:
             st.session_state.studio_account = ledger().account(email)
+            asset_token.account_read(st.session_state)  # adopt_credits must not put an older view's balance over this
         except LedgerError as exc:
-            st.session_state.studio_error = str(exc)
+            if not quiet:
+                st.session_state.studio_error = str(exc)
             return None
     view = dict(st.session_state.studio_account, email=email, prices=price_table(),
                 buy_url=setting("STRUDEL_BUY_URL", "https://buymeacoffee.com/innollia"),
@@ -361,6 +380,19 @@ owner = jobs().store.owner(email) if email else st.session_state.studio_owner
 # A public URL must never be able to spend the key, so AI needs a password, a signed-in account or the local flag.
 # A signed-in account's calls are paid, so they also need the ledger.
 ai_ready = jobs().model is not None and (teacher or bool(email) or LOCAL_AI) and not (email and ledger() is None)
+# The asset room calls the generation API from the browser. The public site reaches it on the page's own origin;
+# a local run (run_local.ps1) has no tunnel in front, so the API's own port is named (OLMUSE_API_PORT, else 8502).
+ASSET_API = f"http://127.0.0.1:{asset_token.api_port()}/api/asset" if LOCAL_AI else "/api/asset"
+
+
+def asset_session():
+    """{token, ttl, api} for the asset iframe, or None. Only a session that may use AI gets a token: an account
+    token carries the email the ledger charges, a password or local session is told apart by its session owner."""
+    key = asset_secret() if ai_ready else None
+    if not key:
+        return None
+    kind, sub = ("acct", owner) if email else ("pw", "pw:" + st.session_state.studio_owner)
+    return {**asset_token.session_token(st.session_state, kind, sub, email, lang, time.time(), secret=key), "api": ASSET_API}
 
 
 def handle(action, payload, manager, choices):
@@ -373,7 +405,10 @@ def handle(action, payload, manager, choices):
             req["account"] = email
         manager.submit(owner, req)
     elif action == "account":
-        account_view(refresh=True, history=True)
+        # {quiet: true} is the asset room after sounds finished: the balance alone, and a ledger failure says nothing.
+        # Without it (the credits window) the history is read too.
+        quiet = isinstance(payload, dict) and payload.get("quiet") is True
+        account_view(refresh=True, history=not quiet, quiet=quiet)
     elif action == "find_payment":
         # {payer_email, amount, date: YYYY-MM-DD} → account.find = {found, added, credits, too_many}
         if not email or ledger() is None:
@@ -450,14 +485,13 @@ def render():
     manager = jobs()
     choices = manager.model.choices(lang=lang) if hasattr(manager.model, "choices") else None
     snap = manager.snapshot(owner)
-    if snap and "credits" in snap and "studio_account" in st.session_state:
-        st.session_state.studio_account["credits"] = snap["credits"]
-    agent_view = agents().view(owner)
-    if agent_view and "credits" in agent_view and "studio_account" in st.session_state:
-        st.session_state.studio_account["credits"] = agent_view["credits"]
+    # A job's or an agent answer's balance is taken once, so the balance the `account` action reads later stays.
+    # One that may be older than the balance shown is not taken: the ledger is read once more instead.
+    if asset_token.adopt_credits(st.session_state, snap, agents().view(owner)):
+        account_view(refresh=True, quiet=True)
     result = studio(lang=lang, ai_enabled=ai_ready, engine=manager.model.name if manager.model else "", choices=choices, job=snap,
                     account=account_view(), signed_in=bool(email), classify=st.session_state.get("studio_classify"), asset_agent=agents().view(owner),
-                    server_error=st.session_state.get("studio_error", ""), key="studio", default=None)
+                    asset_token=asset_session(), server_error=st.session_state.get("studio_error", ""), key="studio", default=None)
     if not isinstance(result, dict):
         return
     event_id = result.get("event_id")

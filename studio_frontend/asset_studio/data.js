@@ -1,4 +1,4 @@
-// Stand-in project for the front-end shell. Nothing here reaches a server; the backend replaces this file.
+// The sample project the board opens on, and the words the room shows for rules and licences.
 (() => {
   const tone = (from, to, len, wave = 'sine', gain = 0.5, at = 0) => ({ kind: 'tone', from, to, len, wave, gain, at });
   const noise = (len, cutoff = 0.5, gain = 0.5, attack = 0.002, at = 0) => ({ kind: 'noise', len, cutoff, gain, attack, at });
@@ -50,7 +50,7 @@
     sfx('sfx_combat_explosion', L('Explosion', '폭발'), 'combat', [noise(1.1, 0.3, 1.5), tone(90, 30, 0.9, 'sine', 1.1)]),
     sfx('sfx_combat_cast', L('Spell cast', '마법 시전'), 'combat', [tone(200, 1400, 0.6, 'sine', 0.4), noise(0.6, 0.6, 0.12, 0.2)]),
     sfx('heal_sfx', L('Heal', '치유'), 'combat', [523, 659, 784, 1047].map((f, i) => tone(f, f, 0.5, 'sine', 0.3, i * 0.1))),
-    sfx('sfx_combat_arrow', L('Arrow', '화살'), 'combat', [noise(0.2, 0.7, 0.3, 0.01), tone(900, 500, 0.15, 'sine', 0.2, 0.09)], { noLicense: true }),
+    sfx('sfx_combat_arrow', L('Arrow', '화살'), 'combat', [noise(0.2, 0.7, 0.3, 0.01), tone(900, 500, 0.15, 'sine', 0.2, 0.09)]),
     sfx('sfx_char_step', L('Footstep', '발소리'), 'char', [noise(0.07, 0.25, 0.5), tone(120, 70, 0.08, 'sine', 0.5)], { sample: true }),
     sfx('sfx_char_jump', L('Jump', '점프'), 'char', [tone(280, 760, 0.2, 'square', 0.3)]),
     sfx('sfx_char_land', L('Land', '착지'), 'char', [noise(0.1, 0.2, 0.6), tone(100, 50, 0.14, 'sine', 0.7)]),
@@ -69,26 +69,22 @@
     bgm('bgm_lose', L('Defeat', '패배'), 72, 52, 'dark'),
   ];
 
-  const PROFILES = [
-    { id: 'mobile', name: L('Mobile', '모바일'), loud: [-20, -16] },
-    { id: 'console', name: L('Console', '콘솔'), loud: [-26, -22] },
-    { id: 'wide', name: L('Wide', '넓게'), loud: [-26, -14] },
-  ];
-  // The AI's own checklist. Users never see or edit this; `applies` narrows a rule.
-  const RULES = [
-    { id: 'peak', name: L('Peak', '최대 소리'), unit: 'dB', limit: -1, level: 'error', fix: true, read: (m) => m.peak, bad: (v, r) => v > r.limit, hint: L('True peak ceiling', 'true peak 상한') },
-    { id: 'clip', name: L('Clipping', '클리핑'), unit: L('', '개'), limit: 0, level: 'error', fix: true, read: (m) => m.clips, bad: (v, r) => v > r.limit, hint: L('Clipped samples', '찌그러진 샘플 수') },
-    { id: 'loud', name: L('Music loudness', '음악 음량'), unit: 'LUFS', range: [-20, -16], level: 'error', fix: true, applies: (a) => a.music, read: (m) => m.loud, bad: (v, r) => v < r.range[0] || v > r.range[1], hint: L('Integrated loudness of the track', '곡 전체 평균 음량') },
-    { id: 'dur', name: L('Length', '길이'), unit: L('s', '초'), limit: 2, level: 'warn', applies: (a) => !a.music && !a.loop, read: (m) => m.seconds, bad: (v, r) => v > r.limit, hint: L('Max SFX length', '효과음 최대 길이') },
-    { id: 'lead', name: L('Leading silence', '앞 무음'), unit: 'ms', limit: 50, level: 'warn', fix: true, applies: (a) => !a.loop, read: (m) => m.lead, bad: (v, r) => v > r.limit, hint: L('Sounds late when triggered', '눌렀을 때 늦게 들림') },
-    { id: 'tail', name: L('Trailing silence', '뒤 무음'), unit: 'ms', limit: 200, level: 'warn', fix: true, applies: (a) => !a.loop, read: (m) => m.tail, bad: (v, r) => v > r.limit, hint: L('Wasted file length', '쓸데없는 파일 길이') },
-    { id: 'dc', name: 'DC', unit: '', limit: 0.002, level: 'warn', read: (m) => m.dc, bad: (v, r) => v > r.limit, hint: L('Waveform offset', '파형 중심 치우침') },
-    { id: 'seam', name: L('Loop seam', '루프 이음새'), unit: L('x', '배'), limit: 3, level: 'warn', applies: (a) => a.loop, read: (m) => m.seam, bad: (v, r) => v > r.limit, hint: L('Click when it repeats', '반복될 때 나는 튐') },
-    { id: 'wrap', name: L('Seam level gap', '이음매 음량 차'), unit: 'dB', limit: 3, level: 'warn', applies: (a) => a.loop && !a.music, read: (m) => m.wrap, bad: (v, r) => v > r.limit, hint: L('A level jump between end and start makes the loop audible', '끝과 처음의 음량이 다르면 반복이 들림') },
-    { id: 'steady', name: L('Dropout', '끊김'), unit: 'dB', limit: 12, level: 'warn', applies: (a) => a.loop && !a.music, read: (m) => m.dip, bad: (v, r) => v > r.limit, hint: L('Ambience must not fade out midway', '환경음은 중간에 잦아들면 안 됨') },
-    { id: 'name', name: L('Name', '이름'), text: true, level: 'error', read: (m, a) => /^(sfx|amb|bgm)_[a-z0-9_]+$/.test(a.id), hint: L('Starts with sfx_, amb_ or bgm_', 'sfx_, amb_, bgm_ 로 시작') },
-    { id: 'lic', name: L('License', '저작권'), text: true, level: 'error', read: (m, a) => !a.noLicense && (!a.imported || !!a.license), hint: L('Tools and sources recorded', '사용 도구·음원 기록') },
-  ];
+  // What each rule is called, by rule id. Which sounds a rule covers, its limit and its level are measure.js's
+  // (assetMeasure.RULES and PROFILES): the page, the command line and the server all judge with that one table.
+  const RULE_TEXT = {
+    peak: { name: L('Peak', '최대 소리'), unit: 'dB', hint: L('True peak ceiling', 'true peak 상한') },
+    clip: { name: L('Clipping', '클리핑'), unit: L('', '개'), hint: L('Clipped samples', '찌그러진 샘플 수') },
+    loud: { name: L('Music loudness', '음악 음량'), unit: 'LUFS', hint: L('Integrated loudness of the track', '곡 전체 평균 음량') },
+    dur: { name: L('Length', '길이'), unit: L('s', '초'), hint: L('Max SFX length', '효과음 최대 길이') },
+    lead: { name: L('Leading silence', '앞 무음'), unit: 'ms', hint: L('Sounds late when triggered', '눌렀을 때 늦게 들림') },
+    tail: { name: L('Trailing silence', '뒤 무음'), unit: 'ms', hint: L('Wasted file length', '쓸데없는 파일 길이') },
+    dc: { name: 'DC', unit: '', hint: L('Waveform offset', '파형 중심 치우침') },
+    seam: { name: L('Loop seam', '루프 이음새'), unit: L('x', '배'), hint: L('Click when it repeats', '반복될 때 나는 튐') },
+    wrap: { name: L('Seam level gap', '이음매 음량 차'), unit: 'dB', hint: L('A level jump between end and start makes the loop audible', '끝과 처음의 음량이 다르면 반복이 들림') },
+    steady: { name: L('Dropout', '끊김'), unit: 'dB', hint: L('Ambience must not fade out midway', '환경음은 중간에 잦아들면 안 됨') },
+    name: { name: L('Name', '이름'), unit: '', hint: L('Follows the id rule (Settings)', 'ID 규칙을 따름(설정)') },
+    lic: { name: L('License', '저작권'), unit: '', hint: L('Tools and sources recorded', '사용 도구·음원 기록') },
+  };
 
   const LICENSES = [
     { name: 'nkido (Akkado, Cedar)', license: 'MIT', holder: 'Moritz Laass', use: L('Sound synthesis engine', '소리 합성 엔진') },
@@ -99,5 +95,5 @@
     { name: 'libvorbis', license: 'BSD-3-Clause', holder: 'Xiph.Org Foundation', use: L('OGG Vorbis encoder', 'OGG Vorbis 인코더') },
   ];
 
-  window.STUDIO_DATA = { bed, music: bgm, GAME: L('Starlight Garden', '별빛 정원'), BRIEF: L('A calm fantasy collecting game. Cute and warm.', '잔잔한 판타지 수집 게임. 귀엽고 따뜻하게.'), CATEGORIES, ASSETS, PROFILES, RULES, LICENSES };
+  window.STUDIO_DATA = { GAME: L('Starlight Garden', '별빛 정원'), BRIEF: L('A calm fantasy collecting game. Cute and warm.', '잔잔한 판타지 수집 게임. 귀엽고 따뜻하게.'), CATEGORIES, ASSETS, RULE_TEXT, LICENSES };
 })();

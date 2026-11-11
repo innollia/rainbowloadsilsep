@@ -236,7 +236,7 @@ body.inDetail #gameTitle:hover { color:var(--text); }
 .dWorking { padding:6px 16px; border-top:1px solid var(--divider); color:var(--work); font-size:16px; line-height:24px; }
 .dTools { position:relative; display:flex; align-items:center; gap:8px; padding:8px 16px 0; }
 .draftSeg { display:inline-flex; align-items:center; gap:4px; }
-.draftSeg .segLabel { margin-right:4px; font-size:16px; line-height:24px; color:var(--text3); }
+.draftSeg .segLabel { margin-right:4px; font-size:16px; line-height:24px; color:var(--text3); white-space:nowrap; font-variant-numeric:tabular-nums; }
 .draftSeg button { width:40px; height:36px; min-height:36px; padding:0; font-size:16px; color:var(--text2); }
 .draftSeg button[aria-checked="true"] { background:var(--text); color:#111; }
 .detailDock { display:flex; align-items:flex-end; gap:8px; padding:8px 16px 12px; flex:none; }

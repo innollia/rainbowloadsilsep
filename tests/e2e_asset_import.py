@@ -1,16 +1,26 @@
 """Real-browser check of bringing existing work into the game sound asset board.
 
-Run: python tests/e2e_asset_import.py  (not collected by pytest; needs playwright and Chrome)
-A first-time visitor who already has work: a folder of sounds, a list of needed sounds,
-drafts in the feel of a brought-in sound, then export and re-open the bundle in a fresh browser.
+Run: python tests/e2e_asset_import.py  (not collected by pytest; needs playwright, Chrome and node)
+A first-time visitor who already has work: a folder of sounds, a list of needed sounds made while the tab is
+reloaded, drafts in the feel of a brought-in sound, then export and re-open the bundle in a fresh browser.
+A brought-in sound that breaks rules shows the same rule ids as `node tools/asset_lint.js --json`.
+
+Sounds are made by the generation API (asset_api.py), started here on a port of its own by the server's own loader
+with OLMUSE_GEN_FAKE=1 set for it: a scripted model and sine waves. No key, no ledger; the job database and the results
+are in a temp folder. The two lines the loader logs on the way (the switch is on, no ledger) are expected.
 """
 import functools
 import json
 import math
+import os
+import secrets
+import socket
 import struct
+import subprocess
 import sys
 import tempfile
 import threading
+import time
 import wave
 import zipfile
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -18,7 +28,9 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-ROOT = Path(__file__).resolve().parent.parent / "studio_frontend" / "asset_studio"
+REPO = Path(__file__).resolve().parent.parent
+ROOT = REPO / "studio_frontend" / "asset_studio"
+sys.path.insert(0, str(REPO))
 
 
 def write_wav(path, seconds, freq, noise=0.0):
@@ -30,9 +42,89 @@ def write_wav(path, seconds, freq, noise=0.0):
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate); w.writeframes(frames)
 
 
+def write_hot_wav(path):
+    """A one-shot that breaks rules on purpose: flat tops at full scale, off centre, over two seconds, silent at both ends."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rate = 44100
+    body = [max(-1.0, min(1.0, 0.25 + 1.6 * math.sin(2 * math.pi * 330 * i / rate))) for i in range(int(rate * 2.4))]
+    samples = [0.0] * int(rate * 0.3) + body + [0.0] * int(rate * 0.5)
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate)
+        w.writeframes(b"".join(struct.pack("<h", int(32767 * s)) for s in samples))
+
+
+def lint_ids(path, tile_id):
+    """The rule ids the command line gives the file, judged as the board judges a brought-in effect:
+    under the id it has on the board and with no sources."""
+    out = subprocess.run(["node", str(REPO / "tools" / "asset_lint.js"), str(path), "--kind", "sfx", "--id", tile_id, "--sources", "[]", "--json"],
+                         capture_output=True, encoding="utf-8")
+    return [x["id"] for x in json.loads(out.stdout)["issues"]]
+
+
 class Quiet(SimpleHTTPRequestHandler):
     def log_message(self, *a):
         pass
+
+
+class GenApi:
+    """The generation API for pages of page_origin, with the scripted model and the sine engine.
+    token() is the message the host page would hand the asset room: a password session's token and where the API is."""
+
+    def __init__(self, folder, page_origin):
+        import uvicorn
+
+        import asset_api
+        import asset_generate
+        import asset_token
+        self.sign, self.request_of = asset_token, asset_generate.request_of
+        self.secret, self.sub = secrets.token_hex(32), "pw:e2e-" + secrets.token_hex(4)
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        self.base = f"http://127.0.0.1:{port}/api/asset"
+        # What run_api.ps1 would start with OLMUSE_GEN_FAKE=1: the server reads its own switch. Everything that could
+        # reach this PC's real jobs, token key or ledger is pointed at the temp folder or left empty.
+        env = dict(os.environ, OLMUSE_GEN_FAKE="1", OLMUSE_GEN_DB=str(folder / "asset-gen.db"), OLMUSE_RENDERS=str(folder / "renders"),
+                   OLMUSE_API_HOSTS=f"127.0.0.1:{port}", OLMUSE_API_ORIGINS=page_origin, STRUDEL_CREDITS_URL="", STRUDEL_LOCAL_LEDGER="")
+        env[asset_token.SECRET_ENV] = self.secret
+        self.app = asset_api.create_app(asset_api.real_deps(env))
+        self.server = uvicorn.Server(uvicorn.Config(self.app, host="127.0.0.1", port=port, log_level="warning", access_log=False, proxy_headers=False))
+        threading.Thread(target=self.server.run, daemon=True).start()
+        deadline = time.time() + 15
+        while not self.server.started:
+            if time.time() > deadline:
+                raise RuntimeError("the generation API did not start")
+            time.sleep(0.05)
+
+    def token(self):
+        signed = self.sign.sign(self.sign.payload_for("pw", self.sub, "", "ko", time.time()), self.secret)
+        return {"type": "asset:token", "token": signed, "ttl": self.sign.TTL - 30, "api": self.base}
+
+    def stop(self):
+        self.server.should_exit = True
+        self.app.state.api.jobs.stop()
+        self.app.state.api.jobs.store.close()
+        self.app.state.api.close()
+
+
+def hand(page, api):
+    """What the host page does once the room is up. The room reads the price of a draft with a token that is new
+    to it, so that answer says the token was taken. Once for every load: a reload forgets the token."""
+    with page.expect_response(lambda r: "/api/asset/quote" in r.url, timeout=15000):
+        page.evaluate("(m) => window.postMessage(m, location.origin)", api.token())
+
+
+ON_DISK = """async (n) => {
+  for (const d of await indexedDB.databases()) {
+    const db = await new Promise((res, rej) => { const o = indexedDB.open(d.name); o.onsuccess = () => res(o.result); o.onerror = () => rej(o.error); });
+    try {
+      if (![...db.objectStoreNames].includes('audio')) continue;
+      const keys = await new Promise((res) => { const q = db.transaction('audio').objectStore('audio').getAllKeys(); q.onsuccess = () => res(q.result); });
+      if (keys.length >= n) return true;
+    } finally { db.close(); }
+  }
+  return false;
+}"""
 
 
 def groups(page):
@@ -47,10 +139,14 @@ def main():
     write_wav(game / "Sword_Swing_01.wav", 0.35, 300, noise=0.6)
     write_wav(game / "amb_forest_loop.wav", 4, 200, noise=0.8)
     write_wav(game / "mystery.wav", 0.2, 800)
+    hot = tmp / "ui_too_hot.wav"
+    write_hot_wav(hot)
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Quiet, directory=str(ROOT)))
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    url = f"http://127.0.0.1:{server.server_address[1]}/index.html?lang=ko"
+    origin = f"http://127.0.0.1:{server.server_address[1]}"
+    url = f"{origin}/index.html?lang=ko"
+    api = GenApi(tmp / "api", origin)
     checks = []
 
     def check(name, ok, detail=""):
@@ -63,6 +159,7 @@ def main():
         errors = []
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto(url)
+        hand(page, api)
 
         # First visit: the tutorial opens and offers Import; the header and board offer it too.
         page.wait_for_selector("#dialog[open] #tutorialImport")
@@ -90,14 +187,35 @@ def main():
         page.click("#addSlots")
         page.wait_for_function("document.querySelectorAll('.tile[data-status=pending]').length === 3")
         check("list became empty slots", True)
-        page.click("#fillBtn")
-        page.wait_for_function("!document.querySelector('.tile[data-status=pending]') && !document.querySelector('.tile[data-status=working]')", timeout=15000)
-        check("slots filled", page.locator(".tile[data-status=draft]").count() == 3)
+
+        # The tab is reloaded while the sounds are being made: the tiles still say so, and they finish.
+        # The finished sounds are kept from arriving until then, so the reload is sure to come in the middle.
+        held = "**/api/asset/jobs/*/sound"
+        page.route(held, lambda route: route.abort())
+        with page.expect_response(lambda r: r.url.endswith("/api/asset/jobs") and r.request.method == "POST") as sent:
+            page.click("#fillBtn")
+        check("the request for the slots is taken", sent.value.status == 200, sent.value.status)
+        check("slots are being made", page.locator(".tile[data-status=working]").count() == 3)
+        # The board record is written before the bytes of its sounds, one sound at a time, and the request above wrote
+        # the record. A tab that goes in between comes back with the sounds not written yet as empty slots, so the
+        # reload waits for the four that were brought in. The request starts their write itself: no page timer is due.
+        deadline = time.time() + 5
+        while not page.evaluate(ON_DISK, 4) and time.time() < deadline:
+            page.wait_for_timeout(20)
+        check("the request put the brought-in sounds on the disk of the browser", page.evaluate(ON_DISK, 4))
+        page.reload()
+        page.wait_for_function("document.querySelectorAll('.tile').length === 7", timeout=15000)
+        check("a reload in the middle still shows the work", page.locator(".tile[data-status=working]").count() == 3)
+        page.unroute(held)
+        hand(page, api)
+        page.wait_for_function("!document.querySelector('.tile[data-status=pending]') && !document.querySelector('.tile[data-status=working]')", timeout=30000)
+        check("slots filled after the reload", page.locator(".tile[data-status=draft]").count() == 3)
 
         # A reload (or closing the tab, or going to the game) loses nothing: the board is saved as it changes.
         page.wait_for_timeout(1200)
         page.reload()
         page.wait_for_function("document.querySelectorAll('.tile').length === 7", timeout=15000)
+        hand(page, api)
         g = groups(page)
         check("board survives a reload", page.inner_text("#gameTitle") == "MyGame" and "버튼 누름" in g.get("UI", [])
               and page.locator(".tile.imported").count() == 4 and page.locator(".tile[data-status=draft]").count() == 3, json.dumps(g, ensure_ascii=False))
@@ -108,12 +226,16 @@ def main():
         page.keyboard.press("Enter")
         page.wait_for_selector("#likeThis")
         page.click("#likeThis")
-        page.wait_for_function("[...document.querySelectorAll('.tile .name')].some((n) => n.textContent.includes('느낌')) && !document.querySelector('.tile[data-status=working]')", timeout=15000)
+        page.wait_for_function("[...document.querySelectorAll('.tile .name')].some((n) => n.textContent.includes('느낌')) && !document.querySelector('.tile[data-status=working]')", timeout=30000)
         page.locator(".tile", has_text="느낌").focus()
         page.keyboard.press("Enter")
         page.get_by_role("tab", name="코드").click()
-        prompt = page.inner_text("#promptText")
-        check("prompt carries reference measurements", all(k in prompt for k in ("기준 소리", "LUFS", "저역", "Sword_Swing_01.wav")), prompt)
+        prompt = page.text_content("#promptText") or ""
+        try:
+            style = api.request_of(prompt).get("style_ref") or {}
+        except ValueError:
+            style = {}
+        check("prompt carries reference measurements", style.get("name") == "Sword swing 01" and "peak" in (style.get("facts") or {}), prompt)
         page.keyboard.press("Escape")
 
         # Export, then re-open the bundle in a fresh browser.
@@ -164,8 +286,21 @@ def main():
         note = odd_page.inner_text("#toast")
         check("odd files skipped and counted", all(k in note for k in ("3개 건너뜀", "소리 파일 아님 1", "읽지 못함 1", "1")), note)
         check("CP949 zip name read as Korean", "발소리" in odd_page.inner_text("#board"), odd_page.inner_text("#board"))
+
+        # A brought-in sound that breaks rules: its tile names the rules the command line names for the same file.
+        hot_page = browser.new_page(viewport={"width": 1440, "height": 900})
+        hot_page.on("pageerror", lambda e: errors.append(str(e)))
+        hot_page.goto(url)
+        hot_page.wait_for_selector("#dialog[open]")
+        hot_page.keyboard.press("Escape")
+        hot_page.set_input_files("#importFiles", str(hot))
+        hot_page.wait_for_selector(".tile.imported[data-issues]", timeout=15000)
+        tile = hot_page.locator(".tile.imported")
+        shown, told = (tile.get_attribute("data-issues") or "").split(), lint_ids(hot, tile.get_attribute("data-id"))
+        check("a rule-breaking sound shows what asset_lint.js finds", shown == told and {"peak", "lic"} <= set(shown), f"board {shown}, command line {told}")
         check("no page errors", not errors, errors)
         browser.close()
+    api.stop()
     server.shutdown()
     failed = [n for n, ok in checks if not ok]
     print(f"{len(checks) - len(failed)}/{len(checks)} passed")

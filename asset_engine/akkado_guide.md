@@ -21,7 +21,7 @@ A program is a list of statements. Audio is produced only by statements that end
 bpm = 120                                    // tempo; default 120. 1 beat = 1 cycle
 master((s) -> limiter(s, -1.5, 0.1))         // clean master, hard ceiling at -1.5 dBFS
 tone = sine(440) * 0.3                       // name = expression (names are immutable)
-tone |> lp(@, 2000) |> out(@)                // out(sig): mono signal to both speakers
+tone |> saturate(@, 2) |> out(@)             // out(sig): mono signal to both speakers
 ```
 
 ## Syntax essentials
@@ -98,7 +98,7 @@ src |> moog(@, 300 + ar(t, 0.01, 0.3) * 2500, 2.5)       // envelope opens the f
 
 ## One-shot sound effects
 
-Rendering always starts at time 0 and `trigger(n)` fires its first pulse at sample 0. `trigger(0.001)` fires once at the start and not again for 1000 beats: use it as the single hit of a sound effect. Drive every envelope (amplitude, pitch, filter) from that one trigger. The sound must decay to silence before the render ends: render length >= attack + 1.5 x longest release + any delay/reverb tail.
+Rendering always starts at time 0 and `trigger(n)` fires its first pulse at sample 0. `trigger(0.001)` fires once at the start and not again for 1000 beats: use it as the single hit of a sound effect. Drive every envelope (amplitude, pitch, filter) from that one trigger. The sound must decay to silence before the render ends, or the draft is rejected (its last 0.05 s must be under -40 dBFS): render length >= attack + 1.5 x longest release + any tail. After a short hit `freeverb` rings about 0.6 s at room 0.5, 1.3 s at 0.8 and 2 s at 0.9; `delay` needs about 2 repeats at fb 0.4, 5 at 0.6 and 10 at 0.8. Silence left at the end is cut off after the render, so when unsure render longer, up to twice the asked length.
 
 ```akkado
 // render: 0.5 s
@@ -123,7 +123,7 @@ Timing rules (these differ from Strudel/Tidal):
 
 - **Each top-level element lasts one beat.** `n"c4 e4 g4 c5"` is 4 beats long, then repeats.
 - `[a b c]` subdivides its slot: `n"[c4 e4] g4"` = two 8th notes, then a quarter.
-- `~` is a rest. `a*3` repeats inside the slot (`1*2` = two 8ths). `a!3` = `a a a` (three slots).
+- `~` is a rest. `a*3` repeats inside the slot (`1*2` = two 8ths). `a!3` = `a a a` (three slots). `[a@3 b]` gives `a` three quarters of the slot.
 - `<a b>` plays one alternative per pass. `.slow(k)` / `.fast(k)` after the literal stretch/compress time (`n"a3 f3".slow(4)` = 4 beats per note).
 - Patterns of different lengths loop independently: `v"1"` (every beat), `v"~ 1"` (beats 2 and 4), `v"[~ 1]"` (off-beat 8ths).
 - A pattern used directly as a number steps through its values: `lp(x, v"400 800 1600 800")`.
@@ -132,16 +132,16 @@ Timing rules (these differ from Strudel/Tidal):
 // render: 4 s
 bpm = 120
 master((s) -> limiter(s, -1.5, 0.1))
-n"c4 [e4 g4] ~ <c5 b4>" as e                             // 4 beats; slot 4 alternates each pass
-    |> tri(e.freq) * adsr(e.gate, 0.005, 0.08, 0.5, 0.05) * e.vel * 0.25
-    |> out(@)
+n"c4 [e4 g4] ~ [<c5 b4> ~]" as e                         // 4 beats; slot 4 alternates each pass, then rests
+    |> tri(e.freq) * adsr(e.gate, 0.005, 0.08, 0.7, 0.05) * e.vel * 0.25
+    |> bus(1, @, "lead")
 v"1 ~ 1*2 [~ 1]" as k                                    // rhythm only: values unused, .trig drives the drum
-    |> sine(60, 0, k.trig) * ar(k.trig, 0.001, 0.15) * 0.35
-    |> out(@)
+    |> sine(60, 0, k.trig) * ar(k.trig, 0.001, 0.15) * 0.3
+    |> bus(2, @, "drums")
 n"c2!2 g1!2".slow(2) as d                                // each note lasts 2 beats
-    |> saw(d.freq) * ar(d.trig, 0.01, 0.5) * 0.15
+    |> saw(d.freq) * ar(d.trig, 0.01, 0.5) * 0.25
     |> lp(@, v"300 600 1200 600")                        // cutoff steps once per beat
-    |> out(@)
+    |> bus(3, @, "bass")
 ```
 
 ## Tempo and time
@@ -162,7 +162,7 @@ blip = sine(660) * ar(t, 0.002, 0.1) * 0.4
 air = stereo(noise(0, 0, 1), noise(0, 0, 2)) |> hp(@, 6000) |> @ * 0.05
 blip |> pan(@, sine(0.5) * 0.8) |> out(@)                // auto-pan
 air |> out(@)
-out(saw(110) * 0.08, saw(111) * 0.08)                    // explicit left, right
+out(sine(110) * 0.08, sine(111) * 0.08)                  // explicit left, right
 ```
 
 ## Stems: buses with labels
@@ -185,7 +185,13 @@ mixer(2, (s) -> s |> saturate(@, 2) |> @ * 0.8, "bass")  // optional per-bus FX
 ## Loudness
 
 - Always start with `master((s) -> limiter(s, -1.5, 0.1))`. Without a `master(...)` line the engine applies a soft-clipper that colors everything and lets peaks reach -0.9 dBFS.
-- The limiter is a safety net, not the mix. Scale sources so the sum stays below about 0.7: oscillators are full scale (+-1), so multiply every voice by a gain. Typical gains: single SFX voice 0.3..0.6; in music kick 0.35, snare 0.2, hats 0.1, bass 0.2..0.25, lead 0.15, pad 0.08.
+- The limiter is a safety net, not the mix. Scale sources so the sum stays below about 0.7: oscillators are full scale (+-1), so multiply every voice by a gain. Typical gains: single SFX voice 0.3..0.6; in music kick 0.3..0.35, snare 0.2, hats 0.1, held bass 0.2..0.25, lead 0.15, pad 0.12..0.16.
+- The final level is set after the render. Effects and ambience keep the level you wrote (only a peak over -1 dBFS is lowered, one under -12 raised to -3). Music is moved to the project's loudness target, but its highest peak may not pass -1.2 dBFS.
+- So music must be dense: if its highest peak is more than about 17 dB above its average loudness (the task text gives the exact figure), the draft is rejected and no gain change helps.
+  - Keep one voice sounding between the hits: a held bass (`adsr` sustain >= 0.6) or a pad at 0.12..0.16. Only short `ar` hits (drums, plucked bass, arp) measure 19..20 dB; with a held bass or a full pad, 15..17.
+  - For a sparse arrangement drive the limiter: `master((s) -> limiter(s * 2, -1.5, 0.1))` brings peaks about 4 dB closer. Past `s * 2` bass distorts; `comp(s, -12, 4)` before the limiter gains as much but distorts bass twice as much.
+  - A quieter kick or louder hats change it by about 1 dB.
+- An ambience is as loud as its continuous bed: events far above a faint bed (drops, crackles, pings) leave the file quiet. Keep its peak within about 17 dB of its loudness too.
 - Stems are captured before the master limiter. Each bus must itself stay below 0.89 (-1 dBFS) or its stem clips. If unsure add `mixer(N, (s) -> limiter(s, -3, 0.1), "label")`.
 - Resonant filters (`q` > 4, `moog` res > 3), `saturate`, feedback delays and summed detuned oscillators raise level: lower the gain after them.
 - Give every envelope an attack >= 0.001 s. `tri` starts at +1 and `saw` at -1, so an un-enveloped start clicks.
@@ -197,8 +203,9 @@ mixer(2, (s) -> s |> saturate(@, 2) |> @ * 0.8, "bass")  // optional per-bus FX
 - Every voice must be silent at the loop point: use decaying `ar` envelopes that finish before the end, and when using `adsr` with `.gate`, end the pattern with a rest (`[g1 ~]`) so the last note has released.
 - Delay and reverb tails are cut at the end and missing at the start. In loops keep them off, or short and quiet (`wet` <= 0.2).
 - Free-running modulation must repeat with the loop: derive it from `ph = phasor(1 / loop_seconds)` (e.g. `cos(ph * 6.28318)`), or use `sine(k / loop_seconds)` with integer k.
-- Sustained un-enveloped tones (drones) need `freq * loop_seconds` to be an integer.
-- Noise beds cannot be periodic; keep their level and filter modulation periodic and make the modulation quietest at the loop point.
+- A layer that never closes must run into its own start, or the loop clicks and the draft is rejected. Only two kinds do: `sine` or `tri` drones with `freq * loop_seconds` an integer and nothing after them but gain, `saturate` or periodic modulation; and noise that keeps its highs (white, `hp`, or `lp` at 3000 and up).
+- Any other sustained layer clicks: `saw` or `sqr` drones (put them through `lp`), drones through a filter, delay or reverb, dark noise (`lp` under 3000, `bp` under 2000, `moog` under 4000). Multiply it, after its last effect, by a gate that shuts exactly at the loop point: `edge = v"[1@N ~]".slow(B) as g |> adsr(g.gate, 0.005, 0.01, 1, 0.005)`, B = loop beats, N = 40 x loop_seconds - 1 (shut for the last 0.025 s). In an ambience set `bpm = 60` so B = loop_seconds. A `phasor` drifts by up to 1% of the loop and cannot do this.
+- A looping ambience gets a warning when any quarter second is more than 12 dB under its average level (gaps, deep swells, events with no bed) or its first and last quarter second differ by more than 3 dB: keep its modulation periodic and shallow.
 
 ## Common mistakes
 
@@ -289,12 +296,14 @@ f = 280 + fall * 2200
 
 ```akkado
 // Wind ambience loop. render: 8 s (loop = 8 s)
+bpm = 60                                             // 1 beat = 1 s
 master((s) -> limiter(s, -1.5, 0.1))
 ph = phasor(0.125)                                   // 0 -> 1 once per 8 s
 gust = 0.5 - 0.3 * cos(ph * 6.28318) + 0.15 * sin(ph * 18.84954)   // periodic, quietest at the seam
+edge = v"[1@319 ~]".slow(8) as g |> adsr(g.gate, 0.005, 0.01, 1, 0.005)   // dark noise: shut for the last 1/320 of the loop
 wl = noise(0, 0, 1) |> bp(@, 350 + gust * 550, 1.5)
 wr = noise(0, 0, 2) |> bp(@, 400 + gust * 550, 1.5)
-stereo(wl, wr) * (0.15 + gust * 0.6) |> out(@)
+stereo(wl, wr) * (0.15 + gust * 0.6) * edge |> out(@)
 ```
 
 ### Rain ambience loop
@@ -354,7 +363,7 @@ master((s) -> limiter(s, -1.5, 0.1))
 fn kick(t) -> sine(45 + ar(t, 0.001, 0.04) * 150, 0, t) * ar(t, 0.001, 0.18)
 fn hat(t) -> noise() |> hp(@, 8000) |> @ * ar(t, 0.001, 0.03)
 
-v"1 ~ 1 [~ 1]" as k |> kick(k.trig) * 0.42 |> bus(1, @, "drums")
+v"1 ~ 1 [~ 1]" as k |> kick(k.trig) * 0.34 |> bus(1, @, "drums")
 v"[1 1] [1 1 1 1]" as h |> hat(h.trig) * 0.08 |> bus(1, @, "drums")
 mixer(1, (s) -> limiter(s, -3, 0.1), "drums")        // optional per-stem safety limiter
 
@@ -363,11 +372,11 @@ n"a1!4 f1!4 c2!4 g1!4" as b
     |> (tri(b.freq) + sine(b.freq * 2) * 0.3) * ar(b.trig, 0.005, 0.25) * 0.26
     |> bus(2, @, "bass")
 
-// pad: one swell per chord; AR finishes before the next chord and before the loop point
+// pad: the layer that sounds between the hits. One swell per chord; AR finishes before the next chord and the loop point
 n"a3 f3 c4 g3".slow(4) as p
     |> saw(p.freq) + saw(p.freq * 1.503) + saw(p.freq * 2.005)
     |> lp(@, 1200)
-    |> @ * ar(p.trig, 0.6, 0.8) * 0.08
+    |> @ * ar(p.trig, 0.6, 0.8) * 0.14
     |> bus(3, @, "pad")
 
 n"[a4 c5 e5 c5] [a4 c5 e5 a5] [e5 c5 a4 c5] [e5 a5 e5 c5] [f4 a4 c5 a4] [f4 a4 c5 f5] [c5 a4 f4 a4] [c5 f5 c5 a4] [c5 e5 g5 e5] [c5 e5 g5 c6] [g5 e5 c5 e5] [g5 c6 g5 e5] [g4 b4 d5 b4] [g4 b4 d5 g5] [d5 b4 g4 b4] [d5 g5 d5 b4]" as a

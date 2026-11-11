@@ -28,7 +28,40 @@ def test_refuses_anything_that_reaches_outside(source):
     assert caught.value.kind == "forbidden"
 
 
-@pytest.mark.parametrize("source", ['sin(3) + min(1, 2) |> out(%,%)', 'main = sine(440)\nmain |> out(%,%)'])
+@pytest.mark.parametrize("source", [
+    '"/Windows/win.ini".samples // x\n()\nsine(1) |> out(%,%)',  # a comment between a name and its bracket
+    'samples // x\n("bank.json")\nsine(1) |> out(%,%)',
+    '"w".wt_load // (\n("a.wav")\nsine(1) |> out(%,%)',
+    'soundfont // "\n("gm")\nsine(1) |> out(%,%)',               # a quote in the comment opens no string
+    'x = "//"\n"/x".samples // y\n()\nsine(1) |> out(%,%)',      # and // in a string starts no comment
+    's`bd sd` |> out(%,%)',
+    'x = "/Windows/win.ini"\nsine(1) |> out(%,%)',               # a path from the root of the drive
+    'x = "//127.0.0.1/share/bank.json"\nsine(1) |> out(%,%)',    # another machine
+    'x = "\\\\\\\\host\\\\share\\\\bank.json"\nsine(1) |> out(%,%)',
+    "x = '/etc/passwd'\nsine(1) |> out(%,%)",
+    'x = ` /etc/passwd`\nsine(1) |> out(%,%)',
+    'x = "\\n/etc/passwd"\nsine(1) |> out(%,%)',
+])
+def test_refuses_what_a_comment_or_a_path_without_a_drive_would_slip_past(source):
+    assert nkido.refuse(source) != ""
+    with pytest.raises(nkido.RenderError) as caught:
+        nkido.render_mended(source, 1.0, exe="no-such-engine")
+    assert caught.value.kind == "forbidden"
+
+
+def test_the_source_is_read_the_way_the_lexer_reads_it():
+    code, strings = nkido.read('a = "x // y" // z "q"\nb = \'c4\' + `l1\nl2` // "\nc = "e\\"f\\\\"')
+    assert code == 'a = "" \nb = \'\' + `` \nc = ""' and strings == ["x // y", "c4", "l1\nl2", 'e"f\\']
+    assert nkido.read('a = "never closed // b') == ('a = ""', ["never closed // b"])
+
+
+@pytest.mark.parametrize("source", [
+    'sin(3) + min(1, 2) |> out(%,%)', 'main = sine(440)\nmain |> out(%,%)',
+    'x = n"c4 e4" // two notes, one sample each\nsine(440) / 2 |> out(%,%)',
+    "a = 'c4' // a pitch\nsine(a) |> out(%,%)",
+    'f = (in) -> in * 0.5 // halves what comes in\nsine(440) |> f(%) |> out(%,%)',
+    'x = v"1 0 1 0" / 2\nsine(440) * x |> out(%,%)',
+])
 def test_plain_synthesis_is_not_refused(source):
     assert nkido.refuse(source) == ""
 

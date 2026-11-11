@@ -425,6 +425,36 @@
   }
 
   let classifySeen, agentSeen, aiSent;
+
+  /* ---------- asset room token and balance ---------- */
+  // The asset room's key to the generation API. Unlike the other asset messages it goes to this page's own origin only.
+  // ttl is counted down from the render that brought it, so a token sent later never claims more time than it has left.
+  // tokenSent is the one the frame holds; a frame that has just loaded holds none.
+  let assetToken = null, tokenSent = '';
+  // asked: the frame wants a newer token than the one it holds. One that has run out is never sent, and the same one
+  // with a minute or less left is no answer: the frame would ask again at once. It waits for the next render instead.
+  function sendToken(asked) {
+    if (!assetToken || !frame.getAttribute('src')) return;
+    const ttl = Math.floor(assetToken.ttl - (performance.now() - assetToken.at) / 1000);
+    if (ttl <= 0 || (asked && ttl <= 60 && assetToken.token === tokenSent)) return;
+    tokenSent = assetToken.token;
+    frame.contentWindow?.postMessage({ type: 'asset:token', token: assetToken.token, ttl, api: assetToken.api }, location.origin);
+  }
+  // Streamlit sends the last args again on a resize or a theme change. The same token with the same ttl is that
+  // and keeps the clock it has; only a render that brought another token or another ttl starts the count again.
+  function takeToken(next) {
+    if (!next?.token) assetToken = null;
+    else if (next.token !== assetToken?.token || next.ttl !== assetToken.ttl) assetToken = { ...next, at: performance.now() };
+    if (assetToken && assetToken.token !== tokenSent) sendToken();
+  }
+  // Sounds that finish close together ask for the balance one by one: they become one read, two seconds after the first.
+  // quiet: the balance only, and a ledger that does not answer writes nothing in this screen's chat.
+  let accountTimer = 0;
+  function readAccount() {
+    if (accountTimer) return;
+    accountTimer = setTimeout(() => { accountTimer = 0; if (account) send('account', { quiet: true }); }, 2000);
+  }
+
   function onRender(args) {
     fit();
     if (args.lang === pendingLang) pendingLang = '';
@@ -439,6 +469,7 @@
     const ag = args.asset_agent, agKey = ag && `${ag.n}:${ag.status}`;
     if (ag && agKey !== agentSeen) { agentSeen = agKey; frame.contentWindow?.postMessage({ type: 'asset:agent_reply', ...ag }, '*'); }
     if (args.classify && args.classify.n !== classifySeen) { classifySeen = args.classify.n; frame.contentWindow?.postMessage({ type: 'asset:classified', ...args.classify }, '*'); }
+    takeToken(args.asset_token);
     const j = args.job;
     job = j;
     if (j) {
@@ -1319,8 +1350,12 @@
     // Imported files sorted by Jev on the server; the answer comes back through the render args (args.classify).
     if (e.data?.type === 'asset:classify' && e.source === frame.contentWindow) send('classify', e.data.payload);
     // The asset board's assistant runs on the music screen's model choice; its answer comes back as args.asset_agent.
-    if (e.data?.type === 'asset:ready' && e.source === frame.contentWindow) frame.contentWindow.postMessage({ type: 'asset:ai', on: aiEnabled }, '*');
+    if (e.data?.type === 'asset:ready' && e.source === frame.contentWindow) { frame.contentWindow.postMessage({ type: 'asset:ai', on: aiEnabled }, '*'); tokenSent = ''; sendToken(); }
     if (e.data?.type === 'asset:agent' && e.source === frame.contentWindow) send('asset_agent', { ...e.data.payload, model: $('modelPick').value, effort: $('effortPick').value });
+    // The frame asks again a minute before its token runs out and after a 401: the newest one Streamlit rendered goes back.
+    if (e.data?.type === 'asset:token?' && e.source === frame.contentWindow) sendToken(true);
+    // Finished sounds changed the balance: the account is read again, without the history the credits dialog reads.
+    if (e.data?.type === 'asset:account' && e.source === frame.contentWindow && account) readAccount();
     // The asset studio's own language picker: switch here too and tell Streamlit, as the header picker does.
     if (e.data?.type === 'asset:setlang' && i18n.pick(e.data.lang) && e.data.lang !== i18n.lang) { pendingLang = e.data.lang; setLang(e.data.lang); send('lang', { lang: e.data.lang }); }
   });

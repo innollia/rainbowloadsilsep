@@ -5,7 +5,7 @@ ROOT = pathlib.Path(__file__).parents[1] / "studio_frontend" / "asset_studio"
 
 
 def run(body):
-    src = "globalThis.window = globalThis;\n" + "\n".join((ROOT / f).read_text(encoding="utf-8") for f in ("data.js", "synth.js", "importer.js"))
+    src = "globalThis.window = globalThis;\n" + "\n".join((ROOT / f).read_text(encoding="utf-8") for f in ("data.js", "synth.js", "importer.js", "measure.js", "store.js"))
     script = src + "\n(async () => {\n" + body + "\n})().catch((e) => { console.error(e); process.exit(1); });"
     out = subprocess.run(["node", "-"], input=script, capture_output=True, text=True, encoding="utf-8", check=True)  # stdin: Windows caps a command line at 32K
     return json.loads(out.stdout)
@@ -71,12 +71,16 @@ def test_brought_in_sounds_render_and_carry_band_measurements():
     for (let i = 0; i < low.length; i++) { low[i] = 0.5 * Math.sin(2 * Math.PI * 80 * i / rate); high[i] = 0.5 * Math.sin(2 * Math.PI * 7000 * i / rate); }
     const m = (src, change) => synth.measure(synth.render({ source: src, layers: [] }, change));
     const a = m(low), b = m(high), faster = m(low, { shift: 2, stretch: 1 });
-    const lic = window.STUDIO_DATA.RULES.find((r) => r.id === 'lic');
-    console.log(JSON.stringify({ a, b, faster, licEmpty: lic.read(null, { imported: true, license: '' }), licSet: lic.read(null, { imported: true, license: 'CC0' }), licMade: lic.read(null, {}) }));""")
+    // Whether a sound's record passes the licence rule, judged as the room judges it: the one table (assetMeasure.lint)
+    // over the sources the room records for that sound (assetStore.sourcesFor).
+    const lic = (asset) => !assetMeasure.lint({ kind: 'sfx', id: 'sfx_a', sources: assetStore.sourcesFor(asset) }, a).some((i) => i.id === 'lic');
+    console.log(JSON.stringify({ a, b, faster, licEmpty: lic({ imported: true, license: '' }), licSet: lic({ imported: true, license: 'CC0' }), licMade: lic({}),
+      rule: assetMeasure.RULES.filter((r) => r.id === 'lic').map((r) => [r.level, !!r.text]), old: 'RULES' in window.STUDIO_DATA }));""")
     assert got["a"]["low"] > 80 and got["b"]["high"] > got["a"]["high"] + 30 and got["b"]["low"] < 10
     assert 60 < got["a"]["bright"] < 100 and got["b"]["bright"] > 5000
     assert abs(got["a"]["seconds"] - 0.5) < 0.01 and abs(got["faster"]["seconds"] - 0.25) < 0.01
     assert got["licEmpty"] is False and got["licSet"] is True and got["licMade"] is True
+    assert got["rule"] == [["error", True]] and got["old"] is False  # one table judges; the sample data carries none of its own
 
 
 def test_exported_zip_names_are_marked_utf8_and_carry_the_unicode_path_field():

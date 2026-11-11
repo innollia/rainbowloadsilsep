@@ -27,7 +27,8 @@ MAX_STEMS = 8
 TIME_LIMIT = 30.0
 MEMORY_LIMIT = 1024 * 1024 * 1024
 
-# Everything in Akkado that reaches outside the patch. A match anywhere (comments included) refuses the source.
+# Everything in Akkado that reaches outside the patch. A match anywhere (comments included) refuses the source, and
+# so does a match in the code with its comments taken out (refuse).
 FORBIDDEN = (
     (r"\bsamples\s*\(", "samples()"),
     (r"\bsample(?:_loop)?\s*\(", "sample()"),
@@ -35,7 +36,7 @@ FORBIDDEN = (
     (r"\bsf_voice\s*\(", "sf_voice()"),
     (r"\b(?:wavetable|wt|wt_load|smooch)\s*\(", "a wavetable"),
     (r"\b(?:bank|variant)\s*\(", ".bank()"),
-    (r"\bs\"", 's"..." sample pattern'),
+    (r"\bs[\"`]", 's"..." sample pattern'),
     (r"\bin\s*\(", "in()"),
     (r"\bmidi\w*\s*\(", "midi()"),
     (r"\bcc\s*\(", "cc()"),
@@ -46,6 +47,9 @@ FORBIDDEN = (
     (r"://|\b(?:file|github|bundled|blob|idb|https?):", "a URI"),
     (r"[A-Za-z]:[\\/]|\.\.[\\/]", "a file path"),
 )
+QUOTES = "\"'`"
+ESCAPES = {"n": "\n", "t": "\t", "r": "\r"}
+OUTSIDE = re.compile(r"\s*[\\/]")  # how a string starts that is a path from the root of the drive or to another machine
 ERROR_LINE = re.compile(r":(\d+):(\d+):\s*error(?:\[(\w+)\])?:?\s*(.*)")
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -70,12 +74,46 @@ class Rendered:
     seconds: float = 0.0
 
 
+def read(source: str) -> tuple[str, list[str]]:
+    """The source the way Akkado's lexer reads it: (the code, with every // comment gone and every string emptied,
+    what the strings say). A string is opened by ", ' or ` and runs to the same mark, over line ends, and a
+    backslash takes the next character with it. // starts a comment only outside a string, and the comment ends
+    with its line."""
+    code, strings, at, end = [], [], 0, len(source)
+    while at < end:
+        mark = source[at]
+        if mark in QUOTES:
+            said, at = [], at + 1
+            while at < end and source[at] != mark:
+                if source[at] == "\\" and at + 1 < end:
+                    at += 1
+                    said.append(ESCAPES.get(source[at], source[at]))
+                else:
+                    said.append(source[at])
+                at += 1
+            strings.append("".join(said))
+            code.append(mark + mark)
+            at += 1
+        elif source.startswith("//", at):
+            while at < end and source[at] != "\n":
+                at += 1
+        else:
+            code.append(mark)
+            at += 1
+    return "".join(code), strings
+
+
 def refuse(source: str) -> str:
-    """The first forbidden thing the source names, or ''."""
-    for pattern, name in FORBIDDEN:
-        if re.search(pattern, source):
-            return name
-    return ""
+    """The first forbidden thing the source names, or ''. The rules are tried on the source as it was written and
+    on its code as the lexer reads it: the lexer passes over a comment, so one between a name and its bracket
+    must hide nothing here either. And no string may start like a path from the root of the drive or to another
+    machine, which has no drive letter and no `..` for the rules to find."""
+    code, strings = read(source)
+    for text in (source, code):
+        for pattern, name in FORBIDDEN:
+            if re.search(pattern, text):
+                return name
+    return "a file path" if any(OUTSIDE.match(said) for said in strings) else ""
 
 
 def wav_facts(data: bytes) -> tuple[int, int, float]:
@@ -159,7 +197,7 @@ def run_caged(cmd: list[str], cwd: str, time_limit: float, memory_limit: int) ->
     env = {k: os.environ[k] for k in ("SYSTEMROOT", "WINDIR", "PATH") if k in os.environ}
     env.update(TEMP=cwd, TMP=cwd, HOME=cwd, USERPROFILE=cwd, APPDATA=cwd, LOCALAPPDATA=cwd, XDG_CACHE_HOME=cwd,
                NO_COLOR="1")
-    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)
     proc = subprocess.Popen(cmd, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                             stderr=subprocess.PIPE, creationflags=flags)
     job = None

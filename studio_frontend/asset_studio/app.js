@@ -1,7 +1,9 @@
-// Game sound asset board: front-end shell on stand-in data. No server calls; requests are simulated with timers.
+// Game sound asset board. Sounds are made by the generation API (gen.js) and judged with measure.js. Without a token
+// from the host page nothing is made, and the board still opens, plays, imports, checks and exports.
 (() => {
   const $ = (id) => document.getElementById(id);
-  const { GAME, BRIEF, CATEGORIES, ASSETS, PROFILES, RULES, LICENSES } = window.STUDIO_DATA;
+  const { GAME, BRIEF, CATEGORIES, ASSETS, LICENSES } = window.STUDIO_DATA;
+  const { PROFILES } = assetMeasure;
   // Groups belong to the project: a spec or the user can add, rename and remove them. kind says how a sound in it behaves.
   const KIND_OF = { ui: 'sfx', combat: 'sfx', char: 'sfx', env: 'amb', bgm: 'music' };
   const KINDS = ['sfx', 'amb', 'music'];
@@ -34,7 +36,6 @@
   // The importer guesses one of the starting group ids; land it on a group of the same kind this project has.
   const fitCat = (id) => catOf(id)?.id || cats.find((c) => c.kind === (KIND_OF[id] || 'sfx'))?.id || cats[0]?.id || addCat(id || 'sounds', KIND_OF[id]).id;
   let idRule = { pattern: '{kind}_{name}', sep: '_', prefix: { sfx: 'sfx', amb: 'amb', music: 'bgm' }, check: true };
-  const escRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   function makeId(name, cat, taken) {
     taken ||= new Set(assets.map((a) => a.id));
     const sep = idRule.sep, pre = idRule.prefix[kindOf(cat)] || kindOf(cat), words = slugOf(name);
@@ -46,13 +47,8 @@
     taken.add(id);
     return id;
   }
-  function idOk(id) {
-    if (!idRule.check) return !!id;
-    const sep = escRe(idRule.sep), word = '[a-z0-9]+', alt = (list) => `(?:${[...new Set(list.filter(Boolean))].map(escRe).join('|')})`;
-    const src = idRule.pattern.split(/(\{kind\}|\{cat\}|\{name\})/).map((p) => (p === '{kind}' ? alt(Object.values(idRule.prefix))
-      : p === '{cat}' ? alt(cats.map((c) => slugOf(c.id).join(idRule.sep))) : p === '{name}' ? `${word}(?:${sep}${word})*` : escRe(p))).join('');
-    try { return new RegExp(`^${src}(?:${sep}\\d+)?$`).test(id); } catch { return true; }
-  }
+  // The id rule is judged in one place (measure.js), the same for the page, the command line and the server.
+  const idOk = (id) => assetMeasure.idOk(id, idRule, cats.map((c) => c.id));
   const idRuleText = () => idRule.pattern.replace('{kind}', `(${Object.entries(idRule.prefix).map(([k, p]) => `${p}=${k}`).join(', ')})`).replace('{cat}', '<category id>').replace('{name}', `<lowercase english words joined by "${idRule.sep}">`);
   const ICONS = {
     play: '<path d="M7 4.5v15l12-7.5z" fill="currentColor" stroke="none"/>',
@@ -111,7 +107,11 @@
       agentPh: 'Ask in words (references, groups, names, how sounds should change)…', agentThinking: 'Thinking…', agentUndo: 'Undo', agentUndone: 'Undone',
       agentUpgraded: (m) => `The default model failed, so a stronger model (${m}) answered instead.`,
       agentDid: (n) => `${n} change${n === 1 ? '' : 's'} made`, agentFailed: (x) => `Could not answer: ${x}`,
-      agentLocal: 'AI is not connected here, so I only understand links, notes ("note: …") and remakes of the picked sounds.', agentNoted: 'Saved it as a reference.', agentRemake: (n) => `Remaking ${n} sound${n === 1 ? '' : 's'}.`,
+      agentLocal: 'AI is not connected here, so sounds cannot be made. Links and notes ("note: …") are still saved as references.', agentNoted: 'Saved it as a reference.', agentRemake: (n) => `Remaking ${n} sound${n === 1 ? '' : 's'}.`,
+      agentHeld: 'That takes more credits than the number that was showing, so nothing has started. The sounds are picked and your words are back in the box, with the new number beside the draft count. Send it as it is to make them.',
+      agentOver: 'That takes more credits than the number that was showing, so nothing has started. What you wrote and picked since then is as you left it. Ask for those sounds again whenever you want them.',
+      noPrice: 'What a draft costs has not come through yet, so nothing has started. Ask again in a moment. Reloading the page reads the price again too.',
+      noLink: 'Making sounds is not connected right now, so nothing has started. Everything else here works as usual.',
       parentCat: 'Inside', noParent: 'Top level', addSubCat: 'Add a group inside', foldersKind: 'A folder per kind (sfx, amb, music)', rootFolder: 'Audio folder',
       rulesHead: 'Use the file rules your agent knows', rulesHelp: 'If an AI agent worked on this game, copy this prompt to it and paste its answer below. It sets the id rule, folders and groups from the names the game already uses.',
       copyRules: 'Copy prompt', pasteRules: "Paste the agent's answer (JSON)", rulesId: 'ID rule', rulesFilesTag: 'Files', rulesFiles: (n) => `${n} files get their group and name`, applyRules: 'Apply the rules',
@@ -155,6 +155,7 @@ ${p.files}`,
       counts: (n, ok) => `${n} total · ${ok} approved`, reviewCount: (n) => `${n} to review`, selected: (n) => `${n} selected`,
       askSelected: (n) => `Request for the ${n} selected`, askOne: (name) => `Request for ${name}`, askNone: 'Pick an asset to send a request',
       drafts: 'Drafts', draftCount: (i) => `${i}`, draftCountLabel: 'Number of drafts', draftNote: (text, k) => `${text} · draft ${k}`, makeOne: 'Make it',
+      withCredits: (label, n) => `${label} · ${n} credit${n === 1 ? '' : 's'}`,
       madeDrafts: (n) => `Made ${n} drafts. Listen and keep one.`, madeOne: 'Made a new version. Compare it with the previous one.',
       expanding: (n) => `Making ${n} in the sample style`, firstVersion: 'First version', fromSpec: 'Created from spec',
       play: 'Play', stop: 'Stop', toBoard: 'Back to board', prevAsset: 'Previous asset', nextAsset: 'Next asset',
@@ -219,15 +220,17 @@ ${p.form}`,
       justImported: 'Just brought in', imported: 'Brought in', importedN: (n) => `Brought in ${n} sound${n === 1 ? '' : 's'}`, bundleLoaded: (g, n) => `Opened ${g}: ${n} assets`,
       slotsAdded: (n) => `Added ${n} empty slots`, nothingToImport: 'No sound files, bundle or list found here',
       nameLabel: 'Name', guessed: 'Guessed, check it', licenseLater: 'License (fill in later)', holderLater: 'Holder', licenseOf: (n) => `License of ${n}`,
-      noLicenseYet: 'license not recorded',
       originHead: 'Source', fillLeft: (n) => `${n} empty slot${n === 1 ? '' : 's'} to make.`, fillAll: 'Make all', filling: (n) => `Making ${n}`,
       likeThis: 'Drafts in this feel', likeName: (n) => `${n} (like)`, likeMade: (n) => `Making ${n} in this feel`, promptHead: 'AI prompt',
       fromPrompt: 'Made from the prompt', importedNote: 'Brought in', fromBundle: 'From the bundle', importHint: 'Already have sounds or a sound list? Drop them here or use Import at the top.',
-      fillPrompt: (p) => `Make the game sound "${p.name}" (${p.id}, ${p.cat}) for ${p.game}.\n${p.when ? `When it plays: ${p.when}\n` : ''}${p.description ? `What it sounds like: ${p.description}\n` : ''}Form: ${p.loop ? 'seamless loop' : 'one shot'}${p.length ? `, about ${p.length}s` : ''}.${p.style ? `\nGame sound direction: ${p.style}` : ''}${p.ref}`,
-      refPrompt: (r) => `\n\nReference: make it in the feel of "${r.name}", the user's own sound (${r.file}). Measured from that file:\n- length ${r.seconds}s, ${r.loop ? 'loop' : 'one shot'}\n- peak ${r.peak} dB, loudness ${r.loud} LUFS\n- energy: low (<250 Hz) ${r.low}% · mid ${r.mid}% · high (>4 kHz) ${r.high}%, brightness about ${r.bright} Hz\n- leading silence ${r.lead} ms, trailing silence ${r.tail} ms\nStay close to its length, loudness and band balance. Do not copy it.`,
       importing: (i, n) => `Bringing in ${i} of ${n}`, skipped: (n, why) => `Skipped ${n}: ${why}`,
       whyType: (n) => `${n} not sound files`, whyBig: (n) => `${n} over 50 MB or past 500 MB in all`, whyBad: (n) => `${n} could not be read`, whyMany: (n) => `${n} past the first 2000`,
       pruned: (n) => `Storage was full, so ${n} old discarded drafts were cleared.`, saveFull: 'Storage is full and the board could not be saved. Export a bundle to keep it.',
+      loadFailed: 'The saved board could not be opened, so nothing is saved on this visit. Reloading the page may open it again.',
+      otherTab: 'This board is open in another tab, so here it can only be viewed. Listening and exporting still work here.',
+      genPaused: 'The AI connection has to be renewed, so no new sounds are asked for here. Sounds already being made carry on at the server. Reloading the page renews it too.',
+      genFailed: (n) => `${n} draft${n === 1 ? '' : 's'} could not be made.`, genRefunded: (n) => `The credits for ${n} draft${n === 1 ? '' : 's'} are returned.`,
+      genLost: (n) => `${n} draft${n === 1 ? ' was' : 's were'} already cleared from the server and could not be brought here.`,
       tutorialTitle: 'How to make game sounds',
       steps: [
         ['Bring in what you have', 'Already have sounds, a list of the sounds the game needs, or a bundle exported here? Import puts them on the board.'],
@@ -254,7 +257,11 @@ ${p.form}`,
       agentPh: 'AI에게 요청 (레퍼런스, 분류, 이름, 소리 수정)…', agentThinking: '생각하는 중…', agentUndo: '되돌리기', agentUndone: '되돌렸어요',
       agentUpgraded: (m) => `원래 모델이 허접하게 실패해서 훨씬 더 좋은 상위 모델(${m})이 대신 나섰어♡ 고마운 줄 알아~`,
       agentDid: (n) => `${n}가지나 바꿔 줬어, 감사하라고~`, agentFailed: (x) => `답하지 못했어요: ${x}`,
-      agentLocal: '여기선 AI 연결이 안 돼서 링크, 메모("메모: …"), 고른 소리 다시 만들기밖에 못 알아듣거든?', agentNoted: '레퍼런스로 저장해 뒀어~', agentRemake: (n) => `소리 ${n}개 다시 만들어 줄게.`,
+      agentLocal: '여기선 AI 연결이 안 돼서 소리는 못 만들어~ 링크랑 메모("메모: …")는 레퍼런스로 저장해 둘 수 있어~', agentNoted: '레퍼런스로 저장해 뒀어~', agentRemake: (n) => `소리 ${n}개 다시 만들어 줄게.`,
+      agentHeld: '아까 보인 숫자보다 크레딧이 더 들어서 아직 시작 안 했어~ 그 소리들을 골라 두고 글도 다시 넣어 뒀어. 시안 옆 숫자가 이번에 드는 크레딧이니까, 그대로 보내면 만들어 줄게~',
+      agentOver: '아까 보인 숫자보다 크레딧이 더 들어서 시작 안 했어~ 그 사이에 쓴 글이랑 고른 소리는 그대로 뒀어. 그 소리는 만들고 싶을 때 다시 시켜 줘~',
+      noPrice: '시안 하나에 크레딧이 얼마나 드는지 아직 못 읽어 와서 시작 안 했어~ 조금 있다가 다시 시켜 줘. 새로고침해도 다시 읽어 와~',
+      noLink: '지금은 소리 만드는 데랑 연결이 안 돼서 시작 안 했어~ 다른 건 평소처럼 다 쓸 수 있어~',
       parentCat: '상위 분류', noParent: '없음(최상위)', addSubCat: '하위 분류 추가', foldersKind: '종류별 폴더(sfx, amb, music)', rootFolder: '소리 폴더',
       rulesHead: '에이전트가 아는 파일 규칙 쓰기', rulesHelp: '이 게임 작업한 AI 에이전트 있으면 이 프롬프트 보내고 답을 아래에 붙여 넣어 봐. 게임이 이미 쓰는 이름에 맞춰서 ID 규칙, 폴더, 분류를 바꿔 줄 테니까.',
       copyRules: '프롬프트 복사', pasteRules: '에이전트의 답(JSON)이나 여기에 붙여 넣어 봐~', rulesId: 'ID 규칙', rulesFilesTag: '파일', rulesFiles: (n) => `파일 ${n}개의 분류랑 이름을 맞춰 줄게.`, applyRules: '규칙 적용',
@@ -298,6 +305,7 @@ ${p.files}`,
       counts: (n, ok) => `전체 ${n} · 승인 ${ok}`, reviewCount: (n) => `검토 ${n}개`, selected: (n) => `${n}개 선택`,
       askSelected: (n) => `선택한 ${n}개에 보낼 요청`, askOne: (name) => `${name}에 보낼 요청`, askNone: '에셋을 골라서 요청을 보내 봐, 허접~',
       drafts: '시안', draftCount: (i) => `${i}개`, draftCountLabel: '시안 개수', draftNote: (text, k) => `${text} · 시안 ${k}`, makeOne: '만들기',
+      withCredits: (label, n) => `${label} · ${n} 크레딧`,
       madeDrafts: (n) => `시안 ${n}개 만들어 줬으니까 들어 보고 하나 골라 봐~`, madeOne: '새 버전 만들어 줬어~ 이전 거랑 비교나 해 봐♡',
       expanding: (n) => `샘플 스타일로 ${n}개 만들어 줄게~`, firstVersion: '첫 버전', fromSpec: '명세에서 생성',
       play: '재생', stop: '정지', toBoard: '보드로', prevAsset: '이전 에셋', nextAsset: '다음 에셋',
@@ -362,15 +370,17 @@ ${p.form}`,
       justImported: '방금 가져온 소리', imported: '직접 가져옴', importedN: (n) => `소리 ${n}개 가져왔어~`, bundleLoaded: (g, n) => `${g} 묶음을 열었어요. 에셋 ${n}개`,
       slotsAdded: (n) => `빈 칸 ${n}개 올려 뒀어~`, nothingToImport: '소리 파일도 묶음도 목록도 못 찾겠는데~?',
       nameLabel: '이름', guessed: '대충 짐작한 분류니까 똑바로 확인해~', licenseLater: '라이선스 (나중에 적어도 돼요)', holderLater: '저작권자', licenseOf: (n) => `${n} 라이선스`,
-      noLicenseYet: '라이선스 기록 없음',
       originHead: '출처', fillLeft: (n) => `만들 빈 칸 ${n}개야~`, fillAll: '모두 만들기', filling: (n) => `${n}개를 만드는 중`,
       likeThis: '이 느낌으로 시안', likeName: (n) => `${n} 느낌`, likeMade: (n) => `이 느낌으로 ${n}개 만들어 줄게~`, promptHead: 'AI 프롬프트',
       fromPrompt: '프롬프트로 생성', importedNote: '직접 가져옴', fromBundle: '묶음에서 가져옴', importHint: '이미 만든 소리나 소리 목록 있어? 여기다 끌어다 놓든가 위쪽 가져오기를 눌러 봐~',
-      fillPrompt: (p) => `${p.game}에 쓸 게임 소리 "${p.name}"(${p.id}, ${p.cat})를 만들어 주세요.\n${p.when ? `나는 때: ${p.when}\n` : ''}${p.description ? `어떤 소리: ${p.description}\n` : ''}형태: ${p.loop ? '끊김 없는 반복' : '한 번 재생'}${p.length ? `, 약 ${p.length}초` : ''}.${p.style ? `\n게임 소리 방향: ${p.style}` : ''}${p.ref}`,
-      refPrompt: (r) => `\n\n기준 소리: 사용자가 가져온 "${r.name}"(${r.file})의 느낌으로 만들어 주세요. 그 파일을 잰 값:\n- 길이 ${r.seconds}초, ${r.loop ? '반복' : '한 번 재생'}\n- 최대 ${r.peak} dB, 음량 ${r.loud} LUFS\n- 에너지: 저역(250 Hz 아래) ${r.low}% · 중역 ${r.mid}% · 고역(4 kHz 위) ${r.high}%, 밝기 약 ${r.bright} Hz\n- 앞 무음 ${r.lead} ms, 뒤 무음 ${r.tail} ms\n길이, 음량, 대역 균형을 비슷하게 맞추되 그대로 베끼지는 마세요.`,
       importing: (i, n) => `가져오는 중 ${i}/${n}`, skipped: (n, why) => `${n}개 건너뜀: ${why}`,
       whyType: (n) => `소리 파일 아님 ${n}`, whyBig: (n) => `50MB 넘음·합계 500MB 넘음 ${n}`, whyBad: (n) => `읽지 못함 ${n}`, whyMany: (n) => `2000개 넘음 ${n}`,
       pruned: (n) => `저장 공간이 모자라서 옛날에 버린 시안 ${n}개는 치워 버렸어~`, saveFull: '저장 공간이 꽉 차서 자동 저장 못 했거든? 내보내기로 묶음부터 받아 둬~',
+      loadFailed: '저장된 보드를 못 열어서 이번에는 저장을 안 해~ 새로고침하면 다시 열릴 수도 있어~',
+      otherTab: '이 보드는 다른 탭에 열려 있어서 여기서는 보기만 돼~ 듣기랑 내보내기는 여기서도 할 수 있어~',
+      genPaused: 'AI 연결을 새로 받아야 해서 여기서는 새 소리를 못 맡겨~ 만들던 소리는 서버에서 계속 만들고 있어~ 새로고침해도 연결을 새로 받아~',
+      genFailed: (n) => `시안 ${n}개는 만들지 못했어~`, genRefunded: (n) => `시안 ${n}개에 쓴 크레딧은 돌아와~`,
+      genLost: (n) => `시안 ${n}개는 서버에서 이미 지워져서 못 받아 왔어~`,
       tutorialTitle: '게임 소리 만드는 법',
       steps: [
         ['가진 것 가져오기', '만들어 둔 소리나 게임에 필요한 소리 목록, 여기서 내보낸 묶음 있으면 가져오기로 보드에 올려 봐~'],
@@ -388,7 +398,7 @@ ${p.form}`,
   const nm = (x) => tx(x.name);
   const statusText = (s) => t('status')[s];
   const stemName = (key) => { const m = /^tone_layer_(\d+)$/.exec(key); return m ? t('toneLayer', m[1]) : t('stems')[key] ?? key; };
-  const noteText = (n) => (typeof n === 'string' ? n : n.key === 'draft' ? t('draftNote', n.text, n.k) : t(n.key));
+  const noteText = (n) => (n == null ? '' : typeof n === 'string' ? n : n.key === 'draft' ? t('draftNote', n.text, n.k) : t(n.key)); // a version record may carry no note
   const chatText = (m) => (m.ai === 'drafts' ? t('madeDrafts', m.n) : m.ai === 'one' ? t('madeOne') : m.text);
   function applyStatic() {
     document.documentElement.lang = lang; document.title = t('docTitle');
@@ -408,21 +418,44 @@ ${p.form}`,
   // The board starts on stand-in work. The first import of the user's own work replaces it.
   let game = GAME, brief = BRIEF, platform = 'mobile', demo = true;
   const selected = new Set();
+  // drafts: the number the draft picker shows, the one place the number of drafts of a request is read from.
+  // pickedDrafts: the number picked by hand, which the picker goes back to when a request names none in words.
   let drafts = 1;
   try { drafts = Math.min(4, Math.max(1, +localStorage.getItem('asset-drafts') || 1)); } catch { /* one draft */ }
+  let pickedDrafts = drafts;
 
-  /* ---------- AI self-check: nothing reaches the user before it has been through this ---------- */
+  /* ---------- storage (store.js): version records, saving, restoring, the tab lock, sound from stored bytes ---------- */
+  let ownDb = null;
+  try { ownDb = window.indexedDB; } catch { /* storage is off: the visit is not saved */ }
+  const store = assetStore.create({
+    indexedDB: ownDb, locks: navigator.locks, synth,
+    snapshot: () => { syncRefs(); return snapshot(); },
+    apply: (data, buffers, info) => applySnapshot(data, buffers, info),
+    keys: () => audioKeys(), assets: () => assets,
+    notify: (what, n) => { if (what === 'pruned') toast(t('pruned', n), 5000); else if (what === 'saveFull') toast(t('saveFull'), 8000); },
+    onLock: (result) => tookOver(result),
+  });
+  // While another tab has this board, this one only shows it: playing, export, going back and the menu button stay usable.
+  // a[download] is the link exportBundle() presses to hand over the zip; nothing else on the page is one.
+  store.guard(window, { allow: '#playAll, #exportBtn, #backBtn, #menuBtn, #dialog.free, a[download]', blocked: (e) => { if (e.type === 'drop') dragEnd(); if (store.readOnly) toast(t('otherTab'), 5000); } });
+
+  /* ---------- checks: one table (measure.js) judges every sound, here as on the command line and at the server ---------- */
+  // The loudness window music has to sit in: the platform's, unless a spec or the saved board says otherwise.
+  let loudRange = [...PROFILES.find((p) => p.id === 'mobile').loud];
+  const limitOf = (id) => assetMeasure.RULES.find((r) => r.id === id).limit;
+  // The issues of one version of a sound, as [{ id, level, value, limit }]. Its record is judged with its sound:
+  // the id against the project's id rule, and its sources (a version with none recorded is a `lic` issue).
+  const broken = (a, v) => assetMeasure.lint({ music: !!a.music, loop: !!a.loop, id: a.id, sources: v.sources }, v.measure, { loud: loudRange, idRule, catIds: cats.map((c) => c.id) });
+
+  /* ---------- the sample board: the room's own synth makes its sounds and reworks them until they pass ---------- */
   const MAX_CHECKS = 6;
-  const rules = RULES.map((r) => ({ ...r }));
-  const rule = (id) => rules.find((r) => r.id === id);
-  Object.assign(rule('name'), { read: (m, a) => idOk(a.id), hint: { en: 'Follows the id rule (Settings)', ko: 'ID 규칙을 따름(설정)' } });
-  const broken = (a, m) => rules.filter((r) => (!r.applies || r.applies(a)) && (r.text ? !r.read(m, a) : r.bad(r.read(m, a), r)));
-  const build = (a, change, note) => { const sound = synth.render(a, change); return { sound, note, change, at: new Date(), peaks: synth.peaks(sound.mix, 200), measure: synth.measure(sound) }; };
-  // Stands in for the AI reworking its own result; the backend replaces this with a model call.
+  // What the synth makes is a legacy version: its recipe (change + note) is what gets saved.
+  const build = (a, change, note) => { const sound = assetStore.shape(synth.render(a, change)); return { id: store.newId(), engine: 'legacy', sources: assetStore.sourcesFor(a), sound, note, change, at: new Date(), peaks: synth.peaks(sound.mix, 200), measure: synth.measure(sound) }; };
+  // The recipe changed so that what broke a rule no longer does.
   function reworked(m, change, left) {
     const next = { ...change }, has = (id) => left.some((r) => r.id === id);
-    if (has('loud')) { const [low, high] = rule('loud').range; next.level = (next.level ?? 1) * 10 ** (((low + high) / 2 - m.loud) / 20); }
-    if (has('peak') || has('clip')) next.ceiling = 10 ** ((rule('peak').limit - 0.2) / 20);
+    if (has('loud')) { const [low, high] = loudRange; next.level = (next.level ?? 1) * 10 ** (((low + high) / 2 - m.loud) / 20); }
+    if (has('peak') || has('clip')) next.ceiling = 10 ** ((limitOf('peak') - 0.2) / 20);
     if (has('dc')) next.dc = true;
     if (has('lead') || has('tail')) {
       const [front = 0, back = 0] = next.trim || [];
@@ -430,20 +463,17 @@ ${p.form}`,
     }
     return next;
   }
-  // Stands in for the AI renaming the file and recording its sources.
+  // A sample whose id breaks the id rule is renamed. Returns whether it was.
   function repaired(a, left) {
-    if (left.some((r) => r.id === 'name')) {
-      const old = a.id; a.id = makeId(nm(a), a.cat, new Set(assets.filter((x) => x !== a).map((x) => x.id)));
-      if (focused === old) focused = a.id;
-    }
-    // A brought-in sound's license is the user's to record, so the AI does not fill it in.
-    if (left.some((r) => r.id === 'lic') && !a.imported) a.noLicense = false;
-    return left.some((r) => r.text && !(r.id === 'lic' && a.imported));
+    if (!left.some((r) => r.id === 'name')) return false;
+    const old = a.id; a.id = makeId(nm(a), a.cat, new Set(assets.filter((x) => x !== a).map((x) => x.id)));
+    if (focused === old) focused = a.id;
+    return true;
   }
   function checked(a, change, note) {
     let v = build(a, change, note);
     for (let i = 0; i < MAX_CHECKS; i++) {
-      const left = broken(a, v.measure);
+      const left = broken(a, v);
       if (!left.length) break;
       const named = repaired(a, left), next = reworked(v.measure, v.change, left);
       if (!named && JSON.stringify(next) === JSON.stringify(v.change)) break;
@@ -456,18 +486,109 @@ ${p.form}`,
     a.current = a.versions.length - 1;
   }
   const version = (a) => a.versions[a.current];
-  // A restored version is only its recipe (change + note); it is rendered the first time it is heard.
-  const filled = (a, v) => {
-    if (v && !v.sound) { const sound = synth.render(a, v.change); Object.assign(v, { sound, peaks: synth.peaks(sound.mix, 200), measure: synth.measure(sound) }); }
-    return v;
-  };
+  // A restored legacy version is only its recipe (change + note); it is rendered the first time it is heard.
+  // nkido and import versions are never rendered: tiles, checks and the spec read their stored peaks and measure, and
+  // their sound is decoded by ensure() where it is needed (playing, the detail view, export, dynamic sounds).
+  const filled = (a, v) => store.filled(a, v);
   const heard = (a) => filled(a, (a.pick >= 0 && a.drafts[a.pick]) || version(a));
-  const issues = (a) => (a.versions.length ? broken(a, heard(a).measure) : []);
+  const ensure = (a, v = heard(a)) => store.ensureSound(v, a);
+  // A sound that can be heard: it has a version, or its first drafts have come and one of them is picked.
+  const hasSound = (a) => a.versions.length > 0 || (a.pick >= 0 && !!a.drafts[a.pick]);
+  const issues = (a) => (hasSound(a) ? broken(a, heard(a)) : []);
   const approve = (a) => { a.status = 'approved'; toFolder([a]); };
   assets.filter((a) => a.sample).forEach((a) => make(a));
 
+  /* ---------- generation (gen.js): asking the API for sounds, bringing them back, picking work up after a reload ---------- */
+  const refBrief = (r) => ({ kind: r.kind, name: r.name || '', url: r.url || '', note: r.note || '', summary: r.summary || '' });
+  // What the API is told about one sound. A new sound may take after a brought-in one, whose measurements go along.
+  // A change starts from the sound's own patch when it has one, and from its measurements when it has not.
+  const soundKind = (a) => (a.music ? 'music' : kindOf(a.cat));
+  function genItem(a, o) {
+    const item = { kind: soundKind(a), loop: !!a.loop, id: a.id, name: nm(a), when: a.when || '', description: a.description || '', seconds: a.length,
+      references: [...ownRefs(a), ...scopeRefs(a)].map(refBrief) };
+    if (o.mode === 'revise') {
+      const v = version(a);
+      item.change = o.text;
+      item.base = v && v.engine === 'nkido' && v.source ? { source: v.source, seconds: v.seconds, bpm: v.bpm } : { facts: v ? filled(a, v).measure : null };
+    } else {
+      const ref = referenceFor(a);
+      if (ref && ref !== a) { const m = heard(ref).measure; item.style_ref = { name: nm(ref), seconds: m.seconds, loop: !!ref.loop, facts: m }; }
+    }
+    return item;
+  }
+  // Without a token the room says what it has always said when AI is off.
+  const genText = (key, n) => t(key === 'aiOff' ? 'agentLocal' : key, n);
+  // The approved sounds, each with the patch of the version in use: what new sounds are told to stay close to.
+  // quote.js takes up to three whose patch is known, the kinds being asked for first. A change to a sound starts
+  // from that sound's own patch and is given none.
+  const genExamples = (list, o) => (o.mode === 'make' ? assetQuote.examples(list.map(soundKind),
+    assets.filter((a) => a.status === 'approved' && a.versions.length && !list.includes(a)).map((a) => { const v = version(a); return { name: nm(a), kind: soundKind(a), loop: !!a.loop, source: v.source, facts: v.measure }; })) : []);
+  const gen = assetGen.create({
+    store, assets: () => assets, measure: assetMeasure, peaks: assetStore.peaksOf,
+    project: () => ({ game: tx(game), style: tx(brief) || '', platform, loud: [...loudRange] }), item: genItem, lang: () => lang,
+    // The price of a draft came (with the token, or on a later read when the first brought none) or changed: the
+    // labels say the number, and requests that were turned away while no label could say it are taken from here on.
+    examples: genExamples, onQuote: () => drawQuotes(),
+    text: genText,
+    toast: (text, ms) => toast(text, ms), toastBusy: () => !$('toast').hidden && !!$('toast').querySelector('button'),
+    post: (type) => { if (inHost) parent.postMessage({ type }, '*'); },
+    hidden: () => document.hidden,
+    // The sounds that changed. The open sound's view is drawn again only when it is one of them: a job of another
+    // sound ending must not take the request being typed there out of the input.
+    render: (list) => { if (openAsset && !list.includes(openAsset)) renderHeader(); else renderOpen(); },
+    progress: (a) => tileOf(a)?.querySelector('.bar')?.style.setProperty('--p', a.progress),
+    done: (a, info) => { if (info.made > 1) a.chat.push({ ai: 'drafts', n: info.made }); else if (info.made === 1 && info.mode === 'revise') a.chat.push({ ai: 'one' }); },
+  });
+  // Why the room takes no request for sounds right now, or ''. To the generator's own reasons (no token, another tab
+  // has the board, no room to save) the page adds one: what a draft costs has not come (gen.js reads it with the
+  // token and goes on reading until it has it), so no label can say what a request takes. Nothing is asked for
+  // before that number can be shown. When those reads keep coming back without an answer of the API (nothing is
+  // behind its address, or it is down), the room says that making sounds is not connected, not that the price is
+  // on its way.
+  const cannot = () => gen.why() || (gen.unit ? '' : gen.unreached ? 'noLink' : 'noPrice');
+  // Says that reason in the toast. Returns whether there was one.
+  function refuse() {
+    if (gen.refuse()) return true;
+    const key = cannot();
+    if (key) toast(genText(key), 8000);
+    return !!key;
+  }
+  // What the room says when it cannot take a request for sounds right now, or ''.
+  const refusal = () => { const key = cannot(); return key && key !== 'wait' ? genText(key) : ''; };
+
+  /* ---------- what a request costs (quote.js): the number in a label, and the request that waits ---------- */
+  // Five labels carry a number and nothing else does: the draft picker's (the sounds picked x the drafts of each), and
+  // #fillBtn, #expandBtn, #likeThis and #makeOne (the sounds each would make, one draft a sound). The number is
+  // gen.quoteOf(), the same sum generate() sends. A session that pays nothing, a price not known yet and nothing to
+  // make show none.
+  const priced = (label, count, n = 1) => assetQuote.label(label, gen.quoteOf(count, n), (text, credits) => t('withCredits', text, credits));
+  // A button that makes `count` sounds: its own text says what that costs.
+  function quoted(b, key, count) { b.dataset.quote = key; b.dataset.items = count; b.textContent = priced(t(key), count); return b; }
+  // Writes the numbers again: the price came or changed, other sounds are picked, the picker moved.
+  function drawQuotes() {
+    document.querySelectorAll('.segLabel').forEach((e) => { e.textContent = priced(t('drafts'), e.closest('#draftSlot') ? pickedSounds().length : 1, drafts); });
+    document.querySelectorAll('[data-quote]').forEach((b) => { b.textContent = priced(t(b.dataset.quote), +b.dataset.items || 0); });
+  }
+  // The request that waits. An answer of the assistant that wants sounds made is held to the number that was beside
+  // the draft count when send was pressed: when it costs more, nothing starts, and it waits until it is sent again as
+  // it is, or let go by other words or other sounds picked. It stays whatever the toast does.
+  const heldAsk = assetQuote.create();
+  // What the answer asked for is kept beside it, as { remakes, fills }: [[ids, words]] each, the sounds of every action
+  // with the words the assistant gave that action. Sent again, it is made from those, never from the sentence in the box.
+  // heldLeft() is what of it can still be made: sounds that are still on the board, still made (or still an empty
+  // slot) and not being made some other way meanwhile. count is how many sounds that is.
+  function heldLeft() {
+    const plan = heldAsk.plan || { remakes: [], fills: [] };
+    const part = (pairs, still) => pairs.map(([ids, words]) => [ids.map(byId).filter((a) => a && still(a) && gen.free(a)), words]).filter(([list]) => list.length);
+    const remakes = part(plan.remakes, (a) => a.versions.length && a.status !== 'working'), fills = part(plan.fills, (a) => a.status === 'pending');
+    return { remakes, fills, count: new Set([...remakes, ...fills].flatMap(([list]) => list)).size };
+  }
+
   /* ---------- audio ---------- */
   let ctx = null, master = null, analyser = null, player = null, queue = null;
+  // Playing may wait for a sound to be decoded, so every request takes a number. One that a later play or a stop has
+  // overtaken (the hover ended, another tile was picked) does not start when its sound finally arrives.
+  let playN = 0, playWait = null;
   function audio() {
     if (!ctx) {
       ctx = new AudioContext(); master = ctx.createGain(); analyser = ctx.createAnalyser();
@@ -477,27 +598,50 @@ ${p.form}`,
     if (ctx.state === 'suspended') ctx.resume();
     return ctx;
   }
-  function stopSound() {
+  function halt() {
     if (player) { player.nodes.forEach((n) => { n.onended = null; try { n.stop(); } catch { /* already over */ } }); player = null; }
-    markPlaying();
   }
-  function play(a, opts = {}) {
-    if (!a.versions.length) return;
-    audio(); stopSound();
-    const v = heard(a), sound = v.sound, nodes = [], gains = {}, loop = opts.loop ?? !!a.loop;
-    for (const s of sound.stems) {
-      const buffer = ctx.createBuffer(1, s.data.length, sound.rate); buffer.copyToChannel(s.data, 0);
-      const src = ctx.createBufferSource(), gain = ctx.createGain();
-      src.buffer = buffer; src.loop = loop; src.connect(gain); gain.connect(master);
-      gain.gain.value = stemLevel(s.name); gains[s.name] = gain;
-      nodes.push(src);
+  function stopSound() { playN++; playWait = null; halt(); markPlaying(); }
+  // Whether a version has a tracks tab. A generated sound always does: with one stem, or with none (its master is then
+  // shown as the one track). A legacy or brought-in sound does only when it has more than one track.
+  const hasTracks = (v) => v.engine === 'nkido' || (v.sound ? v.sound.stems.length : (v.stems || []).length) > 1;
+  // Whether the tracks tab of the open sound has a stem soloed, muted or turned up or down.
+  const stemsTouched = (a, v) => openAsset === a && hasTracks(v) && Object.values(stemState).some((s) => s.mute || s.solo || s.gain !== 1);
+  // Resolves true once the sound has started, false when it did not (overtaken, or its sound could not be read).
+  async function play(a, opts = {}) {
+    if (!hasSound(a)) return false;
+    const mine = ++playN, v = heard(a);
+    audio(); halt(); playWait = null;
+    if (!v.sound) {
+      playWait = { asset: a, hover: !!opts.hover }; markPlaying();
+      try { await ensure(a, v); } catch { if (mine === playN) playWait = null; return false; }
+      if (mine !== playN) return false;
+      playWait = null;
     }
+    const sound = v.sound, nodes = [], gains = {}, loop = opts.loop ?? !!a.loop;
+    // A legacy sound is the sum of its stems. Any other plays its master channels as they were made: its stems were
+    // taken before the master limiter and miss what went straight to out(), so they play only while the tracks tab has
+    // one of them soloed, muted or turned.
+    const byStem = assetStore.isLegacy(v) || stemsTouched(a, v);
+    try {
+      for (const s of byStem ? sound.stems : [{ name: '', chans: sound.chans }]) {
+        const buffer = ctx.createBuffer(s.chans.length, s.chans[0].length, sound.rate);
+        s.chans.forEach((c, i) => buffer.copyToChannel(c, i));
+        const src = ctx.createBufferSource(), gain = ctx.createGain();
+        src.buffer = buffer; src.loop = loop; src.connect(gain); gain.connect(master);
+        if (byStem) { gain.gain.value = stemLevel(s.name); gains[s.name] = gain; }
+        nodes.push(src);
+      }
+    } catch { markPlaying(); return false; } // a rate or channel count this browser's audio cannot hold
     const at = ctx.currentTime + 0.01;
     nodes.forEach((n) => n.start(at, opts.from || 0));
-    player = { asset: a, nodes, gains, at: at - (opts.from || 0), length: sound.seconds, loop, hover: !!opts.hover };
+    player = { asset: a, version: v, byStem, opts, nodes, gains, at: at - (opts.from || 0), length: sound.seconds, loop, hover: !!opts.hover };
     nodes[0].onended = () => { if (player?.nodes[0] === nodes[0]) { player = null; markPlaying(); opts.done?.(); } };
     markPlaying();
+    return true;
   }
+  // Playing, or about to: asked for and waiting for its sound.
+  const sounding = (a) => player?.asset === a || playWait?.asset === a;
   const position = () => (player ? ((ctx.currentTime - player.at) % player.length + player.length) % player.length : 0);
   function markPlaying() {
     document.querySelectorAll('.tile.playing').forEach((t) => t.classList.remove('playing'));
@@ -513,7 +657,7 @@ ${p.form}`,
   /* ---------- board ---------- */
   const tileOf = (a) => document.querySelector(`.tile[data-id="${a.id}"]`);
   const visible = () => assets.filter((a) => (!filter.cat || a.cat === filter.cat) && (!filter.status || a.status === filter.status) && (!filter.imported || a.imported));
-  const ready = (list) => list.filter((a) => a.versions.length);
+  const ready = (list) => list.filter(hasSound);
 
   function drawPeaks(canvas, peaks, hue, cut) {
     const ratio = devicePixelRatio || 1, W = canvas.clientWidth, H = canvas.clientHeight;
@@ -532,20 +676,22 @@ ${p.form}`,
   const resolved = (hue) => (hue.startsWith('var(') ? getComputedStyle(document.documentElement).getPropertyValue(hue.slice(4, -1)) : hue);
 
   function makeTile(a) {
-    const t = el('div', 'tile'); t.dataset.id = a.id; t.dataset.status = a.status; t.tabIndex = a.versions.length || a.status === 'pending' ? 0 : -1;
+    const t = el('div', 'tile'); t.dataset.id = a.id; t.dataset.status = a.status; t.tabIndex = hasSound(a) || a.status === 'pending' ? 0 : -1;
+    // The rules the sound breaks, by id (nothing on screen reads this; a check from outside the page can).
+    if (hasSound(a)) t.dataset.issues = issues(a).map((r) => r.id).join(' ');
     t.setAttribute('role', 'button'); t.setAttribute('aria-label', `${nm(a)}, ${statusText(a.status)}`);
     t.style.setProperty('--c', color(a.cat));
     if (a.music) t.classList.add('wide');
     if (selected.has(a.id)) t.classList.add('selected');
     if (player?.asset === a) t.classList.add('playing');
-    if (a.versions.length) t.append(el('canvas'));
+    if (hasSound(a)) t.append(el('canvas'));
     if (a.imported) { t.classList.add('imported'); t.append(el('span', 'origin', tr('imported'))); }
     if (a.status === 'working') { const bar = el('div', 'bar'); bar.style.setProperty('--p', a.progress); t.append(bar); }
     if (a.status === 'review') {
       t.append(reviewRow(a, () => { drawTile(a); play(a); }));
     }
     const meta = el('div', 'meta'), name = el('span', 'name', nm(a)), sub = el('div', 'sub');
-    const v = a.versions.length ? heard(a) : null;
+    const v = hasSound(a) ? heard(a) : null;
     sub.append(el('span', '', v ? seconds(v.measure.seconds) : statusText(a.status)), el('span', '', a.status === 'working' ? statusText('working') : v && a.versions.length > 1 ? `v${a.current + 1}` : ''));
     const state = el('i', 'state'); state.title = statusText(a.status);
     if (a.status === 'approved') setIcon(state, 'check');
@@ -570,7 +716,8 @@ ${p.form}`,
       };
       return b;
     };
-    row.append(option(t('previous'), -1), ...a.drafts.map((_, i) => option(a.drafts.length > 1 ? String(i + 1) : t('newVersion'), i)));
+    // A sound that had no version before has no "previous" to go back to.
+    row.append(...(a.versions.length ? [option(t('previous'), -1)] : []), ...a.drafts.map((_, i) => option(a.drafts.length > 1 ? String(i + 1) : t('newVersion'), i)));
     row.append(iconButton('check', t('keep'), (e) => { e.stopPropagation(); settle(a, true); }, 'keep'), iconButton('close', t('drop'), (e) => { e.stopPropagation(); settle(a, false); }, 'drop'));
     return row;
   }
@@ -605,7 +752,7 @@ ${p.form}`,
     }
     if (!filter.status && !filter.imported) box.append(iconButton('folderPlus', t('addCat'), newCat, 'ghost iconBtn addCat'));
     box.scrollTop = top;
-    assets.filter((a) => a.versions.length).forEach(drawTile);
+    assets.filter(hasSound).forEach(drawTile);
     renderSide(); renderHeader(); syncDock();
   }
   function importHint() {
@@ -620,7 +767,7 @@ ${p.form}`,
     if (stage !== 'sample') {
       const out = [], empty = assets.filter((a) => a.status === 'pending');
       if (empty.length) {
-        const row = box.cloneNode(), text = el('span', '', t('fillLeft', empty.length)), go = el('button', 'primary', t('fillAll'));
+        const row = box.cloneNode(), text = el('span', '', t('fillLeft', empty.length)), go = quoted(el('button', 'primary'), 'fillAll', empty.length);
         text.style.flex = '1'; go.id = 'fillBtn'; go.onclick = () => fill(empty); row.append(text, go); out.push(row);
       }
       if (unchecked.length) {
@@ -636,7 +783,7 @@ ${p.form}`,
     const samples = assets.filter((a) => a.sample), done = samples.filter((a) => a.status === 'approved').length, rest = assets.filter((a) => a.status === 'pending').length;
     const text = el('span', '', done === samples.length ? t('samplesDone', samples.length, rest) : t('samplesProgress', samples.length, done, rest));
     text.style.flex = '1';
-    const go = el('button', 'primary', t('makeRest')); go.id = 'expandBtn'; go.disabled = done !== samples.length; go.onclick = expand;
+    const go = quoted(el('button', 'primary'), 'makeRest', rest); go.id = 'expandBtn'; go.disabled = done !== samples.length; go.onclick = expand;
     box.append(text, all, go);
     return box;
   }
@@ -710,22 +857,26 @@ ${p.form}`,
     document.body.classList.toggle('selecting', !!count);
     $('ask').placeholder = count ? t('askSelected', count) : target?.versions.length ? t('askOne', nm(target)) : t('agentPh');
     $('send').disabled = agentBusy;
+    // A request that waits is for the words and the sounds it was held with: other sounds picked let it go, and so
+    // does having nothing left to make (its sounds were started some other way, or are off the board).
+    if (heldAsk.changed($('ask').value.trim(), [...selected]) && !heldLeft().count) heldAsk.drop();
+    drawQuotes();
   }
 
   /* ---------- pointer ---------- */
   let hoverTimer = 0, lassoing = false;
   function hoverStart(a) {
-    if (lassoing || !hoverOn || !a.versions.length || queue) return;
+    if (lassoing || !hoverOn || !hasSound(a) || queue) return;
     clearTimeout(hoverTimer);
-    hoverTimer = setTimeout(() => { if (player?.asset !== a) play(a, { hover: true }); }, 140);
+    hoverTimer = setTimeout(() => { if (!sounding(a)) play(a, { hover: true }); }, 140);
   }
-  // A hover preview stops with the hover.
-  function hoverEnd() { clearTimeout(hoverTimer); if (player?.hover) stopSound(); }
+  // A hover preview stops with the hover, and one still waiting for its sound never starts.
+  function hoverEnd() { clearTimeout(hoverTimer); if (player?.hover || playWait?.hover) stopSound(); }
   const HOLD_MS = 450;
   let held = false;
   function hold(a, t, e) {
     held = false;
-    if (e.button || !pickable(a) || e.target.closest('.ab')) return;
+    if (e.button || !pickable(a) || e.target.closest('.ab') || !store.ready) return; // a view-only tab opens nothing
     const x0 = e.clientX, y0 = e.clientY, ring = holdRing(x0, y0, color(a.cat));
     const end = () => { clearTimeout(timer); t.classList.remove('pressing'); ring.remove(); removeEventListener('pointerup', end); removeEventListener('pointercancel', end); removeEventListener('pointermove', move); };
     const move = (ev) => { if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > 8) end(); else ring.style.translate = `${ev.clientX}px ${ev.clientY}px`; };
@@ -793,7 +944,8 @@ ${p.form}`,
   let trash = [];
   function toTrash(list) {
     if (!list.length) return;
-    if (list.some((a) => a === player?.asset)) stopSound();
+    if (list.some(sounding)) stopSound();
+    gen.cancel(list); // a sound still being made is no longer wanted: its jobs are cancelled and it is as it was before
     list.forEach((a) => { selected.delete(a.id); const i = assets.indexOf(a); if (i >= 0) assets.splice(i, 1); a.trashedAt = Date.now(); trash.push(a); });
   }
   function removeAssets(list) { toTrash(list); renderBoard(); toast(t('trashed', list.length), 4000); }
@@ -944,7 +1096,7 @@ ${p.form}`,
   }
 
   // Made sounds and empty ones still to make can be picked; one being made cannot.
-  const pickable = (a) => !!a && (a.versions.length > 0 || a.status === 'pending');
+  const pickable = (a) => !!a && (hasSound(a) || a.status === 'pending');
   function clickTile(a, e) {
     if (held) { held = false; return; }
     if (!pickable(a)) return;
@@ -955,7 +1107,7 @@ ${p.form}`,
     } else {
       const on = !selected.has(a.id);
       toggle(a); anchor = a.id; focused = on ? a.id : null;
-      if (on && a.versions.length) play(a, { loop: false }); else if (player?.asset === a) stopSound();
+      if (on && hasSound(a)) play(a, { loop: false }); else if (sounding(a)) stopSound();
     }
     syncDock();
   }
@@ -1011,8 +1163,8 @@ ${p.form}`,
     if (e.key.startsWith('Arrow')) {
       e.preventDefault();
       const next = neighbour(e.key);
-      if (next) { next.focus(); next.scrollIntoView({ block: 'nearest' }); const n = byId(next.dataset.id); focused = n.id; if (n.versions.length) play(n, { loop: false }); else stopSound(); }
-    } else if (e.code === 'Space' && a) { e.preventDefault(); if (player?.asset === a) stopSound(); else play(a); }
+      if (next) { next.focus(); next.scrollIntoView({ block: 'nearest' }); const n = byId(next.dataset.id); focused = n.id; if (hasSound(n)) play(n, { loop: false }); else stopSound(); }
+    } else if (e.code === 'Space' && a) { e.preventDefault(); if (sounding(a)) stopSound(); else play(a); }
     else if (e.key === 'Enter' && pickable(a)) openDetail(a);
     else if (e.key.toLowerCase() === 'a' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); ready(visible()).forEach((x) => selected.add(x.id)); refreshSelection(); }
     else if (e.key.toLowerCase() === 'x' && pickable(a)) toggle(a);
@@ -1024,72 +1176,119 @@ ${p.form}`,
   });
   function setStatus(a, status) { if (a.status === 'draft' || a.status === 'approved' || a.status === 'flagged') { a.status = a.status === status ? 'draft' : status; const id = a.id; renderBoard(); tileOf(byId(id))?.focus(); } }
 
-  /* ---------- simulated work ---------- */
-  function changeFrom(text) {
-    const low = text.toLowerCase(), has = (...w) => w.some((x) => low.includes(x));
-    return { shift: has('높', '밝', '가볍', '귀엽', 'high', 'bright', 'light', 'cute') ? 1.25 : has('낮', '묵직', '무겁', '어둡', 'low', 'heavy', 'dark', 'deep') ? 0.8 : 1.1, stretch: has('짧', 'short') ? 0.7 : has('길', 'long') ? 1.4 : 0.95, level: has('작', '조용', '낮춰', 'quiet', 'soft', 'lower') ? 0.6 : has('크', '세게', 'loud', 'strong') ? 1.2 : 0.85 };
+  /* ---------- asking for sounds ---------- */
+  const MAX_DRAFTS = 4;
+  // The number of drafts a request names in words ("시안 3개", "3개의 시안", "3 drafts"), or 0 when it names none.
+  // Only a count is one: the whole number stands right before 개/가지 or before drafts/options/versions. A draft
+  // called by its number ("시안 2가 좋아", "option 3", "take draft 2") and a length ("시안 30초", "the draft 30 seconds
+  // long") name none, so talking about a draft never changes how many are made.
+  function draftsSaid(text) {
+    const said = text.match(/(?:시안|후보)[^\d\n]{0,3}(\d+)\s*(?:개|가지)|(?:^|\D)(\d+)\s*(?:개|가지)\s*(?:의\s*)?(?:시안|후보|버전)|(?:^|\D)(\d+)\s*(?:drafts?|options?|versions?)\b/i);
+    const n = said ? +(said[1] || said[2] || said[3]) : 0;
+    return n >= 1 ? Math.min(MAX_DRAFTS, n) : 0;
   }
-  const SPREAD = [[1, 1], [0.89, 1.15], [1.12, 0.88], [0.8, 1.3]];
-  const MAX_DRAFTS = SPREAD.length;
-  // "시안 3개" in the request wins over the picker, so it can be asked for in plain words.
-  function draftsWanted(text) {
-    const said = text.match(/(?:시안|후보|drafts?|options?)\D{0,3}([1-9])|([1-9])\s*(?:개|가지)\s*(?:의\s*)?(?:시안|후보|버전)|([1-9])\s*(?:drafts?|options?|versions?)\b/i);
-    return Math.min(MAX_DRAFTS, said ? +(said[1] || said[2] || said[3]) : drafts);
+  // The picker shows `i`, in the dock and in the open sound, and the labels say what that many drafts cost.
+  function setDrafts(i) {
+    drafts = i;
+    document.querySelectorAll('.draftSeg [role=radio]').forEach((x) => x.setAttribute('aria-checked', String(+x.textContent === i)));
+    drawQuotes();
   }
-  function draftPicker() {
+  // A number of drafts written in a request moves the picker to it, so it can be asked for in plain words and the
+  // picker stays the one place the number is read from: the label beside it has said what it costs before anything
+  // is sent. Words that name no number leave the picker on the number picked by hand. The picker follows a sentence
+  // once: a number picked by hand after it was written stands until the words change. Returns the picker's number.
+  // There are two boxes to write in, the dock's and the open sound's ('open'), and one picker, which goes by the
+  // box in front. follows keeps, for each box, the words the picker last went by there and the number it was put on
+  // for them by hand, or by a request that waits there (0: neither, the words decide). Going from one box to the
+  // other therefore puts the picker back on what that box's words ask for, so the label beside it always prices the
+  // request that would be sent from there.
+  const follows = { dock: { text: '', n: 0 }, open: { text: '', n: 0 } };
+  function draftsWanted(text, box = 'dock') {
+    const f = follows[box];
+    if (text !== f.text) { f.text = text; f.n = 0; }
+    const n = f.n || draftsSaid(text) || pickedDrafts;
+    if (n !== drafts) setDrafts(n);
+    return drafts;
+  }
+  // inDock: the picker under the board, whose label counts the sounds picked there. The other one is the open sound's.
+  function draftPicker(inDock) {
     const seg = el('div', 'draftSeg'); seg.setAttribute('role', 'radiogroup'); seg.setAttribute('aria-label', t('draftCountLabel'));
-    seg.append(el('span', 'segLabel', t('drafts')));
+    seg.append(el('span', 'segLabel', priced(t('drafts'), inDock ? pickedSounds().length : 1, drafts)));
     for (let i = 1; i <= MAX_DRAFTS; i++) {
       const b = el('button', '', String(i)); b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(drafts === i));
       b.setAttribute('aria-label', t('draftCount', i));
       b.onclick = () => {
-        drafts = i; try { localStorage.setItem('asset-drafts', String(i)); } catch { /* kept for this visit */ }
-        document.querySelectorAll('.draftSeg [role=radio]').forEach((x) => x.setAttribute('aria-checked', String(+x.textContent === i)));
+        pickedDrafts = i; try { localStorage.setItem('asset-drafts', String(i)); } catch { /* kept for this visit */ }
+        // Picked by hand over a number written in this box: it stands until those words change.
+        const f = follows[inDock ? 'dock' : 'open']; f.n = (draftsSaid(f.text) || f.n) ? i : 0;
+        setDrafts(i);
       };
       seg.append(b);
     }
     return seg;
   }
-  function request(list, text) {
-    const change = changeFrom(text), count = draftsWanted(text);
-    list.forEach((a, i) => {
-      a.status = 'working'; a.progress = 0;
-      a.chat.push({ me: true, text });
-      const total = 1100 + i * 420 + count * 300 + Math.random() * 900, begun = performance.now();
-      const tick = () => {
-        a.progress = Math.min(1, (performance.now() - begun) / total);
-        tileOf(a)?.querySelector('.bar')?.style.setProperty('--p', a.progress);
-        if (a.progress < 1) { setTimeout(tick, 120); return; }
-        a.drafts = SPREAD.slice(0, count).map(([shift, stretch], k) => checked(a, { ...change, shift: change.shift * shift, stretch: change.stretch * stretch }, count > 1 ? { key: 'draft', text, k: k + 1 } : text));
-        a.pick = 0; a.status = 'review';
-        a.chat.push(count > 1 ? { ai: 'drafts', n: count } : { ai: 'one' });
-        renderOpen(a);
-      };
-      tick();
-    });
-    // The sounds asked about stay selected until something else is picked, so the batch is not lost.
-    if (list.length > 1) { selected.clear(); list.forEach((a) => selected.add(a.id)); }
-    renderOpen();
+  // Changes to sounds that are already made: n drafts of each come back for a pick. pairs is [[sounds, words]], and
+  // all of it goes out as one request in which every sound has the words of its own pair: the server counts
+  // requests, and an answer that changes many sounds one by one must not run into that count. Nothing is asked for
+  // while the room cannot take it (no AI here, another tab has the board, no room to save); the toast says which.
+  // Returns whether every pair had a sound that was asked for.
+  function remake(pairs, n = drafts) {
+    pairs = pairs.filter(([list]) => list.length);
+    if (!pairs.length || refuse()) return false;
+    const words = new Map();
+    let all = true;
+    for (const [list, text] of pairs) {
+      const free = list.filter((a) => gen.free(a) && !words.has(a));
+      if (!free.length) { all = false; continue; }
+      free.forEach((a) => { words.set(a, text); a.chat.push({ me: true, text }); });
+      // The sounds asked about stay selected until something else is picked, so the batch is not lost.
+      if (free.length > 1) { selected.clear(); free.forEach((a) => selected.add(a.id)); }
+    }
+    if (!words.size) return false;
+    gen.generate([...words.keys()], { mode: 'revise', text: (a) => words.get(a), drafts: n });
+    return all;
+  }
+  // One change, to one sound or to several in the same words. Returns whether anything was asked for.
+  function request(list, text, n = drafts) { return remake([[list, text]], n); }
+  // What a request in words wants made, n drafts of each: sounds that are made get drafts of the change, empty slots
+  // are made from the words. remakes and fills are [[sounds, words]]. However many pairs there are, the changes are
+  // one request and the new sounds another. A slot named twice is made from the first words. Returns whether all of
+  // it was taken.
+  function makeAsked(remakes, fills, n) {
+    let taken = true;
+    if (remakes.some(([list]) => list.length) && !remake(remakes, n)) taken = false;
+    const words = new Map();
+    for (const [list, text] of fills) {
+      if (!list.some((a) => gen.free(a) && !words.has(a))) taken = false;
+      for (const a of list) {
+        if (words.has(a)) continue;
+        words.set(a, text);
+        if (text) { a.description = text; a.chat.push({ me: true, text }); }
+      }
+    }
+    if (words.size && !fill([...words.keys()], null, n, (a) => words.get(a))) taken = false;
+    return taken;
   }
   function renderOpen(a) { if (openAsset && (!a || a === openAsset)) renderDetail(); else if (openAsset) renderHeader(); else renderBoard(); }
   function settle(a, keep) {
+    // "Keep" on a sound with no version and no draft picked would throw every draft away. The first is picked instead.
+    if (keep && !a.versions.length && a.drafts.length && !a.drafts[a.pick]) { a.pick = 0; renderOpen(); return; }
     const chosen = keep ? a.drafts[a.pick] : null;
     if (chosen) { a.versions.push(...a.drafts.filter((v) => v !== chosen), chosen); a.current = a.versions.length - 1; } // the others stay in the history
-    a.drafts = []; a.pick = -1; a.status = keep ? 'approved' : 'draft';
-    if (player?.asset === a) stopSound();
+    // Dropped drafts are not fetched again on a later visit; a sound that never had a version is an empty slot again.
+    // Nothing is cancelled at the server: the jobs of a sound under review have all ended.
+    if (!chosen) gen.drop([a]);
+    a.drafts = []; a.pick = -1; a.status = !a.versions.length ? 'pending' : keep ? 'approved' : 'draft';
+    if (sounding(a)) stopSound();
     renderOpen();
   }
+  // After the samples are approved: the rest of the board is made, one draft a sound.
   function expand() {
-    stage = 'expand'; stopSound();
     const rest = assets.filter((a) => a.status === 'pending');
-    toast(t('expanding', rest.length));
-    rest.forEach((a, i) => setTimeout(() => {
-      const t = tileOf(a);
-      make(a); a.status = 'draft';
-      if (t && !openAsset) { const fresh = makeTile(a); fresh.classList.add('arrive'); t.replaceWith(fresh); drawTile(a); renderSide(); renderHeader(); }
-      if (i === rest.length - 1) renderOpen();
-    }, 200 + i * 110));
-    renderBoard();
+    if (refuse()) return;
+    stage = 'expand'; stopSound();
+    if (rest.length) { toast(t('expanding', rest.length)); gen.generate(rest, { mode: 'make', text: '', drafts: 1 }); } // draws the board itself
+    else renderBoard();
   }
 
   /* ---------- dock ---------- */
@@ -1097,19 +1296,25 @@ ${p.form}`,
     if (queue) { queue = null; stopSound(); return; }
     const list = ready(visible());
     if (!list.length) return;
-    queue = { list, at: 0 };
-    const next = () => {
-      if (!queue || queue.at >= queue.list.length) { queue = null; markPlaying(); return; }
-      const a = queue.list[queue.at++];
+    const mine = queue = { list, at: 0 };
+    const next = async () => {
+      if (queue !== mine) return;
+      if (mine.at >= mine.list.length) { queue = null; markPlaying(); return; }
+      const a = mine.list[mine.at++];
       tileOf(a)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      play(a, { done: () => setTimeout(next, 260) });
-      if (a.music || a.loop) { const mine = a; setTimeout(() => { if (queue && player?.asset === mine) { stopSound(); next(); } }, 3500); }
+      // The 3.5 seconds of a loop count from when it starts to sound; a sound that cannot be played is passed over.
+      const turn = playN + 1, started = await play(a, { done: () => setTimeout(next, 260) });
+      if (queue !== mine) return;
+      if (!started) { if (playN === turn) next(); return; }
+      if (a.music || a.loop) setTimeout(() => { if (queue === mine && player?.asset === a) { stopSound(); next(); } }, 3500);
     };
     next();
   };
   // The assistant: whatever is typed below goes to it. It answers with changes the board applies at once,
   // and every answer that changed something can be undone. Without AI it understands links, notes and remakes.
   let agentLog = [], agentBusy = false, agentOn = false, agentN = 0;
+  let turnedAway = false; // the last answer asked for sounds the room could not take
+  let overShown = false; // the last answer's sounds cost more than was shown, and the user had gone on to other words or sounds
   const agentWaits = new Map();
   const pickedSounds = () => (selected.size ? [...selected].map(byId) : focused ? [byId(focused)] : []).filter(Boolean);
   function boardState() {
@@ -1123,15 +1328,16 @@ ${p.form}`,
       selected: pickedSounds().map((a) => a.id),
     };
   }
-  // Without AI: a link or a "note:" line becomes a reference for the picked sounds (or the project); anything else
-  // remakes the picked sounds the way the old box did.
+  // Without the assistant: a link or a "note:" line becomes a reference for the picked sounds (or the project).
+  // Anything else is a request to make or change the picked sounds, which needs the generation API.
   function localAgent(text) {
     const picked = pickedSounds(), url = text.match(/https?:\/\/\S+/i)?.[0], note = text.match(/^\s*(?:메모|참고|레퍼런스|note|reference)\s*[:：]\s*(.+)$/is)?.[1];
     const targets = picked.length ? picked.map((a) => 'asset:' + a.id) : ['project'];
     if (url || note) return { reply: t('agentNoted'), questions: [], actions: targets.map((target) => ({ op: 'add_ref', target, kind: url ? 'link' : 'text', url: url || '', text: url ? text.replace(url, '').trim() : note.trim(), name: '', assets: [] })) };
-    const usable = picked.filter((a) => (a.versions.length || a.status === 'pending') && a.status !== 'working');
-    if (usable.length) return { reply: t('agentRemake', usable.length), questions: [], actions: [{ op: 'revise', assets: usable.map((a) => a.id), text }] };
-    return { reply: t('agentLocal'), actions: [], questions: [] };
+    const usable = picked.filter((a) => (a.versions.length || a.status === 'pending') && a.status !== 'working' && gen.free(a));
+    if (usable.length && !cannot()) return { reply: t('agentRemake', usable.length), questions: [], actions: [{ op: 'revise', assets: usable.map((a) => a.id), text }] };
+    // Sounds were picked but the room cannot take a request now: the answer is the reason (another tab, no room to save, …).
+    return { reply: (usable.length && refusal()) || t('agentLocal'), actions: [], questions: [] };
   }
   function askAgent(text) {
     if (!agentOn || window.parent === window) return Promise.resolve(localAgent(text));
@@ -1144,6 +1350,9 @@ ${p.form}`,
   }
   addEventListener('message', (e) => {
     if (e.source !== window.parent) return;
+    // The token for the generation API. Only the host page's own message counts: from the parent, from this origin.
+    // A token of another kind or person has no price yet: the numbers go until gen.js has read the new one (onQuote).
+    if (e.data?.type === 'asset:token') { if (assetGen.fromHost(e, window.parent, location.origin)) gen.token(e.data).then(drawQuotes); return; }
     if (e.data?.type === 'asset:ai') agentOn = !!e.data.on;
     if (e.data?.type === 'asset:agent_reply') {
       const w = agentWaits.get(e.data.n);
@@ -1154,7 +1363,9 @@ ${p.form}`,
   });
   if (window.parent !== window) parent.postMessage({ type: 'asset:ready' }, '*');
   // Applies the answer's changes and returns how to put things back (remakes have their own keep/discard).
-  function applyActions(actions) {
+  // asked: { text, drafts, picked }, the words that were sent, and the picker's number and the sounds picked when send
+  // was pressed.
+  function applyActions(actions, asked) {
     const before = { cats: JSON.stringify(cats), projectRefs: JSON.stringify(projectRefs), brief, sel: new Set(selected),
       assets: assets.map((a) => [a, { name: a.name, cat: a.cat, description: a.description, when: a.when, music: a.music, loop: a.loop, refs: JSON.stringify(ownRefs(a)) }]) };
     let n = 0;
@@ -1174,16 +1385,41 @@ ${p.form}`,
       else if (x.op === 'revise') {
         remakes.push([list.filter((a) => a.versions.length && a.status !== 'working'), x.text || '']);
         const fresh = list.filter((a) => a.status === 'pending');
-        if (fresh.length) { fresh.forEach((a) => { if (x.text) { a.description = x.text; a.chat.push({ me: true, text: x.text }); } }); fills.push(fresh); }
+        if (fresh.length) fills.push([fresh, x.text || '']);
       }
     }
     syncRefs(); renderBoard();
-    for (const [list, text] of remakes) if (list.length) request(list, text);
-    for (const list of fills) fill(list);
+    turnedAway = false; overShown = false;
+    // The sounds the answer wants made (empty slots among them) cost credits. More than the number that was beside
+    // the draft count when send was pressed, and none of them starts: they are picked and the words go back into the
+    // box, so that number is now what they cost, and the request waits there with what the answer asked for (which
+    // sounds, in which words). A room that cannot take a request at all says so as before.
+    const wanted = [...new Set([...remakes, ...fills].flatMap(([list]) => list))].filter(gen.free);
+    const ids = (pairs) => pairs.map(([list, words]) => [list.filter((a) => wanted.includes(a)).map((a) => a.id), words]);
+    if (wanted.length && !cannot() && heldAsk.answer(wanted.map((a) => a.id), asked.text, gen.quoteOf(wanted.length, asked.drafts), { remakes: ids(remakes), fills: ids(fills) }) === 'hold') {
+      // While the assistant was thinking the user may have written something else or picked other sounds. Those are
+      // theirs: nothing is put over them, so nothing waits, and the toast says that the sounds were not started.
+      const typed = $('ask').value.trim(), was = asked.picked || [];
+      if ((typed && typed !== asked.text) || was.length !== before.sel.size || !was.every((id) => before.sel.has(id))) { heldAsk.drop(); overShown = true; }
+      else {
+        selected.clear(); wanted.forEach((a) => selected.add(a.id));
+        before.sel = new Set(selected); // putting the answer back leaves these picked: the request that waits is for them
+        // The picker goes back to the number of that press. With a sound open it is that view's until the board is back.
+        $('ask').value = asked.text; follows.dock = { text: asked.text, n: asked.drafts }; if (!openAsset) setDrafts(asked.drafts);
+        refreshSelection();
+      }
+    } else if (!makeAsked(remakes, fills, asked.drafts)) turnedAway = true;
     if (!n) return null;
+    // Putting things back leaves a sound that is being made (a.work) exactly as it is: its name, group, kind and
+    // description are what its job was asked with, and its drafts come for a pick as they would have. A group the
+    // answer made stays when such a sound was moved into it.
     return () => {
+      const groups = cats;
       cats = JSON.parse(before.cats); projectRefs = JSON.parse(before.projectRefs); brief = before.brief;
-      for (const [a, f] of before.assets) { const { refs, ...rest } = f; Object.assign(a, rest); a.refs = [...(a.refs || []).filter((r) => r.from !== 'asset'), ...JSON.parse(refs)]; }
+      for (const [a, f] of before.assets) {
+        if (a.work) { for (let c = groups.find((x) => x.id === a.cat); c && !catOf(c.id); c = groups.find((x) => x.id === c.parent)) cats.push(c); continue; }
+        const { refs, ...rest } = f; Object.assign(a, rest); a.refs = [...(a.refs || []).filter((r) => r.from !== 'asset'), ...JSON.parse(refs)];
+      }
       selected.clear(); before.sel.forEach((id) => selected.add(id));
       syncRefs(); renderBoard();
     };
@@ -1193,26 +1429,54 @@ ${p.form}`,
     toast(text, undo ? 8000 : 4000);
     if (undo) { const u = el('button', 'ghost', t('agentUndo')); u.onclick = () => { undo(); autosave(); toast(t('agentUndone')); }; $('toast').append(' ', u); }
   }
-  async function sendAgent(text) {
+  // n: the picker's number when send was pressed, which is how many drafts the answer's sounds are made in.
+  // picked: the ids of the sounds that were picked then.
+  async function sendAgent(text, n, picked) {
     if (agentBusy) return;
     agentLog.push({ me: true, text });
     agentBusy = true; syncDock(); toast(t('agentThinking'), 0);
     try {
       const answer = await askAgent(text);
-      const undo = applyActions(answer.actions);
+      const undo = applyActions(answer.actions, { text, drafts: n, picked });
       agentLog.push({ text: answer.reply || '' });
       const reply = answer.reply || t('agentDid', (answer.actions || []).length);
-      say(answer.upgraded ? `${t('agentUpgraded', answer.upgraded)} ${reply}` : reply, undo);
+      // Sounds the answer wanted made that did not start, because they cost more than was shown or because the room
+      // could not take them: that stays up, not an answer that says they are being made.
+      const no = heldAsk.held ? t('agentHeld') : overShown ? t('agentOver') : turnedAway ? refusal() : '';
+      say(no || (answer.upgraded ? `${t('agentUpgraded', answer.upgraded)} ${reply}` : reply), undo);
     } catch (e) { say(t('agentFailed', e.message || e)); }
     agentBusy = false; syncDock(); autosave();
   }
   // Enter that only ends a Korean syllable must not send the form (same as the music screen).
   document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.isComposing || e.keyCode === 229) && e.target.matches?.('input')) e.preventDefault(); }, true);
+  // What is typed moves the picker as it is typed, and lets go of a request that waits for other words.
+  $('ask').addEventListener('input', () => { const text = $('ask').value.trim(); draftsWanted(text); heldAsk.changed(text, [...selected]); });
   $('askForm').onsubmit = (e) => {
     e.preventDefault();
     const text = $('ask').value.trim(); if (!text || agentBusy) return;
-    $('ask').value = '';
-    sendAgent(text);
+    // The number beside the draft count at this press is what the press is held to. It is read before the words can
+    // move the picker: a count written in them that the picker had not followed yet (the label still says the old
+    // number) is then more than was shown, and waits like any other. n is the picker's number once it has followed.
+    const shown = gen.quoteOf(pickedSounds().length, drafts);
+    const n = draftsWanted(text), picked = [...selected];
+    // The box is emptied, and the picker is back on the number picked by hand.
+    const sent = () => { $('ask').value = ''; draftsWanted(''); };
+    let left = heldAsk.changed(text, picked) ? heldLeft() : null;
+    // Nothing of the request that waited is left to make (syncDock lets such a one go): the words are a new question.
+    if (left && !left.count) { heldAsk.drop(); left = null; }
+    if (left) {
+      // The request that waits, sent again as it is: what is left of it is made as the answer asked, without asking
+      // the assistant a second time. While the room cannot take a request it stays where it is, and the toast says why.
+      if (refuse()) return;
+      // The label changed under it and showed less than it takes at this press: it goes on waiting, with the number it takes.
+      if (heldAsk.send(text, picked, shown, gen.quoteOf(left.count, n)).via === 'hold') { toast(t('agentHeld'), 8000); return; }
+      sent(); $('toast').hidden = true;
+      makeAsked(left.remakes, left.fills, n);
+      return;
+    }
+    heldAsk.send(text, picked, shown);
+    sent();
+    sendAgent(text, n, picked);
   };
   $('selAll').onclick = () => { ready(visible()).forEach((x) => selected.add(x.id)); renderBoard(); };
   $('selClear').onclick = () => { selected.clear(); renderBoard(); };
@@ -1226,7 +1490,13 @@ ${p.form}`,
     const list = Object.values(stemState), anySolo = list.some((s) => s.solo), s = stemState[name] || { gain: 1 };
     return s.mute || (anySolo && !s.solo) ? 0 : s.gain;
   };
-  const applyStems = () => { if (player) for (const [name, g] of Object.entries(player.gains)) g.gain.value = stemLevel(name); };
+  function applyStems() {
+    if (!player) return;
+    // A master that is playing gives way to the stems the moment one is soloed, muted or turned, and comes back when none is.
+    if (!assetStore.isLegacy(player.version) && player.byStem !== stemsTouched(player.asset, player.version)) { play(player.asset, { ...player.opts, from: position() }); return; }
+    for (const [name, g] of Object.entries(player.gains)) g.gain.value = stemLevel(name);
+  }
+  const detailWait = new WeakSet(); // versions the detail view is waiting to hear decoded
   const transition = (fn) => (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches ? document.startViewTransition(fn) : fn());
 
   function showDetail(on) {
@@ -1248,26 +1518,33 @@ ${p.form}`,
     const a = openAsset; stopSound();
     document.querySelector('.dWave')?.style.setProperty('view-transition-name', 'zoom');
     transition(() => {
-      openAsset = null; showDetail(false); renderBoard();
+      // The dock's box is in front again: the picker goes by the words waiting there, not by what was written in the sound.
+      openAsset = null; showDetail(false); draftsWanted($('ask').value.trim()); renderBoard();
       const t = tileOf(a); if (t) { t.style.viewTransitionName = 'zoom'; t.focus(); setTimeout(() => { t.style.viewTransitionName = ''; }, 400); }
     });
   }
   function step(by) {
-    const list = walk.filter((a) => assets.includes(a) && a.versions.length), at = list.indexOf(openAsset), next = list[(at + by + list.length) % list.length];
+    const list = walk.filter((a) => assets.includes(a) && hasSound(a)), at = list.indexOf(openAsset), next = list[(at + by + list.length) % list.length];
     if (next) { stopSound(); openAsset = next; focused = next.id; stemState = {}; renderDetail(); }
   }
-  function toggleDetailPlay() { if (player?.asset === openAsset) stopSound(); else play(openAsset, { loop: !!(openAsset.loop || openAsset.music) }); renderPlayButton(); }
+  function toggleDetailPlay() { if (sounding(openAsset)) stopSound(); else play(openAsset, { loop: !!(openAsset.loop || openAsset.music) }); renderPlayButton(); }
   function renderPlayButton() { const b = $('dPlay'); if (b) { setIcon(b, player?.asset === openAsset ? 'stop' : 'play'); b.setAttribute('aria-label', player ? t('stop') : t('play')); } }
 
   // Laid out like the music screen: play, name and approve on one line, the sound under them, then tabs (tracks,
   // code, versions) across the full width. The side is the conversation, with the references above its input.
   // Licences are not per sound: they are all in the export dialog, copied at once.
   function renderDetail() {
-    if (!openAsset.versions.length) { renderEmptyDetail(); return; }
+    if (!hasSound(openAsset)) { renderEmptyDetail(); return; }
     const a = openAsset, v = heard(a), m = v.measure, box = $('detailView');
+    // An nkido or import version is decoded the first time it is opened; the view is drawn again once its tracks are there.
+    if (!v.sound && !detailWait.has(v)) {
+      detailWait.add(v);
+      ensure(a, v).then(() => { detailWait.delete(v); if (openAsset === a && heard(a) === v) renderDetail(); }, () => { detailWait.delete(v); });
+    }
+    const tracks = v.sound ? v.sound.stems : [];
     const typed = document.querySelector('.detailDock textarea')?.value || '';
     box.textContent = '';
-    const multi = v.sound.stems.length > 1, tab = detailTab === 'tracks' && !multi ? 'versions' : detailTab;
+    const multi = hasTracks(v), tab = detailTab === 'tracks' && !multi ? 'versions' : detailTab;
     const main = el('div', 'dMain' + (tab === 'code' ? ' coding' : '')), head = el('div', 'dHead');
     const play = iconButton('play', t('play'), toggleDetailPlay, 'iconBtn dPlay'); play.id = 'dPlay';
     const title = el('div', 'dTitle');
@@ -1276,7 +1553,7 @@ ${p.form}`,
     name.oninput = () => { a.name = name.value; renderHeader(); };
     const facts = el('div', 'dFacts');
     facts.append(catPicker(a, () => renderDetail()));
-    if (a.imported) { const like = el('button', 'ghost', t('likeThis')); like.id = 'likeThis'; like.onclick = () => likeThis(a); facts.append(like); }
+    if (a.imported) { const like = quoted(el('button', 'ghost'), 'likeThis', likeSlots(a).length || 1); like.id = 'likeThis'; like.onclick = () => likeThis(a); facts.append(like); }
     title.append(name, facts);
     head.append(play, title, approveButton(a));
     const wave = el('div', 'dWave'), canvas = el('canvas'), time = el('span', 'dTime', seconds(m.seconds)); time.id = 'dTime'; time.dataset.len = m.seconds; wave.append(canvas, time);
@@ -1294,12 +1571,14 @@ ${p.form}`,
       b.onclick = () => { detailTab = id; renderDetail(); }; tabs.append(b);
     }
     if (tab === 'code') {
-      if (a.prompt) {
-        const fold = el('details', 'promptFold'), sum = el('summary'), full = el('pre', 'code prompt', a.prompt); full.id = 'promptText';
-        sum.append(el('b', '', t('promptHead')), el('span', '', a.prompt.split('\n')[0]));
+      // The prompt and the source are shown as plain text only.
+      const prompt = v.prompt || a.prompt;
+      if (prompt) {
+        const fold = el('details', 'promptFold'), sum = el('summary'), full = el('pre', 'code prompt', prompt); full.id = 'promptText';
+        sum.append(el('b', '', t('promptHead')), el('span', '', prompt.split('\n')[0]));
         fold.append(sum, full); body.append(fold);
       }
-      const code = el('pre', 'codeView'); for (const line of sourceOf(a).split('\n')) code.append(el('span', 'ln', line || ' '));
+      const code = el('pre', 'codeView'); for (const line of sourceOf(a, v).split('\n')) code.append(el('span', 'ln', line || ' '));
       body.append(code);
     } else if (tab === 'versions') {
       [...a.versions].reverse().forEach((ver) => {
@@ -1308,13 +1587,13 @@ ${p.form}`,
         if (i === a.current) row.append(el('span', 'tag', t('current')));
         body.append(row);
       });
-    } else v.sound.stems.forEach((st, i) => body.append(stemRow(st, i)));
+    } else tracks.forEach((st, i) => body.append(stemRow(st, i)));
     main.append(tabs, body);
     box.append(main, chatPanel(a, typed));
     requestAnimationFrame(() => {
       const hue = resolved(color(a.cat));
       drawPeaks(canvas, v.peaks, hue);
-      document.querySelectorAll('.stem').forEach((row, i) => drawPeaks(row.querySelector('canvas'), synth.peaks(v.sound.stems[i].data, 160), stems[i % stems.length]));
+      document.querySelectorAll('.stem').forEach((row, i) => { if (tracks[i]) drawPeaks(row.querySelector('canvas'), synth.peaks(tracks[i].data, 160), stems[i % stems.length]); });
     });
     renderPlayButton(); renderHeader();
   }
@@ -1328,7 +1607,7 @@ ${p.form}`,
     title.append(name, facts); head.append(title);
     const wave = el('div', 'dWave dEmpty');
     if (a.status === 'working') wave.append(el('span', 'note', `${statusText('working')}…`));
-    else { const go = el('button', 'primary', t('makeOne')); go.id = 'makeOne'; go.onclick = () => fill([a]); wave.append(go); }
+    else { const go = quoted(el('button', 'primary'), 'makeOne', 1); go.id = 'makeOne'; go.onclick = () => fill([a]); wave.append(go); }
     main.append(head, wave);
     box.append(main, chatPanel(a, typed));
     renderPlayButton(); renderHeader();
@@ -1362,8 +1641,9 @@ ${p.form}`,
     row.append(name, el('canvas'), mute, solo, gain);
     return row;
   }
-  function sourceOf(a) {
-    if (a.source) return `// ${a.file || `${a.id}.wav`}\nsample("${a.id}.wav") |> out(%)`;
+  function sourceOf(a, v) {
+    if (v?.engine === 'nkido' && v.source) return String(v.source);
+    if (a.source || v?.engine === 'import') return `// ${a.file || `${a.id}.wav`}\nsample("${a.id}.wav") |> out(%)`;
     return (a.layers || []).map((l) => {
       if (l.kind === 'bed') return `// ${stemName(l.stem)}\nnoise() |> lp(%, ${Math.round(l.cutoff * 8000)}) * ${l.gain} |> out(%)`;
       if (l.kind === 'tone') return `// ${nm(a)}\nsweep(${l.from}, ${l.to}, ${l.len}) |> ${l.wave}(%) * adsr(0, ${l.len}, 0, 0) * ${l.gain} |> out(%)`;
@@ -1380,15 +1660,24 @@ ${p.form}`,
     const tools = el('div', 'dTools');
     const refs = refSlot({ type: 'asset', a }, { bare: true, tools, redraw: redrawChat });
     const busy = a.status === 'working';
-    tools.append(draftPicker());
+    draftsWanted(typed.trim(), 'open'); // this box is in front now: the picker goes by the words in it
+    tools.append(draftPicker(false));
     const dock = el('form', 'detailDock'), input = el('textarea'); input.rows = 2; input.value = typed;
     input.placeholder = t('askThis'); input.setAttribute('aria-label', t('askThis'));
     const send = iconButton('send', t('send'), null); send.type = 'submit'; send.disabled = busy;
-    // A sound not made yet is made from what is asked; a made one gets drafts of the change.
+    // A sound not made yet is made from what is asked; a made one gets drafts of the change. Either way it is the
+    // picker's number of drafts, which a number written in the request has moved by then. As in the dock, the number
+    // beside the draft count is read before the words can move the picker: when they move it at the press to more
+    // than was shown, nothing starts, the label says the new number, and the next press makes it.
     const go = () => {
       const text = input.value.trim(); if (!text || a.status === 'working') return;
-      if (a.versions.length) request([a], text); else { a.chat.push({ me: true, text }); a.description = text; fill([a]); }
+      const shown = gen.quoteOf(1, drafts), n = draftsWanted(text, 'open');
+      if (!cannot() && gen.free(a) && !assetQuote.fits(gen.quoteOf(1, n), shown)) { toast(t('agentHeld'), 8000); return; }
+      if (a.versions.length) request([a], text, n);
+      else if (cannot()) refuse();
+      else if (gen.free(a)) { a.chat.push({ me: true, text }); a.description = text; fill([a], null, n, text); }
     };
+    input.oninput = () => { draftsWanted(input.value.trim(), 'open'); };
     // Enter sends, Shift+Enter breaks the line; nothing is sent while a Korean syllable is still being composed.
     input.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); go(); } };
     dock.onsubmit = (e) => { e.preventDefault(); go(); };
@@ -1433,7 +1722,7 @@ ${p.form}`,
   });
   function openDialog(title) {
     clearTimeout(hoverTimer); queue = null; stopSound(); dynStop();
-    dlg.textContent = '';
+    dlg.textContent = ''; dlg.classList.remove('free');
     dlg.append(iconButton('close', t('close'), () => dlg.close(), 'ghost iconBtn dlgClose'), el('h2', '', title));
   }
   // ms 0 keeps it up until the next toast (progress).
@@ -1448,7 +1737,24 @@ ${p.form}`,
     }
     toast(done);
   }
-  const licenseText = () => `${t('licenseTitle', tx(game))}\n\n` + [...LICENSES.map((l) => `${l.name}\n  ${t('use')}: ${tx(l.use)}\n  ${t('license')}: ${l.license}\n  ${t('holder')}: ${l.holder}`), ...assets.filter((a) => a.imported).map((a) => `${a.file || a.id} (${nm(a)})\n  ${t('license')}: ${a.license || t('noLicenseYet')}\n  ${t('holder')}: ${a.holder || '-'}`)].join('\n\n') + '\n';
+  // What CREDITS.md lists: the sources of the approved sounds' current versions, each once (told apart by name,
+  // license and holder), then the encoders an OGG or MP3 export is written with.
+  const ENCODERS = { ogg: ['wasm-media-encoders', 'libvorbis'], mp3: ['wasm-media-encoders', 'LAME'] };
+  function creditList() {
+    const seen = new Set(), out = [];
+    const add = (s) => {
+      if (!s || !s.name) return;
+      const key = JSON.stringify([s.name, s.license || '', s.holder || '']);
+      if (!seen.has(key)) { seen.add(key); out.push(s); }
+    };
+    for (const a of assets) if (a.status === 'approved' && a.versions.length) (version(a).sources || []).forEach(add);
+    const encoders = ENCODERS[exportOpts.format] || [];
+    LICENSES.filter((l) => encoders.includes(l.name)).forEach(add);
+    return out;
+  }
+  // What a source is used for is said for the ones this room knows by name, in the reader's language.
+  const useOf = (s) => tx(LICENSES.find((l) => l.name === s.name)?.use ?? '');
+  const licenseText = () => `${t('licenseTitle', tx(game))}\n\n` + creditList().map((s) => `${s.name}\n${useOf(s) ? `  ${t('use')}: ${useOf(s)}\n` : ''}  ${t('license')}: ${s.license || '-'}\n  ${t('holder')}: ${s.holder || '-'}`).join('\n\n') + '\n';
   const copyLicenses = () => copy(licenseText(), t('copiedLicenses'));
 
   const specExample = () => {
@@ -1461,7 +1767,7 @@ ${p.form}`,
     platforms: PROFILES.map((f) => f.id).filter((id) => id !== 'wide').join(', '),
     cats: cats.map((c) => `${c.id}(${c.kind})`).join(', '),
     idRule: idRuleText(),
-    dur: rule('dur').limit,
+    dur: limitOf('dur'),
     licenses: LICENSES.map((l) => `${l.name}(${l.license})`).join(', '),
     form: specForm(),
   });
@@ -1522,7 +1828,7 @@ ${p.form}`,
     const row = el('div', 'dlgRow'), run = el('button', 'primary', t('startWithSpec')), keep = el('button', '', t('addOnly'));
     const apply = (remove) => {
       const target = PROFILES.find((f) => f.id === spec.platform);
-      if (target) { rule('loud').range = [...target.loud]; platform = target.id; }
+      if (target) { loudRange = [...target.loud]; platform = target.id; }
       if (spec.game) game = spec.game;
       if (spec.style) brief = spec.style;
       if (Array.isArray(spec.references)) {
@@ -1534,7 +1840,9 @@ ${p.form}`,
       for (const c of specCats) { const have = catOf(c.id); if (have) { if (c.name) have.name = c.name; if (KINDS.includes(c.kind)) have.kind = c.kind; } else addCat(c.name || c.id, c.kind, c.id); }
       for (const c of specCats) if (c.parent && catOf(c.parent) && !under(c.parent, c.id)) catOf(c.id).parent = c.parent;
       for (const id of newCats) if (!catOf(id)) addCat(id, KIND_OF[id] || (spec.assets.find((x) => x.category === id)?.loop ? 'amb' : 'sfx'), id);
-      added.forEach((x) => { x.category ||= cats[0].id; const amb = kindOf(x.category) === 'amb'; const a = { id: x.id, name: x.name, cat: x.category, music: kindOf(x.category) === 'music', loop: !!x.loop || amb, layers: amb ? [STUDIO_DATA.bed(x.name, x.length >= 16 ? 16 : 8, 0.1, 0.4, [[1, 0.25, 0], [3, 0.15, 1]])] : [{ kind: 'tone', from: 500, to: 700, len: Math.min(0.6, x.length || 0.3), wave: 'triangle', gain: 0.4, at: 0 }], status: 'draft', versions: [], current: 0, drafts: [], pick: -1, chat: [], progress: 0, length: x.length, when: x.when || '', description: x.description || '' }; assets.push(a); make(a, {}, { key: 'fromSpec' }); });
+      // What the spec adds arrives as empty slots, the way a pasted list does: their sounds are made when asked for.
+      added.forEach((x) => { x.category ||= cats[0].id; assets.push(blank({ id: x.id, name: x.name, cat: x.category, music: kindOf(x.category) === 'music', loop: !!x.loop || kindOf(x.category) === 'amb', length: x.length, when: x.when || '', description: x.description || '' })); });
+      if (added.length && stage === 'sample') stage = 'expand';
       changed.forEach((x) => { const a = byId(x.id); for (const k of specDiff(a, x)) a[SPEC_KEYS[k]] = k === 'loop' ? !!x.loop : x[k] ?? ''; });
       if (remove) toTrash(gone);
       dlg.close(); renderBoard(); toast(remove && gone.length ? t('specAppliedTrash', added.length, gone.length) : t('specApplied', added.length), 5000);
@@ -1545,6 +1853,7 @@ ${p.form}`,
   }
   function exportDialog() {
     openDialog(t('export')); reopen = exportDialog;
+    dlg.classList.add('free'); // the one dialog a view-only tab may use
     const going = assets.filter((a) => a.status === 'approved'), undone = assets.filter((a) => a.status !== 'approved');
     const left = going.filter((a) => issues(a).length);
     if (left.length) dlg.append(el('p', 'note err', t('exportIssues', left.length, left.map(nm).join(', '))));
@@ -1563,7 +1872,8 @@ ${p.form}`,
     { const r = el('label', 'lineItem'); r.append(el('span', 'grow', t('rootFolder')), root); dlg.append(r); }
     opt(t('engine'), 'engine', [['none', t('engineNone')], ['godot', 'Godot 4']]);
     // Chrome and Edge can write straight into the game: linked once, every approval lands there with the settings above.
-    if ('showDirectoryPicker' in window) {
+    // A view-only tab does not link or write: the tab that has the board does.
+    if ('showDirectoryPicker' in window && store.ready) {
       const r = el('div', 'lineItem'), b = el('button', gameDir ? 'ghost' : '', gameDir ? t('unlinkFolder') : t('linkFolder'));
       b.id = 'folderLink'; b.onclick = gameDir ? () => { gameDir = null; keepDir(null); exportDialog(); } : linkFolder;
       r.append(el('span', 'grow', gameDir ? t('folderLinked', gameDir.name) : t('folderHelp')), b);
@@ -1656,14 +1966,31 @@ ${p.form}`,
   const takenIds = () => new Set(assets.map((a) => a.id));
   const base = (path) => path.split(/[\\/]/).pop();
   const stem = (path) => base(path).replace(/\.[^.]+$/, '');
+  // The board is replaced (the sample board left, a bundle opened). Sounds still being made go with it: their jobs
+  // are cancelled, as in the trash. Sounds the generator made were paid for, so they go to the trash, where they can
+  // be put back. The trash keeps versions only: drafts still under review go there as versions of their sound.
+  function clearBoard() {
+    gen.cancel([...assets]);
+    const made = assets.filter((a) => [...a.versions, ...a.drafts].some((v) => v.engine === 'nkido'));
+    for (const a of made) {
+      if (!a.drafts.length) continue;
+      const had = a.versions.length;
+      a.versions.push(...a.drafts);
+      if (!had) a.current = Math.max(0, a.pick);
+      if (a.status === 'review' || !had) a.status = 'draft';
+      a.drafts = []; a.pick = -1;
+    }
+    toTrash(made);
+    assets.length = 0;
+  }
   // Leaves the stand-in board the first time the user's own work comes in.
   function leaveDemo(name) {
     if (!demo) return;
     demo = false; stopSound(); queue = null; selected.clear(); filter = { cat: null, status: null, imported: false };
-    assets.length = 0; stage = 'expand';
+    clearBoard(); stage = 'expand';
     if (name) { game = name; brief = ''; }
   }
-  // Decoded at the synth's rate so a brought-in sound plays, measures and renders like a made one.
+  // A mono copy at the synth's rate, which is what the facts of a reference file are read from.
   async function decode(bytes) {
     const ac = new OfflineAudioContext(1, 1, 22050);
     const buf = await ac.decodeAudioData(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
@@ -1671,12 +1998,11 @@ ${p.form}`,
     for (let c = 0; c < buf.numberOfChannels; c++) { const ch = buf.getChannelData(c); for (let i = 0; i < data.length; i++) data[i] += ch[i] / buf.numberOfChannels; }
     return data;
   }
-  function fromAudio(a, data, note) {
-    a.source = data; a.layers = [];
-    const sound = synth.render(a);
-    a.versions = [{ sound, note: { key: note }, change: {}, at: new Date(), peaks: synth.peaks(sound.mix, 200), measure: synth.measure(sound) }];
-    a.current = 0;
-  }
+  // A brought-in file is kept as it came: its own bytes are the sound of an import version, measured from what the
+  // file holds (every channel, at its own rate). It is decoded again only when it is heard.
+  const importVersion = (bytes, note, a) => store.importVersion(bytes, { note: { key: note }, sources: assetStore.sourcesFor(a) });
+  // What the user records for a brought-in sound (the export dialog) is the sources of its versions.
+  function creditSources(a) { if (a.imported) for (const v of [...a.versions, ...a.drafts]) if (v.engine !== 'nkido') v.sources = assetStore.importSources(a); }
   // Every way in ends here: picked files, a dropped folder, a zip, or an unzipped bundle.
   // Sizes are checked before anything is read, so a 10 GB file or a folder of photos cannot freeze the tab.
   const { LIMITS } = importer;
@@ -1727,13 +2053,12 @@ ${p.form}`,
     for (const [i, f] of files.entries()) {
       if (files.length > 1) { toast(t('importing', i + 1, files.length), 0); await breathe(); }
       try {
-        const data = await decode(await f.bytes()), path = root ? f.path.slice(root.length + 1) : f.path, secs = data.length / 22050;
-        if (!data.length) throw new Error('empty');
+        const v = await importVersion(await f.bytes(), 'importedNote', { imported: true }), path = root ? f.path.slice(root.length + 1) : f.path, secs = v.seconds;
         if (!left) { leaveDemo(root); left = true; taken = takenIds(); }
         const guess = importer.guessCategory(path, secs), cat = fitCat(guess.cat), sure = guess.sure, name = importer.guessName(path);
         const loopy = kindOf(cat) !== 'sfx' || /loop/i.test(path);
         const a = blank({ id: makeId(name, cat, taken), name, cat, music: kindOf(cat) === 'music', loop: loopy, imported: true, file: f.path, license: '', holder: '', guessed: !sure, status: 'approved' });
-        fromAudio(a, data, 'importedNote');
+        a.versions = [v]; a.current = 0;
         assets.push(a); added.push(a);
       } catch { sk.bad++; }
     }
@@ -1745,10 +2070,10 @@ ${p.form}`,
   // A bundle this screen exported: the spec says what each sound is, the audio files are the sounds.
   async function openBundle(spec, files, sk = tally()) {
     leaveDemo();
-    assets.length = 0; selected.clear(); stopSound();
+    clearBoard(); selected.clear(); stopSound(); // the bundle replaces the board
     game = spec.game || game; brief = spec.style || '';
     const target = PROFILES.find((f) => f.id === spec.platform);
-    if (target) { platform = target.id; rule('loud').range = [...target.loud]; }
+    if (target) { platform = target.id; loudRange = [...target.loud]; }
     if (Array.isArray(spec.categories) && spec.categories.length) cats = spec.categories.filter((c) => c && c.id).map((c, i) => ({ id: c.id, name: c.name || c.id, kind: KINDS.includes(c.kind) ? c.kind : 'sfx', hue: c.color || CATEGORIES.find((d) => d.id === c.id)?.hue || HUES[i % HUES.length], ...(c.parent ? { parent: c.parent } : {}) }));
     if (spec.id_rule?.pattern) idRule = { ...idRule, ...spec.id_rule, prefix: { ...idRule.prefix, ...spec.id_rule.prefix } };
     if (spec.export) exportOpts = { ...exportOpts, ...spec.export };
@@ -1766,7 +2091,7 @@ ${p.form}`,
         imported: x.origin === 'imported', file: x.source_file || '', license: x.license || '', holder: x.holder || '', prompt: x.prompt || '' });
       a.refs = backRefs(x.references).map((r) => ({ ...r, from: 'asset' }));
       if (audio) {
-        try { fromAudio(a, await decode(await audio.bytes()), a.imported ? 'importedNote' : 'fromBundle'); a.status = x.status === 'approved' || !x.status ? 'approved' : 'draft'; }
+        try { a.versions = [await importVersion(await audio.bytes(), a.imported ? 'importedNote' : 'fromBundle', a)]; a.current = 0; a.status = x.status === 'approved' || !x.status ? 'approved' : 'draft'; }
         catch { sk.bad++; }
       }
       assets.push(a);
@@ -1787,39 +2112,26 @@ ${p.form}`,
   }
 
   /* ---------- filling empty slots, optionally in the feel of a brought-in sound ---------- */
-  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  // The sound a new one takes after: the one it was asked to be like, else a brought-in sound of its own group.
   const referenceFor = (a) => (a.ref && byId(a.ref)) || assets.find((r) => r.imported && r.versions.length && r.cat === a.cat) || null;
-  function promptFor(a, ref) {
-    let refText = '';
-    if (ref) {
-      const m = heard(ref).measure, r1 = (v) => Math.round(v * 10) / 10;
-      refText = t('refPrompt', { name: nm(ref), file: ref.file || `${ref.id}.wav`, seconds: r1(m.seconds), loop: !!ref.loop, peak: r1(m.peak), loud: r1(m.loud), low: m.low, mid: m.mid, high: m.high, bright: m.bright, lead: Math.round(m.lead), tail: Math.round(m.tail) });
-    }
-    const cat = catOf(a.cat);
-    return t('fillPrompt', { name: nm(a), id: a.id, cat: cat ? tx(cat.name) : a.cat, game: tx(game), when: a.when, description: a.description, loop: !!a.loop, length: a.length, style: tx(brief), ref: refText });
-  }
-  // Stands in for the model that reads the prompt; it at least follows the reference's length and band balance.
-  function layersFor(a, m) {
-    if (kindOf(a.cat) === 'music') { a.music = true; return STUDIO_DATA.music(a.id, a.name, 100, 57, 'bright').layers; }
-    if (a.loop) return [STUDIO_DATA.bed('main', (a.length || m?.seconds || 8) >= 12 ? 16 : 8, m ? clamp(m.bright / 6000, 0.03, 0.6) : 0.1, 0.4, [[1, 0.25, 0], [3, 0.15, 1]])];
-    const len = clamp(m ? m.seconds : a.length || 0.3, 0.05, 2), f = m ? clamp(m.bright, 150, 3000) : 600, airy = m ? m.high / 100 : 0.3;
-    return [{ kind: 'tone', from: f * 1.2, to: f * 0.8, len, wave: 'triangle', gain: 0.45 * (1 - airy / 2), at: 0 }, { kind: 'noise', len: len * 0.8, cutoff: clamp(airy + 0.2, 0.1, 0.95), gain: 0.35 * (0.3 + airy), attack: 0.002, at: 0 }];
-  }
-  function fill(list, ref) {
-    list.forEach((a) => {
-      const r = ref || referenceFor(a);
-      if (r) a.ref = r.id;
-      a.prompt = promptFor(a, r);
-      if (!a.layers?.length) a.layers = layersFor(a, r && heard(r).measure);
-      a.status = 'working'; a.progress = 0;
-      if (inHost) parent.postMessage({ type: 'asset:prompt', id: a.id, prompt: a.prompt }, '*');
-    });
+  // Asks for sounds that are not made yet, all of them together. count is the drafts of each: one from a button, the
+  // picker's number when the request was typed. text is the words they were asked for in, or a function that gives
+  // each sound its own. Returns whether anything was asked for.
+  function fill(list, ref, count = 1, text = '') {
+    if (!list.length || refuse()) return false;
+    list = list.filter(gen.free);
+    if (!list.length) return false;
+    list.forEach((a) => { const r = ref || referenceFor(a); if (r && r !== a) a.ref = r.id; });
     toast(t('filling', list.length));
-    list.forEach((a, i) => setTimeout(() => { make(a, {}, { key: 'fromPrompt' }); a.status = 'draft'; a.progress = 1; renderOpen(); }, 300 + i * 120));
-    renderOpen();
+    gen.generate(list, { mode: 'make', text, drafts: count });
+    return true;
   }
+  // The empty slots a brought-in sound's "like this" fills: those of its own group. With none, one new slot is made,
+  // so the button's number is for one sound then.
+  const likeSlots = (ref) => assets.filter((a) => a.status === 'pending' && a.cat === ref.cat);
   function likeThis(ref) {
-    let list = assets.filter((a) => a.status === 'pending' && a.cat === ref.cat);
+    if (refuse()) return;
+    let list = likeSlots(ref);
     if (!list.length) {
       const a = blank({ id: makeId(`${nm(ref)} like`, ref.cat), name: t('likeName', nm(ref)), cat: ref.cat, loop: !!ref.loop, music: !!ref.music });
       assets.push(a); list = [a];
@@ -1831,7 +2143,7 @@ ${p.form}`,
   // A reference belongs to the project, a group or one sound. Project and group references are copied into every
   // sound they cover (from says where each copy came from), so each sound carries its own complete list.
   let projectRefs = [];
-  const refBlobs = new Map(), savedRefs = new Set();
+  const refBlobs = new Map();
   const newRefId = () => `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
   const ownRefs = (a) => (a.refs || []).filter((r) => r.from === 'asset');
   const tagged = (list, from) => (list || []).map((r) => ({ ...r, from }));
@@ -2009,7 +2321,7 @@ ${p.form}`,
     return pick;
   }
   function licenseFields(a, after) {
-    const field = (key, label) => { const i = el('input', 'licIn'); i.value = a[key] || ''; i.placeholder = label; i.setAttribute('aria-label', label); i.oninput = () => { a[key] = i.value.trim(); autosave(); after?.(); }; return i; };
+    const field = (key, label) => { const i = el('input', 'licIn'); i.value = a[key] || ''; i.placeholder = label; i.setAttribute('aria-label', label); i.oninput = () => { a[key] = i.value.trim(); creditSources(a); autosave(); after?.(); }; return i; };
     return [field('license', t('licenseLater')), field('holder', t('holderLater'))];
   }
   function importDialog(just = []) {
@@ -2173,13 +2485,14 @@ ${p.form}`,
     const c = catOf(a.cat), dir = exportOpts.folders === 'cat' ? (c ? folderOf(c) : a.cat) : exportOpts.folders === 'kind' ? kindOf(a.cat) : '';
     return [exportOpts.root || 'audio', dir, `${a.id}.${exportOpts.format}`].filter(Boolean).join('/');
   };
-  // Sounds are made at the synth's rate; the chosen rate comes from the browser's own resampler.
-  async function resample(data, from, to) {
-    if (from === to) return data;
-    const off = new OfflineAudioContext(1, Math.max(1, Math.ceil(data.length * to / from)), to), buf = off.createBuffer(1, data.length, from);
-    buf.copyToChannel(data, 0);
+  // A sound keeps its own rate and channels; the chosen rate comes from the browser's own resampler, channel by channel.
+  async function resample(chans, from, to) {
+    if (from === to) return chans;
+    const n = chans[0].length, off = new OfflineAudioContext(chans.length, Math.max(1, Math.ceil(n * to / from)), to), buf = off.createBuffer(chans.length, n, from);
+    chans.forEach((c, i) => buf.copyToChannel(c, i));
     const src = off.createBufferSource(); src.buffer = buf; src.connect(off.destination); src.start();
-    return (await off.startRendering()).getChannelData(0);
+    const out = await off.startRendering();
+    return chans.map((_, i) => out.getChannelData(i));
   }
   // OGG and MP3 come from wasm-media-encoders (LAME and libvorbis built to WebAssembly), loaded the first time they are asked for.
   let encLib = null;
@@ -2188,18 +2501,33 @@ ${p.form}`,
     s.onload = () => ok(window.WasmMediaEncoder); s.onerror = () => { encLib = null; no(new Error('encoder script')); }; document.head.append(s);
   }));
   const wasmBytes = {};
-  async function encode(data, rate) {
+  async function encode(chans, rate) {
     const fmt = exportOpts.format;
-    if (fmt === 'wav') return importer.encodeWav(data, rate, exportOpts.bits);
+    if (fmt === 'wav') return importer.encodeWav(chans, rate, exportOpts.bits);
     const lib = await loadEncoders(), mime = fmt === 'mp3' ? 'audio/mpeg' : 'audio/ogg';
     wasmBytes[fmt] ||= await (await fetch(`vendor/${fmt}.wasm`)).arrayBuffer();
     const enc = await lib.createEncoder(mime, wasmBytes[fmt].slice(0));
     const q = { high: [2, 6], mid: [4, 4], low: [6, 2] }[exportOpts.quality] || [2, 6];
-    enc.configure({ channels: 1, sampleRate: rate, vbrQuality: fmt === 'mp3' ? q[0] : q[1] });
+    // These encoders take one or two channels; anything wider goes out as its mix.
+    const run = chans.length > 2 ? [assetStore.mono(chans)] : chans;
+    enc.configure({ channels: run.length, sampleRate: rate, vbrQuality: fmt === 'mp3' ? q[0] : q[1] });
     const parts = [], take = (u) => { if (u.length) parts.push(u.slice()); };
-    take(enc.encode([data])); take(enc.finalize());
+    take(enc.encode(run)); take(enc.finalize());
     const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let at = 0;
     for (const p of parts) { out.set(p, at); at += p.length; }
+    return out;
+  }
+  // The file of one sound in the chosen format. A generated sound that is already in that format goes out as the very
+  // bytes that were measured; everything else is decoded, brought to the chosen rate and encoded.
+  async function exportBytes(a) {
+    const v = heard(a), had = !!v.sound;
+    if (v.engine === 'nkido' && exportOpts.format === 'wav' && v.rate === exportOpts.rate && v.bits === exportOpts.bits) {
+      const raw = await store.bytes(v.key).catch(() => null);
+      if (raw) return raw;
+    }
+    const s = await ensure(a, v), out = await encode(await resample(s.chans, s.rate, exportOpts.rate), exportOpts.rate);
+    // A sound decoded only for this file is let go again, so a long export does not hold every sound at once.
+    if (!had && !assetStore.isLegacy(v) && player?.version !== v && openAsset !== a) delete v.sound;
     return out;
   }
   // Spec, credits and lint for every approved sound, the audio of `list`, and the Godot files when they are asked for.
@@ -2212,11 +2540,11 @@ ${p.form}`,
       id_rule: idRule, export: exportOpts,
       dynamics: dynamics.map(dynToSpec),
       assets: assets.map((a) => {
-        const v = a.versions.length ? heard(a) : null;
+        const v = a.versions.length ? heard(a) : null, prompt = (v && v.prompt) || a.prompt; // what the sound was made from
         return { id: a.id, name: nm(a), category: a.cat, length: v ? Math.round(v.measure.seconds * 100) / 100 : a.length ?? null, loop: !!a.loop, when: a.when || '', description: a.description || '',
           file: going.includes(a) ? exportPath(a) : null, status: a.status === 'approved' ? 'approved' : a.versions.length ? 'draft' : 'pending',
           ...(ownRefs(a).length ? { references: ownRefs(a).map(refSpec) } : {}),
-          origin: a.imported ? 'imported' : 'made', ...(a.imported ? { source_file: a.file || '', license: a.license || '', holder: a.holder || '' } : {}), ...(a.prompt ? { prompt: a.prompt } : {}) };
+          origin: a.imported ? 'imported' : 'made', ...(a.imported ? { source_file: a.file || '', license: a.license || '', holder: a.holder || '' } : {}), ...(prompt ? { prompt } : {}) };
       }),
       questions: [],
     };
@@ -2226,8 +2554,7 @@ ${p.form}`,
     let n = 0;
     for (const a of list) {
       if (list.length > 1) { toast(t('encoding', ++n, list.length), 0); await breathe(); }
-      const s = heard(a).sound;
-      files.push({ path: exportPath(a), bytes: await encode(await resample(s.mix, s.rate, exportOpts.rate), exportOpts.rate) });
+      files.push({ path: exportPath(a), bytes: await exportBytes(a) });
     }
     if (exportOpts.engine === 'godot') {
       if (!window.godotExport) throw new Error('godot.js');
@@ -2251,7 +2578,7 @@ ${p.form}`,
   let gameDir = null, folderAsk = null, folderTimer = 0, folderChain = Promise.resolve();
   const folderWaiting = new Set();
   async function keepDir(dir) {
-    try { const q = (await idb()).transaction('board', 'readwrite'); if (dir) q.objectStore('board').put(dir, 'gameDir'); else q.objectStore('board').delete('gameDir'); await done(q); }
+    try { await (dir ? store.put('gameDir', dir) : store.del('gameDir')); }
     catch { /* the link lasts this visit only */ }
   }
   function toFolder(list) {
@@ -2356,16 +2683,30 @@ ${p.form}`,
     beds.forEach((a, i) => d.layers.push({ asset: a.id, role: 'bed', param: i ? 'intensity' : '', on: [0.3, 0.8], gain: 1, scatter: { min_gap: 2, max_gap: 8, pitch: [0.9, 1.1], pan: [-0.8, 0.8] } }));
     dynDialog(d);
   }
-  let dynPlayer = null;
+  let dynPlayer = null, dynN = 0; // dynN: a start still waiting for its sounds gives way to whatever was asked after it
   function dynStop() {
+    dynN++;
     if (!dynPlayer) return;
     clearTimeout(dynPlayer.timer); dynPlayer.timers.forEach(clearTimeout);
     dynPlayer.nodes.forEach((n) => { try { n.stop(); } catch { /* over */ } });
     dynPlayer = null;
   }
-  const bufferOf = (a) => { const s = heard(a).sound, b = ctx.createBuffer(1, s.mix.length, s.rate); b.copyToChannel(s.mix, 0); return b; };
+  // A layer plays the sound as it is, every channel at its own rate. Null while that sound is not in memory.
+  const bufferOf = (a) => {
+    const s = heard(a).sound;
+    if (!s || !s.chans[0]?.length) return null;
+    try { const b = ctx.createBuffer(s.chans.length, s.chans[0].length, s.rate); s.chans.forEach((c, i) => b.copyToChannel(c, i)); return b; }
+    catch { return null; }
+  };
+  // Starts once the sound of every layer is in memory. Resolves true when that took a moment, so the dialog can catch up.
   function dynStart(d) {
     audio(); stopSound(); dynStop();
+    const mine = dynN, wait = [];
+    for (const l of d.layers) { const a = byId(l.asset); if (a?.versions.length && !heard(a).sound) wait.push(ensure(a).catch(() => null)); }
+    if (!wait.length) { dynBegin(d); return Promise.resolve(false); }
+    return Promise.all(wait).then(() => { if (mine !== dynN) return false; dynBegin(d); return true; });
+  }
+  function dynBegin(d) {
     const at = ctx.currentTime + 0.05, p = { d, nodes: [], gains: [], timers: [] };
     for (const l of d.layers) {
       const a = byId(l.asset); if (!a?.versions.length) continue;
@@ -2373,14 +2714,17 @@ ${p.form}`,
       if (l.role === 'scatter') {
         const fire = () => {
           if (dynPlayer !== p) return;
-          const src = ctx.createBufferSource(), pan = ctx.createStereoPanner(), s = l.scatter, r = (lo, hi) => lo + Math.random() * (hi - lo);
-          src.buffer = bufferOf(a); src.playbackRate.value = r(...(s.pitch || [1, 1])); pan.pan.value = r(...(s.pan || [0, 0]));
-          src.connect(pan); pan.connect(g); src.start(); p.nodes.push(src);
+          const src = ctx.createBufferSource(), pan = ctx.createStereoPanner(), s = l.scatter, r = (lo, hi) => lo + Math.random() * (hi - lo), buffer = bufferOf(a);
+          if (buffer) {
+            src.buffer = buffer; src.playbackRate.value = r(...(s.pitch || [1, 1])); pan.pan.value = r(...(s.pan || [0, 0]));
+            src.connect(pan); pan.connect(g); src.start(); p.nodes.push(src);
+          }
           p.timers.push(setTimeout(fire, r(s.min_gap, s.max_gap) * 1000));
         };
         p.timers.push(setTimeout(fire, Math.random() * 1000 * (l.scatter.min_gap || 1)));
       } else {
-        const src = ctx.createBufferSource(); src.buffer = bufferOf(a); src.loop = true; src.connect(g); src.start(at); p.nodes.push(src);
+        const buffer = bufferOf(a); if (!buffer) continue;
+        const src = ctx.createBufferSource(); src.buffer = buffer; src.loop = true; src.connect(g); src.start(at); p.nodes.push(src);
       }
     }
     dynPlayer = p;
@@ -2398,7 +2742,9 @@ ${p.form}`,
     const changed = () => { if (!kept()) dynamics.push(d); renderBoard(); autosave(); };
     dlg.onclose = () => { dynStop(); dynMix.clear(); dlg.onclose = null; renderBoard(); };
     const redraw = () => { const top = dlg.scrollTop; dlg.textContent = ''; build(); dlg.scrollTop = top; };
-    const restart = () => { if (dynPlayer?.d === d) dynStart(d); };
+    // A start that had to wait for its sounds redraws the dialog when it begins (it is still this dialog: opening or closing one stops the wait).
+    const caught = (late) => { if (late) { dynLevels(); redraw(); } };
+    const restart = () => { if (dynPlayer?.d === d) dynStart(d).then(caught); };
     const row = (label, ...kids) => { const r = el('label', 'lineItem'); r.append(el('span', 'grow', label), ...kids); dlg.append(r); return r; };
     const input = (value, set, type = 'text', width) => { const i = el('input'); i.type = type; i.value = value; if (type === 'number') i.step = 'any'; if (width) i.style.width = width; i.oninput = () => { set(type === 'number' ? +i.value : i.value); dynLevels(); changed(); }; return i; };
     const select = (value, choices, set) => { const s = el('select'); choices.forEach(([v, l]) => s.add(new Option(l, v))); s.value = value; s.onchange = () => { set(s.value); dynLevels(); changed(); }; return s; };
@@ -2411,7 +2757,7 @@ ${p.form}`,
       const card = el('div', 'dynLayer'), mix = dynMix.get(l) || {}; card.layer = l; card.d = d;
       const pick = select(l.asset, usable.map((a) => [a.id, nm(a)]), (v) => { l.asset = v; restart(); }); pick.setAttribute('aria-label', t('layersHead'));
       const lvl = el('span', 'lvl'); lvl.append(el('i'));
-      const solo = iconButton('solo', t('layerSolo'), () => { dynMix.set(l, { ...mix, solo: !mix.solo }); if (dynPlayer?.d !== d) dynStart(d); dynLevels(); redraw(); }, 'ghost iconBtn');
+      const solo = iconButton('solo', t('layerSolo'), () => { dynMix.set(l, { ...mix, solo: !mix.solo }); if (dynPlayer?.d !== d) dynStart(d).then(caught); dynLevels(); redraw(); }, 'ghost iconBtn');
       solo.setAttribute('aria-pressed', String(!!mix.solo));
       const mute = iconButton(mix.mute ? 'muted' : 'sound', t('layerMute'), () => { dynMix.set(l, { ...mix, mute: !mix.mute }); dynLevels(); redraw(); }, 'ghost iconBtn');
       mute.setAttribute('aria-pressed', String(!!mix.mute));
@@ -2437,7 +2783,7 @@ ${p.form}`,
     function build() {
       dlg.append(iconButton('close', t('close'), () => { dynStop(); dlg.close(); }, 'ghost iconBtn dlgClose'), el('h2', '', t('dynHead')));
       const play = el('button', 'primary', dynPlayer?.d === d ? t('stop') : t('play'));
-      play.onclick = () => { if (dynPlayer?.d === d) dynStop(); else dynStart(d); redraw(); };
+      play.onclick = () => { if (dynPlayer?.d === d) dynStop(); else dynStart(d).then(caught); redraw(); };
       const top = el('div', 'dlgRow'); top.style.justifyContent = 'flex-start'; top.append(play); dlg.append(top);
       row(t('nameLabel'), input(d.name, (v) => { d.name = v; }));
       row(t('dynType'), select(d.type, Object.entries(t('dynTypes')), (v) => { d.type = v; d.layers.forEach((l) => { if (v === 'music') l.role = 'stem'; else if (l.role === 'stem') l.role = 'bed'; }); restart(); redraw(); }));
@@ -2474,120 +2820,127 @@ ${p.form}`,
   }
 
   /* ---------- autosave: the board survives a reload, a closed tab and a trip to the game ---------- */
-  // IndexedDB holds the board as recipes (each version is its change + note, re-rendered when heard) and every
-  // brought-in sound as a Blob. Nothing to press: every change is written shortly after it happens.
-  const SAVE_DB = 'olmuse-asset-board';
-  let dbOpen = null, saveTimer = 0, chain = Promise.resolve(), paused = true, warnedFull = false;
-  const savedAudio = new Set();
-  const idb = () => (dbOpen ||= new Promise((ok, no) => {
-    const r = indexedDB.open(SAVE_DB, 1);
-    r.onupgradeneeded = () => { r.result.createObjectStore('board'); r.result.createObjectStore('audio'); };
-    r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); r.onblocked = () => no(new Error('blocked'));
-  }));
-  const done = (q) => new Promise((ok, no) => { q.oncomplete = () => ok(); q.onerror = () => no(q.error); q.onabort = () => no(q.error || new Error('abort')); });
-  const asked = (q) => new Promise((ok, no) => { q.onsuccess = () => ok(q.result); q.onerror = () => no(q.error); });
+  // store.js does the reading and writing. The board record holds every version as a record: a legacy one as its recipe
+  // (change + note, rendered again when heard), the others with their measurements, their sound kept as Blobs beside it.
+  // Nothing to press: every change is written shortly after it happens.
+  let saveTimer = 0, shown = 'empty', toldFailed = false; // shown: what the last read put on screen
   const keyOf = (a) => (a.key ||= `k${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`);
-  const recipe = (v) => ({ change: v.change, note: v.note, at: v.at });
+  // What is saved of an asset's versions. Drafts are kept while they are under review, and for as long as a job
+  // record (a.work) names the sound, whatever its status: a draft fetched again on a later visit arrives at a sound
+  // that is no longer "working", and it has to be in the record before its job counts as received. The pick is kept
+  // with them, so a sound asked for again while under review comes back with the draft it was heard by. Work without
+  // a job record comes back as it was before the request. In the trash only the versions stay.
+  function keptOf(a, binned) {
+    const kept = !binned && (a.status === 'review' || !!a.work);
+    const status = (a.status === 'working' || a.status === 'review') && !kept ? (a.versions.length ? 'draft' : 'pending') : a.status;
+    return { status, versions: a.versions, drafts: kept ? a.drafts : [], pick: kept ? a.pick : -1 };
+  }
   function snapshot() {
+    const one = (binned) => (a) => {
+      const { versions, drafts: options, source, progress, ...rest } = a, kept = keptOf(a, binned);
+      return { ...rest, key: source ? keyOf(a) : a.key, status: kept.status, versions: kept.versions.map(assetStore.record), drafts: kept.drafts.map(assetStore.record), pick: kept.pick, hasSource: !!source };
+    };
     return {
-      v: 1, game, brief, platform, demo, stage, loud: [...rule('loud').range], cats, idRule, exportOpts, projectRefs, agentLog: agentLog.slice(-30),
-      trash: trash.map((a) => { const { versions, drafts: options, source, progress, ...rest } = a; return { ...rest, key: source ? keyOf(a) : a.key, status: a.status === 'working' || a.status === 'review' ? (versions.length ? 'draft' : 'pending') : a.status, versions: versions.map(recipe), drafts: [], pick: -1, hasSource: !!source }; }),
+      v: assetStore.SNAPSHOT, game, brief, platform, demo, stage, loud: [...loudRange], cats, idRule, exportOpts, projectRefs, agentLog: agentLog.slice(-30),
+      trash: trash.map(one(true)),
       dynamics: dynamics.map((d) => ({ ...d, params: d.params.map((p) => ({ ...p })) })),
-      assets: assets.map((a) => {
-        const { versions, drafts: options, source, progress, ...rest } = a;
-        // Work that was still running comes back as it was before the request; it can be asked again.
-        const status = a.status === 'working' ? (versions.length ? 'draft' : 'pending') : a.status;
-        return { ...rest, key: source ? keyOf(a) : a.key, status, versions: versions.map(recipe), drafts: status === 'review' ? options.map(recipe) : [], pick: status === 'review' ? a.pick : -1, hasSource: !!source };
-      }),
+      assets: assets.map(one(false)),
     };
   }
-  async function write() {
-    syncRefs();
-    const data = snapshot(), d = await idb(), keep = new Set([...assets, ...trash].filter((a) => a.source).map(keyOf));
-    const q = d.transaction(['board', 'audio'], 'readwrite');
-    q.objectStore('board').put(data, 'board');
-    for (const a of [...assets, ...trash]) if (a.source && !savedAudio.has(a.key)) q.objectStore('audio').put(new Blob([a.source]), a.key);
-    for (const k of savedAudio) if (!keep.has(k)) q.objectStore('audio').delete(k);
-    // Reference files share the store under ref: keys; one dropped from every list is deleted with the next save.
-    const refsKept = refKeys();
-    for (const k of refsKept) if (!savedRefs.has(k) && refBlobs.has(k)) q.objectStore('audio').put(new Blob([refBlobs.get(k)]), k);
-    for (const k of savedRefs) if (!refsKept.has(k)) q.objectStore('audio').delete(k);
-    await done(q);
-    savedAudio.clear(); keep.forEach((k) => savedAudio.add(k));
-    savedRefs.clear(); refsKept.forEach((k) => savedRefs.add(k));
-    for (const k of [...refBlobs.keys()]) if (!refsKept.has(k)) refBlobs.delete(k);
-  }
-  // Oldest versions that are not the one in use go first: drafts that lost a comparison stay in the history.
-  function prune() {
-    const old = assets.flatMap((a) => a.versions.map((v) => ({ a, v })).filter((x) => x.v !== x.a.versions[x.a.current])).sort((x, y) => x.v.at - y.v.at);
-    const cut = old.slice(0, Math.max(1, Math.ceil(old.length / 2)));
-    for (const { a, v } of cut) { const now = a.versions[a.current]; a.versions.splice(a.versions.indexOf(v), 1); a.current = a.versions.indexOf(now); }
-    return old.length ? cut.length : 0;
-  }
-  const full = (e) => e && (e.name === 'QuotaExceededError' || /quota/i.test(e.message || ''));
-  async function job() {
-    try { await write(); navigator.storage?.persist?.().catch(() => {}); }
-    catch (e) {
-      if (!full(e)) return;
-      let cleared = 0;
-      for (let n = prune(); n; n = prune()) {
-        cleared += n;
-        try { await write(); toast(t('pruned', cleared), 5000); return; } catch (again) { if (!full(again)) return; }
-      }
-      if (!warnedFull) { warnedFull = true; toast(t('saveFull'), 8000); }
+  // Every audio key the saved board uses. A maker comes with what this page holds itself (the source of legacy
+  // versions, a reference file); the sound of a version waits in the store until it is written.
+  function audioKeys() {
+    const want = new Map();
+    for (const [list, binned] of [[assets, false], [trash, true]]) for (const a of list) {
+      if (a.source) want.set(keyOf(a), () => new Blob([a.source]));
+      const kept = keptOf(a, binned);
+      for (const v of [...kept.versions, ...kept.drafts]) for (const k of assetStore.versionKeys(v)) want.set(k, null);
     }
+    for (const k of refKeys()) want.set(k, refBlobs.has(k) ? () => new Blob([refBlobs.get(k)]) : null);
+    return want;
   }
-  // Writes queue up one after another, so an older snapshot never lands after a newer one.
-  function saveNow() {
-    clearTimeout(saveTimer);
-    if (!paused) chain = chain.then(job, job);
-    return chain;
-  }
-  function autosave() { if (paused) return; clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 500); }
-  addEventListener('pagehide', saveNow);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(hoverTimer); queue = null; stopSound(); dynStop(); saveNow(); } });
-  addEventListener('blur', () => { clearTimeout(hoverTimer); if (player?.hover) stopSound(); });
-  async function restore() {
-    let data = null;
-    const blobs = new Map();
-    try {
-      const d = await Promise.race([idb(), new Promise((_, no) => setTimeout(() => no(new Error('slow')), 3000))]);
-      const q = d.transaction(['board', 'audio']);
-      data = await asked(q.objectStore('board').get('board'));
-      gameDir = (await asked(q.objectStore('board').get('gameDir'))) || null;
-      const keys = await asked(q.objectStore('audio').getAllKeys()), values = await asked(q.objectStore('audio').getAll());
-      keys.forEach((k, i) => blobs.set(k, values[i]));
-    } catch { return false; }
-    if (!data || !Array.isArray(data.assets)) return false;
+  // Puts a read record on screen. Everything is built first, so a record that turns out wrong (the store then answers
+  // 'failed') leaves the board that is showing as it was.
+  function applySnapshot(data, buffers, info) {
+    const live = [], binned = [], files = new Map();
+    for (const [list, into] of [[data.assets, live], [data.trash || [], binned]]) for (const x of list) {
+      const { hasSource, ...a } = x;
+      a.progress = 0;
+      a.versions = Array.isArray(a.versions) ? a.versions : []; a.drafts = Array.isArray(a.drafts) ? a.drafts : [];
+      if (hasSource && buffers.has(a.key)) a.source = new Float32Array(buffers.get(a.key));
+      into.push(a);
+    }
+    for (const [k, buf] of buffers) if (String(k).startsWith('ref:')) files.set(k, new Uint8Array(buf));
     ({ game, brief, platform, demo, stage } = data);
-    if (Array.isArray(data.loud)) rule('loud').range = data.loud;
+    if (Array.isArray(data.loud) && data.loud.length === 2) loudRange = [...data.loud];
     if (Array.isArray(data.cats) && data.cats.length) cats = data.cats;
     if (data.idRule) idRule = data.idRule;
     if (data.exportOpts) exportOpts = { ...exportOpts, ...data.exportOpts };
     projectRefs = Array.isArray(data.projectRefs) ? data.projectRefs : [];
     agentLog = Array.isArray(data.agentLog) ? data.agentLog : [];
-    for (const [k, blob] of blobs) if (String(k).startsWith('ref:')) { try { refBlobs.set(k, new Uint8Array(await blob.arrayBuffer())); savedRefs.add(k); } catch { /* unreadable blob */ } }
+    refBlobs.clear(); files.forEach((bytes, k) => refBlobs.set(k, bytes));
     if (Array.isArray(data.dynamics)) dynamics = data.dynamics;
-    assets.length = 0; trash = [];
-    for (const x of [...data.assets, ...(data.trash || []).map((y) => ({ ...y, inTrash: true }))]) {
-      const { hasSource, ...a } = x;
-      a.progress = 0;
-      if (hasSource) {
-        const blob = blobs.get(a.key);
-        let source = null;
-        try { source = blob && new Float32Array(await blob.arrayBuffer()); } catch { /* unreadable blob */ }
-        if (source) { a.source = source; savedAudio.add(a.key); }
-        else Object.assign(a, { versions: [], drafts: [], pick: -1, current: 0, status: 'pending' }); // the browser dropped the audio
-      }
-      if (a.inTrash) { delete a.inTrash; trash.push(a); } else assets.push(a);
+    gameDir = info?.gameDir || null;
+    assets.length = 0; assets.push(...live); trash = binned;
+  }
+  // The store writes the board record first, then each sound that is not on disk yet, and runs one save at a time, so
+  // an older snapshot never lands after a newer one. It writes nothing while this tab may not (another tab has the
+  // board, or the saved board could not be read).
+  function saveNow() {
+    clearTimeout(saveTimer);
+    return store.save().then((ok) => {
+      if (!ok) return;
+      navigator.storage?.persist?.().catch(() => {});
+      // A reference file dropped from every list is deleted with the save; its bytes go from memory too.
+      const kept = refKeys();
+      for (const k of [...refBlobs.keys()]) if (!kept.has(k)) refBlobs.delete(k);
+      gen.check(); // a draft whose sound found room only now counts as received
+    }).catch(() => {});
+  }
+  function autosave() { if (!store.writable) return; clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 500); }
+  addEventListener('pagehide', saveNow);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(hoverTimer); queue = null; stopSound(); dynStop(); saveNow(); } });
+  addEventListener('blur', () => { clearTimeout(hoverTimer); if (player?.hover || playWait?.hover) stopSound(); });
+  // After a read. A board that could not be opened is never written over on this visit (tellFailed says so).
+  async function afterRestore(result) {
+    if (result === 'failed') return;
+    if (result === 'empty') gameDir = (await store.get('gameDir')) || null; // a folder linked before anything was saved
+    shown = result;
+  }
+  // The first visit opens the tutorial, also when the saved board could not be opened or the browser keeps nothing.
+  // A view-only tab leaves it for the next visit: nothing in it could be pressed there.
+  function greet() {
+    if (store.readOnly) return;
+    let seen = false;
+    try { seen = !!localStorage.getItem('asset-tutorial-seen'); localStorage.setItem('asset-tutorial-seen', '1'); } catch { /* shows again next time */ }
+    if (!seen) tutorial();
+  }
+  // A board that could not be opened is said once. While a dialog is up (the tutorial), it waits until that is closed.
+  function tellFailed() {
+    if (toldFailed) return;
+    if (dlg.open) { dlg.addEventListener('close', tellFailed, { once: true }); return; }
+    toldFailed = true; toast(t('loadFailed'), 8000);
+  }
+  // The other tab closed and this one has the board now. The store has read it again: what is on screen is replaced
+  // by what was saved, and only then is input taken.
+  function tookOver(result) {
+    // A read that failed on this visit, now or earlier, keeps the visit from saving for good, even when this last read
+    // worked: the tab would show the real board, take every change and keep none. So it starts over as a new visit
+    // that has the board. It does the same when the other tab started again from the samples while this one still
+    // shows the old board.
+    if (store.paused || (result === 'empty' && shown !== 'empty')) { location.reload(); return; }
+    $('toast').hidden = true;
+    if (result === 'restored') {
+      clearTimeout(hoverTimer); queue = null; stopSound(); dynStop();
+      if (dlg.open) dlg.close();
+      selected.clear(); focused = null; anchor = null; openAsset = null; showDetail(false);
+      renderBoard();
     }
-    return true;
+    afterRestore(result).then(() => { gen.attach(); greet(); });
   }
-  // "Start again from samples" really starts again.
-  async function forget() {
-    paused = true; clearTimeout(saveTimer); await chain;
-    try { const q = (await idb()).transaction(['board', 'audio'], 'readwrite'); q.objectStore('board').clear(); q.objectStore('audio').clear(); await done(q); } catch { /* nothing saved */ }
-  }
+  // "Start again from samples" really starts again. Sounds still being made, on the board or in the trash, are
+  // cancelled first; the cancel is sent so that it outlives the page, and is not waited for.
+  async function forget() { clearTimeout(saveTimer); gen.cancel([...assets, ...trash]); await store.clear(); }
 
   /* ---------- host page ---------- */
   const inHost = window.parent !== window;
@@ -2602,7 +2955,7 @@ ${p.form}`,
   function setLang(next) {
     if (!LANGS.includes(next)) return;
     lang = next; applyStatic();
-    $('draftSlot').replaceChildren(draftPicker());
+    $('draftSlot').replaceChildren(draftPicker(true));
     if (openAsset) renderDetail(); else renderBoard(); // the detail keeps a typed request across the redraw
     markPlaying();
     if (dlg.open && reopen) { const again = reopen; dlg.close(); again(); }
@@ -2617,13 +2970,17 @@ ${p.form}`,
   $('exportBtn').onclick = exportDialog;
   $('boardBack').onclick = $('gameTitle').onclick = () => { if (openAsset) closeDetail(); };
   $('prevAsset').onclick = () => step(-1); $('nextAsset').onclick = () => step(1);
-  addEventListener('resize', () => { if (openAsset) renderDetail(); else assets.filter((a) => a.versions.length).forEach(drawTile); });
-  $('draftSlot').append(draftPicker());
+  addEventListener('resize', () => { if (openAsset) renderDetail(); else assets.filter(hasSound).forEach(drawTile); });
+  $('draftSlot').append(draftPicker(true));
   (async () => {
-    await restore().catch(() => false);
-    paused = false; renderBoard(); liveLoop();
-    let seen = false;
-    try { seen = !!localStorage.getItem('asset-tutorial-seen'); localStorage.setItem('asset-tutorial-seen', '1'); } catch { /* shows again next time */ }
-    if (!seen) tutorial();
+    // One tab has the board at a time. This one asks for it, then reads what was saved either way: without the board
+    // it shows the same sounds, view-only, until the other tab is closed.
+    await store.lock();
+    const result = await store.restore();
+    await afterRestore(result);
+    renderBoard(); liveLoop();
+    gen.attach(); // work a reload interrupted is picked up once the token is here too
+    greet();
+    if (result === 'failed') tellFailed();
   })();
 })();
