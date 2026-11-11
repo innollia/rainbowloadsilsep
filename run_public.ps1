@@ -72,8 +72,23 @@ $config = Join-Path $HOME '.cloudflared\olmuse.yml'
 try {
   while ($true) {
     if (-not (Get-NetTCPConnection -LocalPort 8501 -State Listen -ErrorAction SilentlyContinue)) { Start-App }
-    & $tunnel tunnel --config $config run olmuse 2>&1 | Select-Object -Last 3
-    Write-Host "$(Get-Date -Format s) tunnel exited ($LASTEXITCODE), restarting in 5s"
+    # The tunnel can stay alive with no connection to Cloudflare, and visitors then get error 1033. Its own /ready
+    # answers 200 only while it has a connection; three misses in a row (about 45 s) and it is started again. What it
+    # says goes to a file, so a drop can be read afterwards.
+    $run = Start-Process $tunnel -WindowStyle Hidden -PassThru -ArgumentList 'tunnel', '--config', "`"$config`"", '--metrics', '127.0.0.1:20741', '--logfile', "`"$(Join-Path $logs 'tunnel.log')`"", 'run', 'olmuse'
+    $missed = 0; Start-Sleep 20
+    while (-not $run.HasExited) {
+      $ready = $false
+      try { $ready = (Invoke-WebRequest 'http://127.0.0.1:20741/ready' -UseBasicParsing -TimeoutSec 5).StatusCode -eq 200 } catch { }
+      if ($ready) { $missed = 0 } else { $missed++ }
+      if ($missed -ge 3) {
+        Write-Host "$(Get-Date -Format s) tunnel has no connection, starting it again"
+        Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue; break
+      }
+      if (-not (Get-NetTCPConnection -LocalPort 8501 -State Listen -ErrorAction SilentlyContinue)) { Start-App }
+      Start-Sleep 15
+    }
+    Write-Host "$(Get-Date -Format s) tunnel stopped, restarting in 5s"
     Start-Sleep 5
   }
 }
