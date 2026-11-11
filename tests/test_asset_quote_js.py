@@ -632,6 +632,50 @@ def test_an_answer_that_changes_many_sounds_one_by_one_is_one_request_for_the_ch
     assert got["words"] is True and got["status"] == ["working"] and got["said"] == "Making them." and got["kept"] is True
 
 
+def test_an_approved_sound_that_is_being_changed_is_still_what_new_sounds_are_told_to_stay_close_to():
+    """A change to an approved sound leaves its approved version in use until a draft of the change is kept. New sounds
+    asked for meanwhile, in the same answer or by the button, still get the approved patches as examples. They used to
+    get none: the examples were picked by the sound's status, which says "being made" from the moment the change is
+    asked for. A sound that was only a draft before its change is no example, and a change itself is given none."""
+    examples = [["sfx_one", "PATCH v-one"], ["sfx_two", "PATCH v-two"], ["amb_wind", "PATCH v-wind"]]
+    made = ["amb_wind", "bgm_title", "sfx_one", "sfx_two", "sfx_three"]
+    posts = r"""
+    out.posts = api.posted('/jobs').map((b) => [[...new Set(b.items.map((i) => i.mode))], b.items.map((i) => i.id), b.examples.map((e) => [e.name, e.source])]);
+    """
+    # One answer changes every made sound and makes the empty slots.
+    got = run_page(TOOLS + AGENT + r"""
+    api.free = true; api.unit = 0;
+    await hand('pw', 'pw:room');
+    write('brighten the made ones and make the empty ones'); await send();
+    await answer('Making them.', [...MADE.map((id) => ({ op: 'revise', assets: [id], text: 'a touch brighter' })),
+      ...['sfx_hit', 'sfx_block', 'sfx_new'].map((id) => ({ op: 'revise', assets: [id], text: 'words for ' + id }))]);
+    await until(() => api.posted('/jobs').length >= 2);
+    await settle(); await advance(0); await settle();
+    """.replace("MADE", json.dumps(made)) + posts, before=SAVED + HOST)
+    assert got["posts"] == [[["revise"], made, []], [["make"], ["sfx_hit", "sfx_block", "sfx_new"], examples]]
+    # Two steps: the changes are under way when "Make all" is pressed. When the changes come to nothing the sounds are
+    # approved as before.
+    got = run_page(TOOLS + AGENT + r"""
+    api.free = true; api.unit = 0;
+    await hand('pw', 'pw:room');
+    write('brighten the made ones'); await send();
+    await answer('Remaking them.', MADE.map((id) => ({ op: 'revise', assets: [id], text: 'a touch brighter' })));
+    await until(() => api.posted('/jobs').length >= 1);
+    await settle(); await advance(0); await settle();
+    out.changing = statusOf(...MADE);
+    $('fillBtn').click();
+    await until(() => api.posted('/jobs').length >= 2);
+    await settle(); await advance(0); await settle();
+    for (const j of api.jobs.values()) if (j.request === api.posted('/jobs')[0].request_id) api.set(j.id, { status: 'failed', refund: 'none' });
+    await advance(1500); await settle();
+    await until(() => !statusOf(...MADE).includes('working'));
+    out.after = statusOf(...MADE);
+    """.replace("MADE", json.dumps(made)) + posts, before=SAVED + HOST)
+    assert got["changing"] == ["working"] * 5
+    assert got["posts"] == [[["revise"], made, []], [["make"], ["sfx_hit", "sfx_block", "sfx_new"], examples]]
+    assert got["after"] == ["approved", "approved", "approved", "approved", "draft"]
+
+
 def test_undo_on_a_held_answer_puts_its_other_changes_back_and_the_request_goes_on_waiting():
     got = run_page(TOOLS + AGENT + r"""
     await hand();
@@ -869,6 +913,47 @@ def test_nothing_is_asked_for_while_what_a_draft_costs_has_not_come_and_no_label
     assert got["priced"] == ["Drafts · 1 credit", "Make all · 3 credits"] and got["made"] == [3, 3, False] and got["quiet"] == 2
 
 
+def test_an_answer_that_would_fill_a_slot_in_its_own_words_leaves_the_slot_alone_while_the_room_takes_no_request():
+    """The price has not come, so nothing can be asked for. An answer of the assistant wants an empty slot made in
+    words of its own. Those words must not become the slot's description or a line in its chat: nothing was started,
+    the toast has no undo for it, and a later "Make all" would make the slot from words the user never saw go out.
+    The slot stays as the plan described it, the way a made sound in the same answer is left alone."""
+    got = run_page(TOOLS + AGENT + r"""
+    const NO_PRICE = 'What a draft costs has not come through yet, so nothing has started. Ask again in a moment. Reloading the page reads the price again too.';
+    let failed = true;
+    api.hook = (call, { err }) => (call.path.startsWith('/quote') && failed ? err(503, 'busy') : null);
+    tell({ type: 'asset:token', token: tokenOf('acct', 'acct:me'), ttl: 900, api: BASE });
+    await until(() => quotes() === 1); await settle(); await advance(0);
+    const kept = (id) => { const a = onDisk(id); return [a.description ?? null, a.chat]; };
+    write('make the hit heavier, and three brighter'); await send();
+    // The rename is something the answer can do, and it is saved: by then the board on disk is the board after the answer.
+    await answer('Making them.', [{ op: 'rename', assets: ['sfx_two'], name: 'Two' }, { op: 'revise', assets: ['sfx_hit'], text: 'heavy sword on metal' },
+      { op: 'revise', assets: ['sfx_three'], text: 'brighter' }, { op: 'revise', assets: ['sfx_block', 'sfx_new'], text: 'a dull thud' }]);
+    out.said = said() === NO_PRICE + ' Undo';
+    out.posts = api.posted('/jobs').length;
+    out.status = statusOf('sfx_hit', 'sfx_block', 'sfx_new', 'sfx_three');
+    await advance(600);
+    await until(() => onDisk('sfx_two').name === 'Two');
+    out.slots = [kept('sfx_hit'), kept('sfx_block'), kept('sfx_new')];
+    out.made = kept('sfx_three');
+    // In the slot's own view too: no line was added to what was asked of it.
+    tileOf('sfx_hit').focus(); key('Enter', tileOf('sfx_hit'));
+    await until(() => !!document.querySelector('.detailDock'));
+    out.lines = document.querySelectorAll('.tabBody .msg').length;
+    key('Escape'); await settle();
+    // The price comes. "Make all" makes the slots from the descriptions of the plan.
+    failed = false;
+    await advance(10000); await until(() => quotes() >= 2); await settle();
+    $('fillBtn').click();
+    await until(() => api.posted('/jobs').length === 1);
+    out.madeFrom = api.posted('/jobs')[0].items.map((i) => [i.id, i.description]);
+    """, before=SAVED + PLANNED + HOST)
+    assert got["said"] is True and got["posts"] == 0 and got["status"] == ["pending", "pending", "pending", "draft"]
+    assert got["slots"] == [["Sword hit, combat, short and dry", []], ["Shield block, a dull thud", []], [None, []]]
+    assert got["made"] == [None, []] and got["lines"] == 0
+    assert got["madeFrom"] == [["sfx_hit", "Sword hit, combat, short and dry"], ["sfx_block", "Shield block, a dull thud"], ["sfx_new", ""]]
+
+
 def test_a_room_whose_price_reads_no_api_answers_says_that_making_sounds_is_not_connected():
     """Where no API is behind the address, another server's page comes back to every read of the price. The first
     requests are told that the price has not come. After three such reads the room no longer asks to try again in a
@@ -904,6 +989,85 @@ def test_a_room_whose_price_reads_no_api_answers_says_that_making_sounds_is_not_
     assert got["third"] == [True, 0, ["pending"] * 3]
     assert got["agent"] == [True, 0, ["draft"]]
     assert got["back"] == "Make all · 3 credits" and got["made"] == [3, False, False]
+
+
+def test_a_slot_that_was_to_be_like_a_brought_in_sound_which_came_back_empty_is_made_without_it():
+    """Filling writes on each slot which brought-in sound it takes after, before anything is sent. On a later visit
+    that sound may have come back as an empty slot (its bytes were not on disk). The slot was then still told to take
+    after it, there was nothing to measure, and "Make all" started nothing and said that AI is not connected, for
+    every slot of the board and on every press. A sound with no version is no longer one to take after: the slot goes
+    by another brought-in sound of its group when there is one, and by none when there is not."""
+    story = TOOLS + r"""
+    await hand();
+    out.label = $('fillBtn').textContent;
+    $('fillBtn').click();
+    await until(() => api.posted('/jobs').length === 1 || statusOf('sfx_hit')[0] === 'pending');
+    out.said = said();
+    out.sent = api.posted('/jobs').map((b) => b.items.map((i) => [i.id, i.style_ref ? i.style_ref.name : null]));
+    out.status = statusOf('sfx_mine', 'sfx_hit', 'sfx_block', 'sfx_new');
+    """
+    like_mine = "BOARD.assets.find((a) => a.id === 'sfx_hit').ref = 'sfx_mine';"                # as an earlier "Make all" left it
+    lost = "disk.stores.get('audio').delete('ver:v-mine');"                                      # its bytes never reached the disk
+    also = r"""
+BOARD.assets.push(onBoard('sfx_also', 'combat', 'approved', [broughtIn('v-also')], { imported: true, file: 'also.wav', license: 'CC0', holder: 'me' }));
+disk.stores.get('audio').set('ver:v-also', new Blob([WAV]));
+"""
+    # The brought-in sound is there: the slots of its group take after it.
+    got = run_page(story, before=SAVED + like_mine + HOST)
+    assert got == {"label": "Make all · 3 credits", "said": "Making 3", "sent": [[["sfx_hit", "sfx_mine"], ["sfx_block", "sfx_mine"], ["sfx_new", None]]],
+                   "status": ["approved", "working", "working", "working"]}
+    # It came back empty: it is one more slot to make, and nothing takes after it.
+    got = run_page(story, before=SAVED + like_mine + lost + HOST)
+    assert got == {"label": "Make all · 4 credits", "said": "Making 4", "sent": [[["sfx_mine", None], ["sfx_hit", None], ["sfx_block", None], ["sfx_new", None]]],
+                   "status": ["working"] * 4}
+    # Another brought-in sound of the group has its sound: that is the one to go by.
+    got = run_page(story, before=SAVED + like_mine + lost + also + HOST)
+    assert got == {"label": "Make all · 4 credits", "said": "Making 4", "status": ["working"] * 4,
+                   "sent": [[["sfx_mine", "sfx_also"], ["sfx_hit", "sfx_also"], ["sfx_block", "sfx_also"], ["sfx_new", None]]]}
+
+
+# Stands between the page and the generator: what the page tells of the sounds named in BROKEN cannot be put together.
+BROKEN_ITEMS = r"""
+const BROKEN = new Set(), realCreate = assetGen.create;
+assetGen.create = (deps) => realCreate({ ...deps, item: (a, o) => { if (BROKEN.has(a.id)) throw new TypeError('nothing to measure'); return deps.item(a, o); } });
+"""
+
+
+def test_sounds_that_could_not_be_asked_for_are_said_so_over_making_them_and_the_others_are_made():
+    """What the page tells the API of one sound may fail to be put together. The toast used to end on the words of
+    the press ("Making them." from the assistant, "Making in this feel" from a brought-in sound) with nothing sent,
+    or on "AI is not connected" from the button. Now the sound that failed goes back alone, the others are asked for,
+    and the toast says how many drafts could not be made."""
+    got = run_page(TOOLS + AGENT + r"""
+    await hand();
+    const sent = () => api.posted('/jobs').map((b) => [b.items.map((i) => i.id), b.expect_credits]);
+    // The button: one of the three slots fails.
+    BROKEN.add('sfx_block');
+    $('fillBtn').click();
+    await until(() => api.posted('/jobs').length === 1 || statusOf('sfx_hit')[0] === 'pending');
+    await settle(); await advance(0); await settle();
+    out.button = { said: said(), sent: sent(), status: statusOf('sfx_hit', 'sfx_block', 'sfx_new') };
+    // The assistant, for the slot that is left and with nothing else in its answer: it cannot be asked for either.
+    pick('sfx_block');
+    write('make the block'); await send();
+    await answer('Making it.', [{ op: 'revise', assets: ['sfx_block'], text: 'a dull thud' }]);
+    out.agent = { said: said(), posts: api.posted('/jobs').length, status: statusOf('sfx_block') };
+    // A change to two made sounds, three drafts each, one of which fails; the answer also renames, so it can be undone.
+    BROKEN.add('sfx_one');
+    pick('sfx_block', 'sfx_one', 'sfx_two'); setDial(3);
+    write('brighter'); await send();
+    await answer('Remaking two.', [{ op: 'rename', assets: ['sfx_three'], name: 'Three' }, { op: 'revise', assets: ['sfx_one', 'sfx_two'], text: 'brighter' }]);
+    await until(() => api.posted('/jobs').length === 2 || statusOf('sfx_two')[0] !== 'working');
+    await settle(); await advance(0); await settle();
+    out.change = { said: said(), sent: sent()[1] ?? null, status: statusOf('sfx_one', 'sfx_two') };
+    // The answer's toast has a button and is left up; what could not be made is said when it is gone.
+    await advance(8000); await advance(2000); await settle();
+    out.later = said();
+    """, before=SAVED + HOST + BROKEN_ITEMS)
+    assert got["button"] == {"said": "1 draft could not be made.", "sent": [[["sfx_hit", "sfx_new"], 2]], "status": ["working", "pending", "working"]}
+    assert got["agent"] == {"said": "1 draft could not be made.", "posts": 1, "status": ["pending"]}
+    assert got["change"] == {"said": "Remaking two. Undo", "sent": [["sfx_two"], 3], "status": ["approved", "working"]}
+    assert got["later"] == "3 drafts could not be made."
 
 
 # ---------- read from the files ----------

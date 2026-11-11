@@ -9,6 +9,7 @@ import wave
 from pathlib import Path
 
 import pytest
+import soundfile as sf
 
 import asset_api
 import asset_generate as ag
@@ -34,8 +35,8 @@ class Lint:
         self.issues = list(issues)
 
     def __call__(self, wav, kind="sfx", loop=False, loud=(-20, -16)):
-        with wave.open(io.BytesIO(wav)) as w:
-            rate, channels, frames = w.getframerate(), w.getnchannels(), w.getnframes()
+        found = sf.info(io.BytesIO(wav))  # not `wave`: a folded loop is a float file until it is trimmed
+        rate, channels, frames = found.samplerate, found.channels, found.frames
         return {"measure": {"seconds": frames / rate, "rate": rate, "channels": channels, "bits": 16, "clips": 0,
                             "sample_peak": -10.0, "peak": -10.0, "loud": -18.0, "lead": 0.0, "tail": 0.0, "dc": 0.0,
                             "seam": 0.0, "end": -80.0},
@@ -69,6 +70,42 @@ def test_the_request_is_the_body_of_a_job(tmp_path):
     row = trial.serve(made, "music", "victory", "A short victory fanfare, 2 bars at 120 BPM. Stems: melody, bass.", 4.0, tmp_path)
     assert ag.request_of(model.prompts[0])["item"]["loop"] is False
     assert (row["passed"], row["stems"]) == (True, ["melody", "bass"])
+
+
+def test_a_looping_ambience_is_folded_the_way_the_server_folds_it(tmp_path):
+    """--server is asset_generate.run, so nothing here folds: the engine is asked for half a second more than the
+    loop, and what comes out is the loop at its own length. Music and effects are rendered at their length."""
+    made, _ = deps()
+    row = trial.serve(made, "ambience", "wind", "A seamless loop of gentle wind over an open field.", 8.0, tmp_path)
+    assert made.engine.calls[0][1] == 8.5 == ag.render_seconds(8.0, "amb", True)
+    assert (row["passed"], row["first_try"], row["length"], row["issues"]) == (True, True, 8.0, [])
+    with wave.open(str(tmp_path / "wind.wav")) as w:
+        assert (w.getnframes(), w.getframerate(), w.getsampwidth()) == (8 * 48000, 48000, 2)
+    made, _ = deps()
+    row = trial.serve(made, "music", "boss", "A dark 4-bar boss loop at 120 BPM. Stems: lead, bass, drums.", 8.0, tmp_path)
+    assert (made.engine.calls[0][1], row["loop"], row["length"]) == (8.0, True, 8.0)
+    made, _ = deps()
+    trial.serve(made, *COIN, tmp_path)
+    assert made.engine.calls[0][1] == 0.5
+
+
+@needs_node
+def test_main_folds_its_ambience_loops_under_the_real_lint(tmp_path, monkeypatch, capsys):
+    asked, render = [], ag.FakeEngine.render_mended
+    monkeypatch.setattr(ag.FakeEngine, "render_mended", lambda self, source, seconds, *more, **limits: (
+        asked.append(seconds) or render(self, source, seconds, *more, **limits)))
+    monkeypatch.setenv("OLMUSE_GEN_FAKE", "1")
+    monkeypatch.setattr(sys, "argv", ["akkado_trial.py", "--server", "--only", "ambience", "--limit", "2", "--out", str(tmp_path)])
+    trial.main()
+    lines = capsys.readouterr().out.splitlines()
+    assert asked == [8.5, 8.5]  # the engine the API builds was asked for the loop and the half second that is folded
+    assert [line.split()[:4] for line in lines[:2]] == [["ambience", name, "pass", "first"] for name in ("wind", "rain")]
+    saved = json.loads((tmp_path / "result.json").read_text(encoding="utf-8"))
+    assert (saved["summary"]["first_try"], saved["summary"]["issues_left"], saved["summary"]["failed"]) == (2, 0, {})
+    assert [(row["loop"], row["length"], row["issues"]) for row in saved["rows"]] == [(True, 8.0, [])] * 2
+    for name in ("wind", "rain"):
+        with wave.open(str(tmp_path / f"{name}.wav")) as w:
+            assert (w.getnframes(), w.getsampwidth()) == (8 * 48000, 2)
 
 
 def test_passed_after_a_repair(tmp_path):

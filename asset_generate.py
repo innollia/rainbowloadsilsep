@@ -1,11 +1,12 @@
 """One draft of one game sound for the asset room: the request check, the prompt, and the loop that asks the
-model for an Akkado patch, renders it, measures it, trims it, measures it again and hands faults back.
+model for an Akkado patch, renders it, measures it, trims it, measures it again and hands faults back. A looping
+ambience is rendered half a second longer and that extra is folded onto its start, before anything is measured.
 
     clean_request(body, lang) -> the checked body of POST /jobs (GenError 400 or 413 otherwise)
     run(job, deps, report)    -> Outcome (done with bytes, failed with a code, or cancelled)
 
 Nothing here knows the job store, the queue or the ledger (asset_jobs.py owns those and calls run), and nothing
-imports streamlit. numpy and soundfile load only when a sound is trimmed or a fake one is made.
+imports streamlit. numpy and soundfile load only when a sound is folded or trimmed, or a fake one is made.
 
 The model is asked with low reasoning effort: at the default effort replies were sometimes cut off and a request
 took 2.7 times as long (measured with tools/akkado_trial.py).
@@ -71,6 +72,7 @@ FADE_MS = 5
 PEAK_LIMIT, PEAK_TARGET = -1.0, -1.2    # dBTP: above the limit a sound is lowered to the target
 QUIET_PEAK, QUIET_TARGET = -12.0, -3.0  # dBTP: under the first a sound that is not music is raised to the second
 STEM_PEAK = -1.0          # dBFS: the gain of the stems never puts the largest sample of the loudest one over this
+FOLD_SECONDS = 0.5        # a looping ambience is rendered this much past its length, and the extra is folded onto its start
 
 SCHEMA = {"type": "object", "required": ["source", "seconds", "bpm"], "properties": {
     "source": {"type": "string", "description": "the whole Akkado patch"},
@@ -341,7 +343,10 @@ def ask_text(project: dict, examples: list, item: dict, k: int = 1, n: int = 1) 
         lines.append(f"The finished file is brought to about {middle:g} LUFS with its peaks under {PEAK_TARGET:g} dBTP, "
                      f"after the render. So keep the loudest peaks within about {PEAK_TARGET - middle:.0f} dB of the "
                      "average level: a few loud hits over a quiet bed cannot be brought up to that loudness.")
-    if item.get("loop"):
+    if item.get("loop") and kind == "amb":
+        lines.append("It loops, and the server joins its end to its start: write no fade in or out and no gate at the "
+                     "loop point, and keep the bed sounding throughout.")
+    elif item.get("loop"):
         lines.append("It loops: the end must run into the start with no click and no jump in level.")
     elif kind == "sfx":
         lines.append("It is a one-shot: it starts at once and dies away to silence before the render ends.")
@@ -394,15 +399,87 @@ def clip_seconds(value, kind: str, want=None) -> float:
     return SECONDS_DEFAULT[kind]
 
 
+# ---------- the fold of a looping ambience ----------
+def folded(kind: str, loop: bool) -> bool:
+    """Whether the server closes this loop itself. Music and looping effects close in the patch."""
+    return kind == "amb" and bool(loop)
+
+
+def render_seconds(seconds: float, kind: str, loop: bool) -> float:
+    """The length the engine is asked for: a looping ambience runs FOLD_SECONDS past its own length, or half its
+    length when that is less, and fold() lays that extra over its start."""
+    return seconds + min(FOLD_SECONDS, seconds / 2) if folded(kind, loop) else seconds
+
+
+def fold_gains(match: float, frames: int):
+    """(the gain of the extra, the gain of the head) for each frame of the overlap: the first falls from 1 and the
+    second rises from 0, and the two sounds together stay as loud as either alone.
+
+    match is how far the two are the same sound, their correlation, held within 0..1. Unrelated sounds (0) get the
+    sine and cosine pair, whose squares add up to 1. The same sound twice (1) gets a straight line, whose gains
+    add up to 1. Between the two it is the pair that keeps out*out + in*in + 2*match*out*in at 1. Sounds that
+    oppose each other are faded like unrelated ones, because the pair for them would have gains over 1."""
+    import numpy as np
+    at = np.arange(frames) / max(frames, 1)
+    angle = math.acos(min(max(float(match), 0.0), 1.0))
+    if angle < 1e-6:
+        return 1.0 - at, at
+    return np.sin((1.0 - at) * angle) / math.sin(angle), np.sin(at * angle) / math.sin(angle)
+
+
+def fold(made: nkido.Rendered, seconds: float) -> tuple[nkido.Rendered, str]:
+    """(the render as a loop of `seconds`, the sample format it came in). The loop is 32-bit float, so that
+    nothing is rounded or clipped between here and the trim, which writes the format named here.
+
+    What the render has past the loop's length is laid over the loop's start and cross-faded there. The first
+    frame of the loop is the frame the render had right after the loop's last one, so the end runs into the start
+    the way the sound itself went on, and by the end of the overlap only the head is left. Nothing fades in or
+    out and nothing is cut from the loop's end. The gains keep the level through the overlap (fold_gains), for
+    the correlation of the two ends as it is measured in the master.
+
+    The overlap is as long as what the render really has past round(seconds * rate) frames: nkido renders whole
+    blocks of 128 frames and stops up to 127 frames under the length it was asked for. Every stem is folded with
+    the master's gains, so stems that added up to the master still do. A render that is no longer than the loop
+    comes back as it is, with no format named."""
+    import numpy as np
+    import soundfile as sf
+
+    def read(data: bytes):
+        return sf.read(io.BytesIO(data), dtype="float64", always_2d=True)[0]
+
+    info = sf.info(io.BytesIO(made.wav))
+    keep = int(round(seconds * info.samplerate))
+    over = min(info.frames - keep, keep)
+    if over < 1:
+        return made, ""
+    master = read(made.wav)
+    head, extra = master[:over], master[keep:keep + over]
+    power = math.sqrt(float((head ** 2).sum()) * float((extra ** 2).sum()))
+    fade_out, fade_in = fold_gains(float((head * extra).sum()) / power if power > 0 else 0.0, over)
+
+    def laid(x) -> bytes:
+        loop = x[:keep].copy()
+        n = min(over, len(x) - keep)
+        if n > 0:
+            loop[:n] = x[keep:keep + n] * fade_out[:n, None] + x[:n] * fade_in[:n, None]
+        out = io.BytesIO()
+        sf.write(out, loop, info.samplerate, format="WAV", subtype="FLOAT")
+        return out.getvalue()
+
+    stems = {label: laid(read(data)) for label, data in made.stems.items()}
+    return nkido.Rendered(laid(master), stems, info.samplerate, info.channels, keep / info.samplerate), info.subtype
+
+
 # ---------- the trim ----------
-def trim(wav: bytes, stems: dict, raw: dict, kind: str, loop: bool, loud) -> tuple[bytes, dict, float]:
-    """The master and its stems with the same cut, written in the sample format they came in, and how many dB the
-    stems' gain is under the master's (0.0 when it is the same).
+def trim(wav: bytes, stems: dict, raw: dict, kind: str, loop: bool, loud, subtype: str = "") -> tuple[bytes, dict, float]:
+    """The master and its stems with the same cut, written in the sample format they came in (or in `subtype`,
+    which a folded loop names), and how many dB the stems' gain is under the master's (0.0 when it is the same).
 
     Only arithmetic on the raw measurement: DC taken out; when the sound does not loop, leading silence over 50 ms
     cut to 5 ms and trailing silence over 200 ms cut to 50 ms, with a 5 ms fade at each cut; music brought to the
     middle of the loudness range without passing -1.2 dBTP; anything else lowered to -1.2 dBTP when it is over -1
-    and raised to -3 when it is under -12. A loop is never folded: the patch closes its own seam.
+    and raised to -3 when it is under -12. A loop is never cut and never faded here: music and looping effects
+    close their own seam in the patch, and a looping ambience comes already folded (fold).
 
     The cut and the DC come first and the gain is worked out for what is left. Taking the mean away moves a
     lopsided wave (a narrow pulse) off its centre and raises its peak, so the measured peak is moved by as much
@@ -433,7 +510,7 @@ def trim(wav: bytes, stems: dict, raw: dict, kind: str, loop: bool, loud) -> tup
 
     def cut(data: bytes):
         """(the samples after the cut, the DC and the fades; rate; sample format; the largest sample before)."""
-        subtype = sf.info(io.BytesIO(data)).subtype
+        own_subtype = sf.info(io.BytesIO(data)).subtype
         x, own_rate = sf.read(io.BytesIO(data), dtype="float64", always_2d=True)
         before = top(x)
         x = x[start:min(stop, len(x))]
@@ -444,7 +521,7 @@ def trim(wav: bytes, stems: dict, raw: dict, kind: str, loop: bool, loud) -> tup
                 x[:fade] *= np.linspace(0.0, 1.0, fade)[:, None]
             if fade and stop < frames:
                 x[-fade:] *= np.linspace(1.0, 0.0, fade)[:, None]
-        return x, own_rate, subtype, before
+        return x, own_rate, own_subtype, before
 
     master = cut(wav)
     peak, gain = number("peak", -200.0), 0.0
@@ -462,9 +539,9 @@ def trim(wav: bytes, stems: dict, raw: dict, kind: str, loop: bool, loud) -> tup
             gain = QUIET_TARGET - peak
 
     def written(part, level: float) -> bytes:
-        x, own_rate, subtype, _before = part
+        x, own_rate, own_subtype, _before = part
         out = io.BytesIO()
-        sf.write(out, x * (10 ** (level / 20)), own_rate, format="WAV", subtype=subtype)
+        sf.write(out, x * (10 ** (level / 20)), own_rate, format="WAV", subtype=subtype or own_subtype)
         return out.getvalue()
 
     parts = {label: cut(data) for label, data in stems.items()}
@@ -640,8 +717,20 @@ def _error_text(issue: dict, kind: str, measured: dict, loud) -> str:
     return text
 
 
-def _check(made, kind: str, loop: bool, loud, want, deps: Deps) -> Take:
-    """Measure the raw render, trim it, measure the result, and name every fault."""
+SEAM = "the loop clicks at its seam: the end does not run into the start"
+SEAM_FOLDED = ("the loop clicks at its seam, where the server has already joined the end to the start: something in "
+               "the patch jumps at exactly the loop length. Give what starts there an attack, and add no fade or gate")
+
+
+def _check(made, kind: str, loop: bool, loud, want, deps: Deps, seconds=None) -> Take:
+    """Measure the raw render, trim it, measure the result, and name every fault.
+
+    seconds is the loop length of a render that was made longer to be folded (render_seconds). It is folded first,
+    so the raw measurement and every fault named from it (silent, clipped, the length) are of the loop that the
+    trim and the lint then get, never of the longer render."""
+    subtype = ""
+    if seconds is not None:
+        made, subtype = fold(made, seconds)
     raw = deps.measure(made.wav, kind=kind, loop=loop, loud=loud)["measure"]
     peak = raw.get("sample_peak")
     if not _real(peak) or peak < SILENT_PEAK:
@@ -661,14 +750,14 @@ def _check(made, kind: str, loop: bool, loud, want, deps: Deps) -> Take:
     if want and not want / 2 <= made.seconds <= want * 2:
         faults.append(Fault(f"the render is {made.seconds:g} seconds, the asked length is about {want:g}",
                             {"id": "length", "level": "warn", "value": made.seconds, "limit": [want / 2, want * 2]}))
-    wav, stems, lowered = trim(made.wav, made.stems, raw, kind, loop, loud)
+    wav, stems, lowered = trim(made.wav, made.stems, raw, kind, loop, loud, subtype)
     final = deps.measure(wav, kind=kind, loop=loop, loud=loud)
     issues = [dict(issue) for issue in final["issues"]]
     for issue in issues:
         if issue.get("level") == "error":
             faults.append(Fault(_error_text(issue, kind, final["measure"], loud), error=True))
         elif issue.get("id") == "seam":
-            faults.append(Fault("the loop clicks at its seam: the end does not run into the start"))
+            faults.append(Fault(SEAM_FOLDED if subtype else SEAM))
     listed = {issue.get("id") for issue in issues}
     issues += [f.issue for f in faults if f.issue and f.issue["id"] not in listed]
     return Take(faults, not any(f.error for f in faults), wav, list(stems.items()), final["measure"], issues, lowered)
@@ -676,6 +765,7 @@ def _check(made, kind: str, loop: bool, loud, want, deps: Deps) -> Take:
 
 def run(job: Job, deps: Deps, report=lambda **fields: None) -> Outcome:
     """Ask -> pre-check -> render -> measure -> trim -> measure again, and hand faults back up to REPAIRS times.
+    A looping ambience is rendered longer than the length it gets (render_seconds) and folded before it is measured.
 
     report(stage=, attempt=, usd=) is told where the job is. Between steps the job stops when it was cancelled
     or its deadline passed. It stops at the first attempt without a fault. When every attempt has one, the latest
@@ -751,7 +841,7 @@ def run(job: Job, deps: Deps, report=lambda **fields: None) -> Outcome:
         else:
             report(stage="rendering", attempt=attempt)
             try:
-                made, source, fault, end = _render(source, seconds, bpm, deps, halted)
+                made, source, fault, end = _render(source, render_seconds(seconds, kind, loop), bpm, deps, halted)
                 end = end or halted()
                 if end:
                     return ended(end)
@@ -759,7 +849,7 @@ def run(job: Job, deps: Deps, report=lambda **fields: None) -> Outcome:
                     faults = [Fault(fault)]
                 else:
                     report(stage="checking", attempt=attempt)
-                    take = _check(made, kind, loop, loud, want, deps)
+                    take = _check(made, kind, loop, loud, want, deps, seconds if folded(kind, loop) else None)
                     faults = take.faults
                     if take.keep:
                         kept = (take, source, bpm)

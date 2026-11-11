@@ -1628,3 +1628,162 @@ def test_a_store_made_before_sessions_were_written_down_gets_the_column(tmp_path
     finally:
         store.close()
     aj.GenStore(path).close()  # and a store that has it is opened as it is
+
+
+def test_one_session_cannot_pass_the_refund_limits_of_its_address_alone(bench):
+    """One request holds up to 64 drafts and each of them that fails, or is never received, is a refund. All of
+    them went into the address's count, so 37 from one session turned everybody at the address away for an hour.
+    Of one session the address counts no more than what closes that session's own door: 13 in an hour, 25 a day."""
+    one, two = session("one"), session("two")
+    address, own = "rf:" + PW.owner, "rf:" + PW.owner + "/" + aj.lane_of(one)
+    hour = lambda b: len(b.jobs.refunds.get(PW.owner, ()))  # noqa: E731 - the address's refunds of the last hour
+    b = bench(engine=[BROKEN() for _ in range(3 * 40)])
+    ids = b.send(one, rid="a1", items=40, free=True)  # forty drafts of one request, and none passes the checks
+    b.jobs.drain()
+    assert {b.row(i)["error"] for i in ids} == {"make_failed"}
+    assert (b.jobs.count(own), b.jobs.count(address), hour(b)) == (40, 25, 13)
+    assert refused(b.jobs.submit, one, body("a2", free=True)) == (429, "refund_limit", {"retry_after": 3601})
+    assert b.jobs.quote_for(two, 1, 1)["ok"] is True and b.jobs.submit(two, body("b1", free=True))["replayed"] is False
+    # Forty that nobody received (the tab was closed): an hour later one sweep ends them all.
+    b = bench()
+    ids = b.send(one, rid="a1", items=40, free=True)
+    b.jobs.drain()
+    b.later(aj.UNFETCHED_TTL + 1)
+    b.jobs.sweep()
+    assert {b.row(i)["status"] for i in ids} == {"gone"} and (b.jobs.count(own), b.jobs.count(address), hour(b)) == (40, 25, 13)
+    assert refused(b.jobs.submit, one, body("a2", free=True))[1] == "refund_limit"
+    assert b.jobs.submit(two, body("b1", free=True))["replayed"] is False
+    assert b.jobs.submit(session("reloaded"), body("c1", free=True))["replayed"] is False
+    # The address's own count is still there for sessions that keep changing: the third one passes it.
+    b = bench(engine=[BROKEN() for _ in range(3 * 42)])
+    for n, name in enumerate(("one", "two", "three")):
+        assert hour(b) == 13 * n and b.jobs.quote_for(session("next"), 1, 1)["ok"] is True
+        b.send(session(name), rid=name, items=14, free=True)
+        b.jobs.drain()
+    assert (hour(b), b.jobs.count(address)) == (39, 42)
+    assert refused(b.jobs.submit, session("next"), body("d1", free=True)) == (429, "refund_limit", {"retry_after": 3601})
+    # And the day's: of one session the address takes one more than the session's own limit for the day.
+    b = bench(engine=[BROKEN() for _ in range(3 * 10)], limits=aj.Limits(pw_refund_hourly=100, pw_refund_daily=5))
+    b.jobs.refund_hourly, b.jobs.refund_daily = 100, 2
+    b.send(one, rid="a1", items=5, free=True)
+    b.jobs.drain()
+    assert (b.jobs.count(own), b.jobs.count(address)) == (5, 3)
+    assert refused(b.jobs.submit, one, body("a2", free=True)) == (429, "refund_limit", {"retry_after": TOMORROW})
+    b.send(two, rid="b1", items=5, free=True)
+    b.jobs.drain()
+    assert b.jobs.count(address) == 6
+    assert refused(b.jobs.submit, session("next"), body("d1", free=True)) == (429, "refund_limit", {"retry_after": TOMORROW})
+
+
+def test_a_second_outage_of_refunds_is_said_after_its_own_ten_minutes(bench, caplog):
+    """The hour between two ALERTs is for one outage that goes on. It also held back the first ALERT of the next
+    outage, which was said 57 minutes late, or never when the ledger was back before that."""
+    b = bench(engine=[BROKEN() for _ in range(6)])
+    a = b.who()
+    alerts = lambda: [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR and "refund" in r.getMessage()]  # noqa: E731
+
+    def owed(rid):
+        b.ledger.fail.add("refund")
+        ids = b.send(a, rid=rid)
+        b.jobs.drain()
+        assert b.row(ids[0])["charge"] == "refund_due"
+        return ids[0]
+
+    def sweeps(count):
+        for _ in range(count):
+            b.later(60)
+            b.jobs.sweep()
+
+    with caplog.at_level(logging.INFO, logger="olmuse.asset.jobs"):
+        first = owed("r1")
+        sweeps(12)  # the first refusal is at 120 seconds, the ALERT ten minutes after it
+        assert len(alerts()) == 1
+        b.ledger.fail.clear()
+        sweeps(1)
+        assert b.row(first)["charge"] == "refunded"
+        second = owed("r2")
+        sweeps(11)
+        assert len(alerts()) == 1 and b.row(second)["charge"] == "refund_due"
+        sweeps(1)  # ten minutes of refusals again, 13 minutes after the first ALERT
+        assert len(alerts()) == 2 and alerts()[1].endswith("for 10 minutes; credits still to go back: 1")
+        sweeps(59)
+        assert len(alerts()) == 2  # and from there once an hour, as in the first outage
+        sweeps(1)
+        assert len(alerts()) == 3 and alerts()[2].endswith("for 70 minutes; credits still to go back: 1")
+
+
+def test_whoever_just_came_stands_behind_the_ones_already_waiting(bench):
+    """A session that was never picked counted as the one picked longest ago, so each new one (a reload, another
+    tab) went ahead of a session that had been picked once, for as long as new ones kept coming. Owners the same."""
+    named = lambda letter, count: [{"ref": f"{letter}{i}", "kind": "sfx", "name": f"{letter}{i}", "seconds": 0.2}  # noqa: E731
+                                   for i in range(count)]
+
+    def picked(b):
+        job = b.jobs._next(block=False)
+        b.jobs._serve(job)
+        return job["ref"]
+
+    for comer in (lambda n: session(f"new{n}"),                       # sessions of one address
+                  lambda n: session("s", f"pwip:{n:016x}")):          # and owners: other addresses
+        b = bench()
+        home = session("home")
+        late = b.send(home, rid="h1", items=named("h", 2), free=True)[1]
+        assert picked(b) == "h0"
+        order, told = [], []
+        for n in range(4):  # one newcomer asks before every pick
+            b.send(comer(n), rid=f"x{n}", items=named(f"x{n}", 1), free=True)
+            told.append(b.view(home, late).get("position"))
+            order.append(picked(b))
+        assert order == ["x00", "h1", "x10", "x20"] and told[0] == 2  # one newcomer was there first; the rest wait
+        assert b.jobs.drain() == 1
+    # A newcomer stands behind the ones that waited before it, and ahead only of the one that was picked last.
+    b = bench()
+    b.send(session("a"), rid="a1", items=named("a", 3), free=True)
+    b.send(session("b"), rid="b1", items=named("b", 3), free=True)
+    assert [picked(b) for _ in range(3)] == ["a0", "b0", "a1"]
+    b.send(session("c"), rid="c1", items=named("c", 2), free=True)
+    assert [picked(b) for _ in range(5)] == ["b1", "c0", "a2", "b2", "c1"]
+    # Whoever came while nothing had been picked since is in line as before: thirty sessions, one sound each first.
+    b = bench()
+    b.send(session("a"), rid="a1", items=named("a", 2), free=True)
+    assert picked(b) == "a0"
+    for n in range(29):
+        b.send(session(f"s{n}"), rid=f"s{n}", items=named(f"s{n}x", 2), free=True)
+    assert [picked(b) for _ in range(30)] == [f"s{n}x0" for n in range(29)] + ["a1"]
+
+
+def test_a_balance_read_that_comes_back_after_a_charge_does_not_undo_it(bench):
+    """A read of the balance and a worker's charge cross: the ledger made the read first and its answer arrived
+    last. The read's balance was remembered over the charge's, one credit too many, so a request that had to be
+    a 402 was taken and its draft failed as no_credits when it was picked."""
+    b = bench(free=2)
+    a = b.who()
+    b.send(a, items=2)  # two credits and two drafts waiting: the balance is read and remembered
+    b.later(aj.BALANCE_RECHECK + 1)
+    ask, read, back, out = b.ledger.account, threading.Event(), threading.Event(), {}
+
+    def slow(email):
+        got = ask(email)  # the ledger reads at once; its answer is on the way back until `back`
+        read.set()
+        back.wait(10)
+        return got
+
+    b.ledger.account = slow
+    asker = threading.Thread(target=lambda: out.update(quote=b.jobs.quote_for(a, 1, 1)))
+    asker.start()  # short of credits and six seconds old: the ledger is asked once more, and says 2
+    try:
+        assert read.wait(10)
+        b.jobs._serve(b.jobs._next(block=False))  # meanwhile one draft is picked and its charge answers: 1 left
+        assert b.jobs.status(a, [])["credits"] == 1
+    finally:
+        back.set()
+        asker.join(10)
+        b.ledger.account = ask
+    assert b.jobs.status(a, [])["credits"] == 1 == b.ledger.credits()
+    assert (out["quote"]["ok"], out["quote"]["reason"], out["quote"]["balance"]) == (False, "no_credits", 1)
+    assert refused(b.jobs.submit, a, body("r2")) == (402, "no_credits", {"balance": 1, "credits": 1})
+    assert b.jobs.drain() == 1 and b.ledger.credits() == 0 and len(b.ledger.named("charge")) == 2
+    # A read nothing crossed is remembered as before.
+    b.ledger.real.grant("a@b.c", 3)
+    b.later(aj.BALANCE_RECHECK)
+    assert b.jobs.quote_for(a, 3, 1)["balance"] == 3 and b.jobs.status(a, [])["credits"] == 3

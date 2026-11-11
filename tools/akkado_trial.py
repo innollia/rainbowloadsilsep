@@ -4,10 +4,12 @@ The same requests can be asked two ways, and both print the first-try and after-
 WAV and source to --out for listening:
 
   default    this file's own loop: the model writes a patch from asset_engine/akkado_guide.md, the adapter renders
-             it, and a failed render is handed back with its error up to REPAIRS times.
+             it, and a failed render is handed back with its error up to REPAIRS times. The WAV is the render as
+             it came: an ambience is not folded into its loop here, so it does not loop cleanly.
   --server   the server's loop: each request is the body POST /jobs takes and runs as one draft through
              asset_generate.run, with the model, the engine and the measuring that asset_api.real_deps builds from
-             the environment. OLMUSE_GEN_FAKE=1 gives its scripted model and sine waves, and spends nothing.
+             the environment. A looping ambience is rendered half a second longer and folded, as on the server.
+             OLMUSE_GEN_FAKE=1 gives its scripted model and sine waves, and spends nothing.
 
     python tools/akkado_trial.py --out out/akkado_trial [--server] [--model id] [--only sfx|ambience|music] [--limit n]
 """

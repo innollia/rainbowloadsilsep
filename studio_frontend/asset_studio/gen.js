@@ -7,7 +7,8 @@
 //   fetch, now() (a clock that only runs forward, in ms: performance.now), wall() (Date.now), setTimeout, clearTimeout,
 //   uuid(), sha256(bytes) -> hex, atob, measure (assetMeasure), peaks (assetStore.peaksOf),
 //   project() -> { game, style, platform, loud }, item(asset, { mode, text }) -> what POST /jobs takes for one sound
-//   (ref and mode are filled in here, and every field is cut to the length the API takes),
+//   (ref and mode are filled in here, and every field is cut to the length the API takes; a sound it throws for is
+//   left out of the request and goes back to how it was, counted among the drafts that could not be made),
 //   examples(list, opts) -> approved sounds to stay close to, lang(),
 //   text(key, n) -> the wording of aiOff, genPaused, otherTab, loadFailed, saveFull, genFailed, genRefunded, genLost,
 //   toast(text, ms), toastBusy() -> a toast with a button in it is up, post(type) -> a message to the host page,
@@ -166,6 +167,8 @@
     const mine = (w) => owns(state.token, w);
     const usable = () => !!state.token && !state.paused && !!store && !!store.writable;
     const isOpen = (j) => !j.got && !fetched.has(j.id) && !skipped.has(j.id) && !barred.has(j.id);
+    // Whether the sound's record still names the job: it does not once the sound was put back or taken off the board.
+    const holds = (a, j) => !!a.work && a.work.jobs.includes(j);
     // A sound is settled once none of its jobs is still being waited for. One with a barred job is never settled here.
     const waiting = (w) => w.jobs.some((j) => isOpen(j) || barred.has(j.id));
     // Whether a sound can be asked for: it has no job record, or one with nothing left to wait for on this visit (what
@@ -320,6 +323,9 @@
       if (key && key !== 'wait') toast(say(key), key === 'aiOff' ? 4000 : 8000);
       return !!key;
     }
+    // A job record is let go: bytes that were kept for its jobs' next look go with it, now and not at a later look
+    // (with nothing left to wait for there is none).
+    const unhold = (w) => { for (const j of w.jobs) had.delete(j.id); };
     // The sound goes back to how it was before it was asked for; drafts of that request are dropped.
     function undo(a) {
       const w = a.work;
@@ -329,6 +335,7 @@
         a.drafts = a.drafts.filter((v) => !ids.has(v.id));
         a.status = w.before;
       }
+      unhold(w);
       a.progress = 0; delete a.work;
     }
     const asked = (request) => live().filter((a) => a.work && a.work.request === request);
@@ -360,32 +367,52 @@
           const r = await ask(request, { mode, text, n });
           if (r.ok) continue;
           out = r;
-          // The server said no: the rest of what was asked would hear the same.
-          if (!r.pending) { const rest = batches.slice(i + 1).flatMap(asked); rest.forEach(undo); render(rest); break; }
+          // The server said no: the rest of what was asked would hear the same. A request of which nothing could be
+          // put together ('body') was not the server's answer: the next one is still sent.
+          if (!r.pending && r.reason !== 'body') { const rest = batches.slice(i + 1).flatMap(asked); rest.forEach(undo); render(rest); break; }
         }
       } finally { for (const request of batches) flying.delete(request); }
       return out;
     }
     // One request: the words that will be sent are kept, then the board that says which sounds are being made, and
     // only then is anything sent. A board that could not be written sends nothing.
+    // What is told of each sound is put together one sound at a time. A sound for which that fails (the page's item()
+    // threw) goes back to how it was, alone: the others are sent and paid for without it. What could not be asked for
+    // is said as drafts that could not be made, and only after this has waited once: the page says its own words
+    // right after it asks ("Making 4", the assistant's reply), and those must not be what is left standing.
     async function ask(request, o) {
       const back = (text, ms) => { const list = asked(request); list.forEach(undo); render(list); toast(text, ms); };
       const priced = state.unit ? null : await loadUnit();
-      const group = asked(request);
+      let group = asked(request);
       if (!group.length) return { ok: false, reason: 'none' };
       // The token became someone else's while this waited: nothing is made in another person's name.
       if (!mine(group[0].work)) { back(''); return { ok: false, reason: 'other' }; }
       if (!state.unit) { back(priced.status === 401 ? '' : priced.message || say('aiOff'), 6000); return { ok: false, reason: priced.code || 'aiOff' }; }
-      let body;
+      const items = new Map();
+      for (const a of group) {
+        try { items.set(a, shapeItem(refOf(a), d.item ? d.item(a, { mode: o.mode, text: a.work.text }) : null, o.mode)); } catch { /* goes back below */ }
+      }
+      const dropped = group.filter((a) => !items.has(a));
+      dropped.forEach(undo); render(dropped);
+      group = group.filter((a) => items.has(a));
+      let body = null;
       try {
-        body = JSON.stringify({
+        if (group.length) body = JSON.stringify({
           request_id: request, expect_credits: quoteOf(group.length, o.n).credits, drafts: o.n, lang: d.lang ? d.lang() : undefined,
           project: shapeProject(d.project ? d.project() : null),
           examples: shapeExamples(d.examples ? d.examples(group, { mode: o.mode, text: o.text, drafts: o.n }) : []),
-          items: group.map((a) => shapeItem(refOf(a), d.item ? d.item(a, { mode: o.mode, text: a.work.text }) : null, o.mode)),
+          items: group.map((a) => items.get(a)),
         });
-      } catch { back(say('aiOff'), 6000); return { ok: false, reason: 'body' }; }
+      } catch { body = null; }
+      if (body == null) {
+        // Nothing of the request can be sent. As with a request the server turned away, that is said at once.
+        back('');
+        await null;
+        toast(say('genFailed', (dropped.length + group.length) * o.n), 6000);
+        return { ok: false, reason: 'body' };
+      }
       const kept = (await store.put('req:' + request, body)) && (await store.saveBoard());
+      if (dropped.length) tell({ failed: dropped.length * o.n, refunded: 0, lost: 0 });
       if (!kept) { back(say('saveFull'), 8000); store.del('req:' + request); return { ok: false, reason: 'saveFull' }; }
       return send(request, body);
     }
@@ -576,12 +603,14 @@
         const r = await call('POST', '/jobs/status', JSON.stringify({ ids: [id] }));
         const views = r.status === 200 && r.data && Array.isArray(r.data.jobs) ? r.data.jobs : null;
         full = views ? views.find((x) => x && x.id === id) : null;
-        if (!views) { had.set(id, got); putOff(r); return false; }
+        // Kept for the look that follows, and only for a job its sound still waits for: a sound taken off the board
+        // while this read was on its way has no look to follow, and the poller may stop here.
+        if (!views) { if (holds(a, j)) had.set(id, got); else had.delete(id); putOff(r); return false; }
         if (!full || full.status !== 'done' || !full.result) { had.delete(id); return false; } // it is no longer a result: the next look says what became of it
       }
       had.delete(id);
       const w = a.work, { main, parts } = got;
-      if (!w || !w.jobs.includes(j)) return false;
+      if (!holds(a, j)) return false;
       const v = versionOf(a, j, full.result, main, parts), blobs = [[v.key, new Blob([main], { type: 'audio/wav' })]];
       v.stems.forEach((s, i) => blobs.push([s.key, new Blob([parts[i].bytes], { type: 'audio/wav' })]));
       for (const [key, blob] of blobs) store.hold(key, blob);
@@ -791,7 +820,7 @@
     // Drafts that were not kept. Their records go, so a later visit does not fetch them again. The server is told
     // nothing: every job of a sound that is not being made has ended, and a result nobody takes runs out there by itself.
     function drop(assets) {
-      for (const a of assets || []) if (a && mine(a.work) && a.status !== 'working') delete a.work;
+      for (const a of assets || []) if (a && mine(a.work) && a.status !== 'working') { unhold(a.work); delete a.work; }
     }
 
     return {

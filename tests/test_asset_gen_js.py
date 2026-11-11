@@ -189,16 +189,16 @@ const brief = (a) => ({ status: a.status, versions: a.versions.map((v) => v.id),
 """
 
 
-def node(script, timeout=60):
+def node(script, timeout=60, flags=()):
     # stdin: Windows caps a command line at 32K. The timeout turns a promise that never settles into a failure.
-    out = subprocess.run(["node", "-"], input=script, capture_output=True, text=True, encoding="utf-8", check=True, timeout=timeout)
+    out = subprocess.run(["node", *flags, "-"], input=script, capture_output=True, text=True, encoding="utf-8", check=True, timeout=timeout)
     return json.loads(out.stdout)
 
 
-def run(body):
-    """The modules the way the browser loads them, then `body`, which fills `out`."""
+def run(body, flags=()):
+    """The modules the way the browser loads them, then `body`, which fills `out`. flags: options for node itself."""
     src = "globalThis.window = globalThis;\n" + "\n".join((ROOT / f).read_text(encoding="utf-8") for f in FILES) + HELPERS
-    return node(src + "\n(async () => {\nconst out = {};\n" + body + "\nconsole.log(JSON.stringify(out));\n})().catch((e) => { console.error(e); process.exit(1); });")
+    return node(src + "\n(async () => {\nconst out = {};\n" + body + "\nconsole.log(JSON.stringify(out));\n})().catch((e) => { console.error(e); process.exit(1); });", flags=flags)
 
 
 # A stand-in for the browser, enough for app.js to draw its board and take clicks: elements with children, classes,
@@ -587,6 +587,47 @@ def test_more_than_64_sounds_go_out_as_several_requests():
     out.jobs = list.every((a) => a.work.jobs.length === 1);
     """)
     assert got == {"ok": True, "sizes": [64, 6], "requests": ["req-1", "req-2"], "jobs": True}
+
+
+def test_a_sound_whose_item_cannot_be_put_together_goes_back_alone_and_the_others_are_sent():
+    """The page's item() may throw for one sound (it once did for a slot that was to be like a sound with nothing to
+    measure). That sound goes back to how it was, the others of the request are sent and paid for without it, and
+    what is said is that so many drafts could not be made, not that AI is off. It is said after the page's own words
+    at the press (the page says "Making 4", or the assistant's reply, right after it asks), so it is what stays up."""
+    got = run(r"""
+    const bad = new Set(['sfx_b']);
+    const item = (a) => { if (bad.has(a.id)) throw new TypeError('nothing to measure'); return { kind: 'sfx', loop: false, id: a.id, name: a.name, description: '' }; };
+    const a = slot('sfx_a'), b = slot('sfx_b'), c = slot('sfx_c'), p = page({ assets: [a, b, c], deps: { item } });
+    await p.token();
+    const sent = () => p.api.posted('/jobs').map((x) => [x.items.map((i) => i.id), x.drafts, x.expect_credits]);
+    const reqs = () => [...p.store.board.keys()].filter((k) => k.startsWith('req:'));
+    // One of three, two drafts each.
+    let asking = p.gen.generate([a, b, c], { mode: 'make', drafts: 2 });
+    out.atOnce = [[a, b, c].map((x) => x.status), !!b.work, p.toasts.slice()];
+    out.one = { r: await asking, sent: sent(), jobs: [a, b, c].map((x) => (x.work ? x.work.jobs.length : null)), free: p.gen.free(b), toasts: p.toasts.slice(), reqs: reqs() };
+    // Every sound of a request: nothing is sent, and nothing is kept to send later.
+    const d = slot('sfx_d'), e = slot('sfx_e'); p.assets.push(d, e); bad.add('sfx_d'); bad.add('sfx_e');
+    let from = p.api.calls.length; p.toasts.length = 0;
+    asking = p.gen.generate([d, e], { mode: 'make', drafts: 1 });
+    out.allAtOnce = [[d, e].map(brief), p.toasts.slice()];
+    out.all = { r: await asking, calls: p.api.paths(from), toasts: p.toasts.slice(), reqs: reqs() };
+    // Sixty-five sounds are two requests. Nothing of the first can be put together: the second is still sent.
+    const many = Array.from({ length: 65 }, (_, i) => slot('sfx_m' + i)); p.assets.push(...many); many.slice(0, 64).forEach((x) => bad.add(x.id));
+    from = p.api.posted('/jobs').length; p.toasts.length = 0;
+    const r = await p.gen.generate(many, { mode: 'make', drafts: 1 });
+    out.batches = { r, sent: sent().slice(from), status: [...new Set(many.slice(0, 64).map((x) => x.status))], last: [many[64].status, many[64].work ? many[64].work.jobs.length : null], toasts: p.toasts.slice() };
+    // What goes for the whole request (the examples) cannot be put together: none of it is sent.
+    const f = slot('sfx_f'), q = page({ assets: [f], deps: { examples: () => { throw new TypeError('no patch'); } } });
+    await q.token();
+    out.whole = [await q.gen.generate([f], { mode: 'make', drafts: 3 }), q.api.posted('/jobs').length, brief(f), q.toasts];
+    """)
+    assert got["atOnce"] == [["working", "pending", "working"], False, []]
+    assert got["one"] == {"r": {"ok": True}, "sent": [[["sfx_a", "sfx_c"], 2, 4]], "jobs": [2, None, 2], "free": True, "toasts": ["genFailed:2"], "reqs": []}
+    back = {"status": "pending", "versions": [], "drafts": [], "pick": -1, "work": False}
+    assert got["allAtOnce"] == [[back, back], []]
+    assert got["all"] == {"r": {"ok": False, "reason": "body"}, "calls": [], "toasts": ["genFailed:2"], "reqs": []}
+    assert got["batches"] == {"r": {"ok": False, "reason": "body"}, "sent": [[["sfx_m64"], 1, 1]], "status": ["pending"], "last": ["working", 1], "toasts": ["genFailed:64"]}
+    assert got["whole"] == [{"ok": False, "reason": "body"}, 0, back, ["genFailed:3"]]
 
 
 def test_sounds_asked_for_together_are_one_request_in_which_each_has_its_own_words():
@@ -1020,6 +1061,52 @@ def test_a_sound_that_came_whole_is_kept_when_the_look_after_it_is_turned_away_a
     assert got["saved"] == ["ver:job1", "ver:job1:s1", "ver:job1:s2"] and got["sameBytes"] == [True, True, True] and got["toasts"] == []
     assert got["cut"] == [2, "working", False]
     assert got["cutBack"] == [2, made, "SOURCE job1", []]
+
+
+def test_bytes_kept_for_the_next_look_are_let_go_as_soon_as_their_sound_is_taken_off_the_board():
+    """The bytes of a finished job are kept when the status read after them is turned away, for the look that follows.
+    A sound moved to the trash has no look to follow: with nothing else being made the poller stops, and the bytes
+    used to stay in memory until something else was asked for or the token was renewed. They go with the job's record,
+    whether the sound leaves while that read is on its way or after it was turned away. Node runs with --expose-gc:
+    a WeakRef to a buffer the API handed over is empty once nothing holds the buffer."""
+    got = run(r"""
+    const held = async (refs) => { for (let i = 0; i < 5; i++) { await new Promise((ok) => realTimeout(ok, 20)); global.gc(); } await new Promise((ok) => realTimeout(ok, 20)); return refs.map((r) => !!r.deref()); };
+    // when the sound goes to the trash: 'during' the status read that is turned away, 'after' it (before the next
+    // look), or 'answered': during a read that is answered, which never kept anything.
+    async function story(when) {
+      const api = fakeApi(), refs = [];
+      const a = slot('sfx_a'), p = page({ assets: [a], api, deps: { fetch: async (url, init) => {
+        const r = await api.fetch(url, init);
+        if (init.method === 'GET' && r.status === 200) { const real = r.arrayBuffer; r.arrayBuffer = async () => { const buf = await real(); refs.push(new WeakRef(buf)); return buf; }; }
+        return r;
+      } } });
+      const trash = () => { p.gen.cancel([a]); p.assets.splice(p.assets.indexOf(a), 1); };
+      await p.token();
+      await p.gen.generate([a], { mode: 'make', drafts: 1 });
+      api.finish('job1', 1);
+      let sent = false, n = 1;
+      api.hook = (call, h) => {
+        if (call.method === 'GET' && call.path.startsWith('/jobs/')) sent = true;
+        if (call.path !== '/jobs/status' || !sent || n-- <= 0) return null;
+        if (when !== 'after') trash();
+        return when === 'answered' ? null : h.err(429, 'rate', { retry_after: 7 }, { 'Retry-After': '7' });
+      };
+      const from = api.calls.length;
+      await advance(0);
+      if (when === 'after') { trash(); await settle(); }
+      const calls = api.paths(from), now = await held(refs);                // the clock has not moved: no other look has come
+      await advance(600000);
+      return { calls, watched: refs.length, work: !!a.work, status: a.status, now, later: api.paths(from).length - calls.length };
+    }
+    out.during = await story('during');
+    out.after = await story('after');
+    out.answered = await story('answered');
+    """, flags=("--expose-gc",))
+    calls = ["POST /jobs/status", "GET /jobs/job1/sound", "GET /jobs/job1/stems/1", "POST /jobs/status", "POST /jobs/cancel"]
+    gone = {"calls": calls, "watched": 2, "work": False, "status": "pending", "now": [False, False], "later": 0}
+    assert got["answered"] == gone
+    assert got["during"] == gone
+    assert got["after"] == gone
 
 
 def test_only_the_sounds_that_changed_are_handed_to_the_page_to_draw_again():

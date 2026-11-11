@@ -55,7 +55,50 @@ def test_the_source_is_read_the_way_the_lexer_reads_it():
     assert nkido.read('a = "never closed // b') == ('a = ""', ["never closed // b"])
 
 
+LOADERS = ["samples", "sample", "sample_loop", "soundfont", "sf_voice", "wt_load", "smooch", "wt", "wavetable", "bank",
+           "variant", "in", "midi", "midi_cc", "cc", "tune"]
+
+
+@pytest.mark.parametrize("number", ["0", "3", "1e3", ".5", "12.5", "7E-2"])
+def test_a_number_written_against_a_name_hides_nothing(number):
+    """Akkado's lexer ends a number where its digits end, so `0samples(` is the number 0 and then a call of
+    samples. A rule that looks for the start of a word saw one word there, `0samples`, and let it pass."""
+    tail = "\nsine(220) |> out(%, %)"
+    assert [name for name in LOADERS if not nkido.refuse(f'{number}{name}("x"){tail}')] == []
+    assert [name for name in LOADERS if not nkido.refuse(f'{number}{name} // x\n("x"){tail}')] == []
+    assert nkido.refuse(f'{number}s"bd sd" |> out(%, %)') and nkido.refuse(f'{number}s`bd sd` |> out(%, %)')
+    assert nkido.refuse(f'{number}import "x"{tail}') and nkido.refuse(f'{number}include "x"{tail}')
+    with pytest.raises(nkido.RenderError) as caught:
+        nkido.render_mended(f'{number}samples("manifest.json"){tail}', 1.0, exe="no-such-engine")
+    assert caught.value.kind == "forbidden"
+
+
 @pytest.mark.parametrize("source", [
+    'x = "C:x.json"\nsine(1) |> out(%,%)',      # the folder the C: drive stands in, with no slash to find
+    'x = "D:x.json"\nsine(1) |> out(%,%)',      # and on another drive that is its root
+    'x = "D:dir/x.json"\nsine(1) |> out(%,%)',
+    'x = `d:x.wav`\nsine(1) |> out(%,%)',
+    "x = ' C:x.json'\nsine(1) |> out(%,%)",
+])
+def test_refuses_a_drive_named_without_a_slash(source):
+    assert nkido.refuse(source) == "a file path"
+    with pytest.raises(nkido.RenderError) as caught:
+        nkido.render_mended(source, 1.0, exe="no-such-engine")
+    assert caught.value.kind == "forbidden"
+
+
+@needs_engine
+def test_the_engine_reads_a_number_and_a_name_where_they_touch():
+    """What the rule above answers: this renders, so the name after the digits is called."""
+    assert nkido.render("0sine(440) * 0.3 |> out(%,%)", 0.2).wav[:4] == b"RIFF"
+
+
+@pytest.mark.parametrize("source", [
+    'x0samples = 2\nmix2in = (a) -> a * x0samples\nsine(440) |> mix2in(%) |> out(%,%)',  # one name each, digits inside
+    'osc1cc = (a) -> a\nlfo2tune = (a) -> a\nsine(440) |> osc1cc(%) |> lfo2tune(%) |> out(%,%)',
+    'remidi = (a) -> a\nmy_sample = (a) -> a\nsine(440) |> remidi(%) |> my_sample(%) |> out(%,%)',
+    'sine(440) |> lp(%, 800, q: 2) |> bus(1, %, "kick")',   # a named argument and a label are no drive
+    'x = n"c4:0.8 e4"\nsine(440) |> out(%,%)',
     'sin(3) + min(1, 2) |> out(%,%)', 'main = sine(440)\nmain |> out(%,%)',
     'x = n"c4 e4" // two notes, one sample each\nsine(440) / 2 |> out(%,%)',
     "a = 'c4' // a pitch\nsine(a) |> out(%,%)",

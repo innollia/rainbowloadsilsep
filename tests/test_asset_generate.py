@@ -1,10 +1,10 @@
 """The asset room's draft loop (asset_generate.py): the request check, the prompt, ask -> render -> measure ->
 trim -> measure -> repair, and the fakes. No key and no engine: FakeModel, FakeEngine and a measure of the test's own."""
+import hashlib
 import io
 import json
 import math
 import shutil
-import wave
 
 import numpy as np
 import pytest
@@ -20,16 +20,17 @@ PROJECT = {"game": "g", "style": "s", "platform": "mobile", "loud": [-20.0, -16.
 
 
 def facts(wav):
-    """Enough of measure.js for these tests, from a 16-bit WAV: levels, silence at both ends, length."""
-    with wave.open(io.BytesIO(wav)) as w:
-        rate, chans, n = w.getframerate(), w.getnchannels(), w.getnframes()
-        x = np.frombuffer(w.readframes(n), "<i2").reshape(-1, chans) / 32768.0
+    """Enough of measure.js for these tests, from a 16-bit WAV or the float one a folded loop is before its trim:
+    levels, silence at both ends, length."""
+    bits = {"PCM_16": 16, "FLOAT": 32}[sf.info(io.BytesIO(wav)).subtype]
+    x, rate = sf.read(io.BytesIO(wav), dtype="float64", always_2d=True)
+    n, chans = x.shape
     db = lambda v: 20 * math.log10(max(float(v), 1e-6))  # noqa: E731
     top = np.abs(x).max(axis=1) if n else np.zeros(0)
     heard = np.nonzero(top > 0.003)[0]
     rms = math.sqrt(float((x ** 2).mean())) if n else 0.0
     last = x[-max(1, int(0.05 * rate)):] if n else x
-    return {"seconds": n / rate, "rate": rate, "channels": chans, "bits": 16, "clips": int((top >= 32767 / 32768).sum()),
+    return {"seconds": n / rate, "rate": rate, "channels": chans, "bits": bits, "clips": int((top >= 32767 / 32768).sum()),
             "sample_peak": db(top.max() if n else 0), "peak": db(top.max() if n else 0), "loud": db(rms) - 0.7,
             "lead": float(heard[0]) / rate * 1000 if len(heard) else 0.0,
             "tail": float(n - 1 - heard[-1]) / rate * 1000 if len(heard) else 0.0,
@@ -248,6 +249,12 @@ def test_kind_and_length_lines():
     assert "It is a one-shot" in sfx and "Target length: about 0.4 seconds." in sfx
     loop = outside(ag.ask_text(PROJECT, [], item(kind="amb", loop=True)))
     assert "It loops" in loop and "one-shot" not in loop and "at most 30 seconds" in loop
+    # A looping ambience is joined by the server, so it is asked for no fade; any other loop closes in its patch.
+    assert "the server joins its end to its start: write no fade in or out" in loop and "run into the start" not in loop
+    for kind in ("sfx", "music"):
+        closes = outside(ag.ask_text(PROJECT, [], item(kind=kind, loop=True)))
+        assert "It loops: the end must run into the start with no click and no jump in level." in closes and "server" not in closes
+    assert "It loops" not in outside(ag.ask_text(PROJECT, [], item(kind="amb")))
     music = outside(ag.ask_text(PROJECT, [], item(kind="music", seconds=99, bpm=120.0)))
     assert "at least 2 named stems" in music and "about 30 seconds" in music and "Tempo: 120 BPM." in music
     # Music is told the level it will be brought to, and how far its peaks may stand over it (mobile: -18 and 17).
@@ -435,6 +442,187 @@ def test_the_loop_measures_the_raw_file_and_then_the_trimmed_one():
        project={**PROJECT, "loud": [-26.0, -22.0]})
     assert len(lint.calls) == 2 and lint.calls[0]["measure"]["seconds"] == 1.0 > lint.calls[1]["measure"]["seconds"]
     assert all((c["kind"], c["loop"], c["loud"]) == ("amb", False, (-26.0, -22.0)) for c in lint.calls)
+
+
+# ---------- the fold of a looping ambience ----------
+RATE = 48000
+AMB_LOOP = {"kind": "amb", "loop": True}
+
+
+def samples(wav):
+    return sf.read(io.BytesIO(wav), dtype="float64", always_2d=True)[0]
+
+
+def level(x):
+    return 10 * math.log10(float((x ** 2).mean()))
+
+
+def bed(seconds, seed=3, gain=0.1, span=240):
+    """A dark noise floor as a render of that length: white noise averaged over 5 ms. Nothing ties a point of it to
+    its start, so a cut anywhere jumps. A longer one starts with the same sound."""
+    white = np.random.RandomState(seed).standard_normal((int(round(seconds * RATE)) + span - 1, 2))
+    return ag.wav_of(np.stack([np.convolve(white[:, c], np.ones(span), "valid") for c in (0, 1)], axis=1) * gain / math.sqrt(span))
+
+
+def test_a_looping_ambience_is_rendered_half_a_second_longer_and_comes_out_at_its_own_length():
+    source = '// loop\nsine(220) * 0.1 |> bus(1, @, "hum")\nsine(440) * 0.1 |> bus(2, @, "air")'
+    for seconds, asked in ((8.0, 8.5), (7.3, 7.8), (30.0, 30.5), (0.6, 0.9)):  # under a second: half the loop more
+        out, _, engine, _, _ = go([{"source": source, "seconds": seconds, "bpm": 0}], item=AMB_LOOP)
+        assert engine.calls[0][1] == pytest.approx(asked) and (out.status, out.result["issues"]) == ("done", [])
+        assert out.result["seconds"] == seconds and out.result["bits"] == 16
+        files = [sf.info(io.BytesIO(data)) for data in (out.wav, *(data for _, data in out.stems))]
+        assert [(f.frames, f.subtype) for f in files] == [(round(seconds * RATE), "PCM_16")] * 3
+    assert ag.SECONDS_CAP["amb"] + ag.FOLD_SECONDS <= nkido.MAX_SECONDS  # the longest loop is still a length the engine takes
+    for kind, loop in (("sfx", False), ("sfx", True), ("music", True), ("music", False), ("amb", False)):
+        _, _, engine, _, _ = go([{**GOOD, "seconds": 2.0}], item={"kind": kind, "loop": loop})
+        assert engine.calls[0][1] == 2.0 == ag.render_seconds(2.0, kind, loop)  # nothing else is rendered longer
+
+
+def test_the_fold_takes_what_the_engine_really_rendered():
+    """nkido renders whole blocks of 128 frames and stops under the length it was asked for: 7.8 s is 374400 frames
+    and a whole number of blocks, 8.5 s comes out as 407936. The loop is its own length either way."""
+    def blocks(source, seconds, bpm):
+        made = ag.sine_render(source, seconds)
+        frames = int(seconds * RATE) // 128 * 128
+        return nkido.Rendered(ag.wav_of(samples(made.wav)[:frames]), {}, RATE, 2, frames / RATE)
+
+    for seconds in (8.0, 7.3, 1.1):
+        out, _, _, _, _ = go([{"source": "// loop\nsine(220) * 0.3 |> out(@)", "seconds": seconds, "bpm": 0}], [blocks], item=AMB_LOOP)
+        assert sf.info(io.BytesIO(out.wav)).frames == round(seconds * RATE) and out.result["seconds"] == seconds
+    # A render that is no longer than the loop has nothing to fold: it is left as it is.
+    short = render_of(ag.tone(1.0))
+    assert ag.fold(short, 1.0) == (short, "") and ag.fold(short, 2.0) == (short, "")
+
+
+def test_fold_starts_on_the_extra_and_ends_on_the_head():
+    x, keep, over = samples(bed(2.5)), 2 * RATE, RATE // 2
+    made, subtype = ag.fold(render_of(bed(2.5), {"a": bed(2.5)}), 2.0)
+    y = samples(made.wav)
+    assert (len(y), made.seconds, made.rate, made.channels, subtype) == (keep, 2.0, RATE, 2, "PCM_16")
+    assert np.allclose(y[0], x[keep], atol=1e-6)  # the loop starts on the frame the render had after the loop's last
+    assert np.allclose(y[over:], x[over:keep], atol=1e-6)  # past the overlap nothing is touched, and nothing fades
+    assert np.abs(y[over - 1] - x[over - 1]).max() < 1e-3  # and the overlap ends on the head
+    assert np.array_equal(samples(made.stems["a"]), y)  # a stem is folded the way the master is
+    # Not rounded and not clipped before the trim: two unrelated ends near full scale add up past it in the middle.
+    assert sf.info(io.BytesIO(made.wav)).subtype == "FLOAT"
+    hot = np.repeat(np.sign(np.random.RandomState(1).standard_normal(int(2.5 * RATE)))[:, None], 2, axis=1) * 0.95
+    loud, _ = ag.fold(render_of(ag.wav_of(hot)), 2.0)
+    assert np.abs(samples(loud.wav)).max() > 1.0
+    done = ag.trim(loud.wav, {}, facts(loud.wav), "amb", True, (-20, -16), "PCM_16")[0]
+    assert facts(done)["clips"] == 0 and facts(done)["peak"] == pytest.approx(-1.2, abs=0.05) and facts(done)["bits"] == 16
+
+
+def test_the_gains_of_the_fold_keep_the_power_whatever_the_two_ends_share():
+    n = 1000
+    u = np.arange(n) / n
+    fade_out, fade_in = ag.fold_gains(0.0, n)  # unrelated ends: the equal-power pair
+    assert np.allclose(fade_out, np.cos(u * math.pi / 2)) and np.allclose(fade_in, np.sin(u * math.pi / 2))
+    fade_out, fade_in = ag.fold_gains(1.0, n)  # the same sound at both ends: a straight line, which changes nothing
+    assert np.allclose(fade_out, 1 - u) and np.allclose(fade_in, u)
+    for match in (0.0, 0.2, 0.5, 0.9, 0.999999, 1.0):
+        fade_out, fade_in = ag.fold_gains(match, n)
+        assert np.allclose(fade_out ** 2 + fade_in ** 2 + 2 * match * fade_out * fade_in, 1.0)
+        assert (fade_out[0], fade_in[0]) == (pytest.approx(1.0, abs=1e-12), 0.0) and fade_in[-1] == pytest.approx(1.0, abs=0.002)
+    # Ends that oppose each other are faded like unrelated ones: a gain never goes over 1.
+    assert all(np.array_equal(a, b) for a, b in zip(ag.fold_gains(-0.7, n), ag.fold_gains(0.0, n)))
+    assert all(np.array_equal(a, b) for a, b in zip(ag.fold_gains(1.3, n), ag.fold_gains(1.0, n)))
+
+
+@pytest.mark.parametrize("cycles", [440.0, 440.15, 440.25])  # cycles in the loop: whole, 54 degrees off at the seam, 90
+def test_a_steady_tone_keeps_its_level_through_the_overlap(cycles):
+    seconds, t = 2.0, np.arange(int(2.5 * RATE)) / RATE
+    tone = np.repeat((np.sin(2 * math.pi * cycles / seconds * t) * 0.3)[:, None], 2, axis=1)
+    out, _, _, _, _ = go([{**GOOD, "seconds": seconds}], [render_of(ag.wav_of(tone))], item=AMB_LOOP)
+    y, over = samples(out.wav), RATE // 2
+    assert len(y) == 2 * RATE
+    rest = level(y[over:])
+    assert all(abs(level(y[at:at + over // 8]) - rest) < 0.5 for at in range(0, over, over // 8))
+    assert abs(level(y[:over]) - rest) < 0.1
+
+
+def test_a_noise_floor_keeps_its_level_through_the_overlap():
+    white = np.random.RandomState(5).standard_normal((int(2.5 * RATE), 2)) * 0.1
+    out, _, _, _, _ = go([{**GOOD, "seconds": 2.0}], [render_of(ag.wav_of(white))], item=AMB_LOOP)
+    y, over = samples(out.wav), RATE // 2
+    rest = level(y[over:])
+    assert len(y) == 2 * RATE and all(abs(level(y[at:at + over // 8]) - rest) < 0.5 for at in range(0, over, over // 8))
+
+
+@needs_node
+def test_a_floor_that_does_not_meet_its_own_start_loops_without_a_seam_once_it_is_folded():
+    lint = ag.NodeLint()
+    cut = lint(bed(2.0), kind="amb", loop=True)
+    assert cut["measure"]["seam"] > 3 and "seam" in [i["id"] for i in cut["issues"]]  # the loop length alone clicks
+    out, model, engine, _, _ = go([{**GOOD, "seconds": 2.0}], [lambda source, seconds, bpm: render_of(bed(seconds))],
+                                  lint=lint, item=AMB_LOOP)
+    assert engine.calls[0][1] == 2.5 and len(model.prompts) == 1
+    assert out.status == "done" and out.result["measure"]["seam"] <= 3 and out.result["seconds"] == 2.0
+    assert "seam" not in [i["id"] for i in out.result["issues"]]
+    assert out.result["measure"]["wrap"] <= 3 and out.result["measure"]["dip"] <= 12  # and its level runs through
+
+
+def test_the_stems_of_a_folded_loop_still_add_up_to_the_master():
+    rain, hum = samples(bed(2.5, seed=1)), samples(ag.tone(2.5, 110.3, 0.1))
+    made = nkido.Rendered(ag.wav_of(rain + hum), {"rain": ag.wav_of(rain), "hum": ag.wav_of(hum)}, RATE, 2, 2.5)
+    out, _, _, _, _ = go([{**GOOD, "seconds": 2.0}], [made], item=AMB_LOOP)
+    master, parts = samples(out.wav), [samples(data) for _, data in out.stems]
+    assert out.status == "done" and "stems_lowered_db" not in out.result and [len(p) for p in parts] == [len(master)] * 2
+    assert len(master) == 2 * RATE and np.abs(master - sum(parts)).max() < 5 / 32768  # the rounding of three files
+
+
+def test_a_folded_loop_is_judged_as_the_loop_it_is():
+    # Both measurements are of the loop: the first of the folded render before its trim, never of the longer render.
+    lint = Lint()
+    out, model, _, _, _ = go([{**GOOD, "seconds": 2.0}], lint=lint, item={**AMB_LOOP, "seconds": 1.0})
+    assert [(c["measure"]["seconds"], c["measure"]["bits"]) for c in lint.calls] == [(2.0, 32), (2.0, 16)]
+    # 2 s is within twice the 1 s that was asked; the 2.5 s that were rendered for it would not be.
+    assert out.result["repairs"] == 0 and out.result["issues"] == [] and len(model.prompts) == 1
+    # Silence is silence folded or not, and the fault names the loop.
+    quiet = lambda source, seconds, bpm: render_of(ag.tone(seconds, level=0.005))  # noqa: E731
+    out, model, _, _, _ = go([{**GOOD, "seconds": 2.0}] * 3, [quiet] * 3, item=AMB_LOOP)
+    assert (out.status, out.error) == ("failed", "make_failed") and "silent (peak -46.0 dBFS)" in model.prompts[1]
+
+
+def test_a_folded_loop_with_a_seam_is_told_that_the_server_joined_it():
+    seam = [{"id": "seam", "level": "warn", "value": 9.0, "limit": 3}]
+    _, model, _, _, _ = go([GOOD, GOOD], lint=Lint(issues=[[], seam]), item=AMB_LOOP)
+    told = model.prompts[1].split("It failed: ")[1]
+    assert "the loop clicks at its seam" in told and "attack" in told and "run into the start" not in told
+    _, model, _, _, _ = go([GOOD, GOOD], lint=Lint(issues=[[], seam]), item={"kind": "sfx", "loop": True})
+    assert "the loop clicks at its seam: the end does not run into the start" in model.prompts[1]
+
+
+# What run() gave for these jobs before looping ambience was folded: sha256 of the master and of every stem with its
+# label. Effects, music and an ambience that does not loop are made the way they were, to the byte.
+UNFOLDED = {
+    "sfx": "17464fd92df34f44737d0360bf0464038c8a030f410b0566e50208b5ab550cea",
+    "sfx loop": "b155440a54e13ebbdef01b4b96d03ec21f8757682e7d8905b98d3b526b290813",
+    "music": "8320d76b0ca9a23bec814207fc87d61688362d21a4019d08218b61c2f80845f7",
+    "music loop": "ffb3510463453994bdaa13b3c5869eb3892f099a5da379ea482181d577a7a9f4",
+    "amb": "767288692dcda72a22edac02e795a7e8f060c843d1b034ddf63969c0bed039c7",
+}
+
+
+def unfolded(name):
+    stems = {"bass": ag.tone(1.0, 110, 0.5), "melody": ag.tone(1.0, 220)}
+    quiet = Lint(force=[{"loud": -30.0}])
+    return {
+        "sfx": lambda: go([GOOD], [render_of(ag.tone(1.0, level=0.3, lead=0.2, tail=0.5, decay=True), {"a": ag.tone(1.0, 330, 0.2, decay=True)})]),
+        "sfx loop": lambda: go([{**GOOD, "seconds": 0.75}], item={"kind": "sfx", "loop": True}),
+        "music": lambda: go([GOOD], [render_of(ag.tone(1.0, 165, 0.2, decay=True), stems)], lint=quiet, item={"kind": "music"}),
+        "music loop": lambda: go([{"source": ag.FakeModel.patch_for(ag.ask_text(PROJECT, [], item(kind="music", loop=True)))["source"],
+                                   "seconds": 2.0, "bpm": 120}], lint=quiet, item={"kind": "music", "loop": True}),
+        "amb": lambda: go([GOOD], [render_of(ag.tone(1.0, 220, 0.05, lead=0.1, tail=0.3))], item={"kind": "amb"}),
+    }[name]()[0]
+
+
+@pytest.mark.parametrize("name", list(UNFOLDED))
+def test_what_is_not_a_looping_ambience_is_made_as_before_to_the_byte(name):
+    out = unfolded(name)
+    digest = hashlib.sha256(out.wav)
+    for label, data in out.stems:
+        digest.update(label.encode() + data)
+    assert out.status == "done" and digest.hexdigest() == UNFOLDED[name]
 
 
 # ---------- model errors ----------

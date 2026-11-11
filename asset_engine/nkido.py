@@ -29,27 +29,29 @@ MEMORY_LIMIT = 1024 * 1024 * 1024
 
 # Everything in Akkado that reaches outside the patch. A match anywhere (comments included) refuses the source, and
 # so does a match in the code with its comments taken out (refuse).
+#
+# A name is forbidden where it is called. Akkado has no other use for a built-in: it cannot be a value, so it
+# cannot be renamed or handed on. midi stands for every name that starts with it.
+CALLS = {"samples": "samples()", "sample": "sample()", "sample_loop": "sample()", "soundfont": "soundfont()",
+         "sf_voice": "sf_voice()", "wavetable": "a wavetable", "wt": "a wavetable", "wt_load": "a wavetable",
+         "smooch": "a wavetable", "bank": ".bank()", "variant": ".bank()", "in": "in()", "midi": "midi()",
+         "cc": "cc()", "tune": "tune()"}
+WORDS = {"import": "import", "include": "include"}  # these wherever they stand
+# The names and the numbers of a text, cut the way Akkado's lexer cuts them (akkado/src/lexer.cpp): a name is a
+# letter or _ and then letters, digits and _; a number is its digits, a fraction and an exponent that has digits,
+# and it ends there. So `0samples(` is the number 0 and then the name samples, and `x0samples(` is one name.
+WORD = re.compile(r"(?P<name>[A-Za-z_][A-Za-z0-9_]*)|(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
+BRACKET = re.compile(r"\s*\(")
 FORBIDDEN = (
-    (r"\bsamples\s*\(", "samples()"),
-    (r"\bsample(?:_loop)?\s*\(", "sample()"),
-    (r"\bsoundfont\s*\(", "soundfont()"),
-    (r"\bsf_voice\s*\(", "sf_voice()"),
-    (r"\b(?:wavetable|wt|wt_load|smooch)\s*\(", "a wavetable"),
-    (r"\b(?:bank|variant)\s*\(", ".bank()"),
-    (r"\bs[\"`]", 's"..." sample pattern'),
-    (r"\bin\s*\(", "in()"),
-    (r"\bmidi\w*\s*\(", "midi()"),
-    (r"\bcc\s*\(", "cc()"),
-    (r"\btune\s*\(", "tune()"),
-    (r"\bimport\b", "import"),
-    (r"\binclude\b", "include"),
     (r"\$", "a $ directive"),
     (r"://|\b(?:file|github|bundled|blob|idb|https?):", "a URI"),
     (r"[A-Za-z]:[\\/]|\.\.[\\/]", "a file path"),
 )
 QUOTES = "\"'`"
 ESCAPES = {"n": "\n", "t": "\t", "r": "\r"}
-OUTSIDE = re.compile(r"\s*[\\/]")  # how a string starts that is a path from the root of the drive or to another machine
+# How a string starts that is a path out of the render's folder: from the root of the drive, to another machine, or
+# on a drive it names (`D:x` needs no slash: it is x in the folder that drive stands in).
+OUTSIDE = re.compile(r"\s*(?:[\\/]|[A-Za-z]:)")
 ERROR_LINE = re.compile(r":(\d+):(\d+):\s*error(?:\[(\w+)\])?:?\s*(.*)")
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -103,13 +105,34 @@ def read(source: str) -> tuple[str, list[str]]:
     return "".join(code), strings
 
 
+def called(text: str) -> str:
+    """The first forbidden name the text calls or says, or ''. A name counts from where the lexer starts it, so
+    digits written against it hide nothing and a longer name that only ends like it is left alone."""
+    for found in WORD.finditer(text):
+        name, end = found.group("name"), found.end()
+        if not name:
+            continue
+        if name in WORDS:
+            return WORDS[name]
+        if name == "s" and text[end:end + 1] in ('"', "`"):
+            return 's"..." sample pattern'
+        if BRACKET.match(text, end):
+            what = CALLS.get("midi" if name.startswith("midi") else name)
+            if what:
+                return what
+    return ""
+
+
 def refuse(source: str) -> str:
     """The first forbidden thing the source names, or ''. The rules are tried on the source as it was written and
     on its code as the lexer reads it: the lexer passes over a comment, so one between a name and its bracket
-    must hide nothing here either. And no string may start like a path from the root of the drive or to another
-    machine, which has no drive letter and no `..` for the rules to find."""
+    must hide nothing here either. And no string may start like a path out of the render's folder (OUTSIDE),
+    which need not have a slash after a drive letter or a `..` for the rules to find."""
     code, strings = read(source)
     for text in (source, code):
+        named = called(text)
+        if named:
+            return named
         for pattern, name in FORBIDDEN:
             if re.search(pattern, text):
                 return name

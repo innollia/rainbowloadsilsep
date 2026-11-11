@@ -250,7 +250,7 @@ class Limits:
     pw_daily_usd: float = 0.60    # dollars of all password sessions
     daily_usd: float = 5.00       # dollars of all generation
     pw_refund_hourly: int = 36    # refunds the users caused, of all the password sessions of one address in an hour
-    pw_refund_daily: int = 72     # and in a day
+    pw_refund_daily: int = 72     # and in a day; one session adds at most REFUND_HOURLY + 1 and REFUND_DAILY + 1
 
     ENV = {"account_daily": "OLMUSE_GEN_ACCOUNT_DAILY", "daily": "OLMUSE_GEN_DAILY", "pw_daily": "OLMUSE_GEN_PW_DAILY",
            "pw_all_daily": "OLMUSE_GEN_PW_ALL_DAILY", "pw_daily_usd": "OLMUSE_GEN_PW_DAILY_USD",
@@ -367,6 +367,7 @@ class GenStore:
 
 
 PENDING =("pending", "unknown", "refund_due")  # charges that still have a ledger call to come
+ANY = object()  # _set_balance: the balance is remembered whatever was remembered before
 
 
 def refund_of(row) -> str:
@@ -419,9 +420,9 @@ class GenJobs:
         self.waiting: dict[str, list[tuple]] = {}   # owner -> [(batch order, k, item order, id, lane)], sorted
         self.kinds: dict[str, str] = {}             # owner -> acct | pw
         self.active: dict[str, int] = {}            # owner -> jobs a worker holds
-        self.served: dict[str, int] = {}            # owner -> the count of picks when it was last served
+        self.served: dict[str, float] = {}          # owner -> the count of picks when it was last served, or came
         self.lane_active: dict[tuple, int] = {}     # (owner, lane) -> jobs a worker holds, of one session of an address
-        self.lane_served: dict[tuple, int] = {}     # (owner, lane) -> the count of picks when it was last served
+        self.lane_served: dict[tuple, float] = {}   # (owner, lane) -> the count of picks when it was last served, or came
         self.held: dict[str, threading.Thread] = {}  # job id -> the worker that holds it
         self.mail: dict[str, str] = {}              # owner -> email; never written to disk
         self.balances: dict[str, tuple[int, float]] = {}  # owner -> (the ledger's last answer, when)
@@ -460,11 +461,19 @@ class GenJobs:
         worker = self.held.get(job_id)
         return worker is not None and worker.is_alive()
 
-    def _set_balance(self, owner: str, credits):
-        """A balance the ledger gave, from a read, a charge or a refund. The ledger answers this account again."""
+    def _set_balance(self, owner: str, credits, over=ANY) -> int:
+        """A balance the ledger gave, from a read, a charge or a refund. The ledger answers this account again.
+        Returns the balance that is remembered now.
+
+        A read says what was remembered when it was sent (`over`) and is dropped when that has changed since: a
+        charge or a refund answered while the read was out, and the read may have been made before it. Its
+        balance would bring back a credit that is gone, and a request that has to be a 402 would be taken."""
         with self.store.lock:
-            self.balances[owner] = (int(credits), self.clock())
             self.unread.pop(owner, None)
+            held = self.balances.get(owner)
+            if over is ANY or held is over or held is None:
+                held = self.balances[owner] = (int(credits), self.clock())
+            return held[0]
 
     def count(self, name: str, day: str = "") -> int:
         """Today's value of a counter: d:<owner>, d:members, d:teachers, usd:pw, usd:all, rf:<owner>."""
@@ -554,8 +563,7 @@ class GenJobs:
                 self.unread = {owner: at for owner, at in self.unread.items() if 0 <= now - at < LEDGER_REST}
                 self.unread[who.owner] = now
             raise GenError(503, "no_ledger") from None
-        self._set_balance(who.owner, credits)
-        return credits
+        return self._set_balance(who.owner, credits, over=held)
 
     def _short(self, owner: str, cost: int, balance, queued: int) -> bool:
         """Lock held. Whether the account cannot pay `cost` more. Reserved: what waits and what is being charged
@@ -584,7 +592,8 @@ class GenJobs:
     def _refund_limits(self, who: Who) -> list[tuple[str, int, int]]:
         """(whose refunds, how many an hour, how many a day). An account's are its own. A password session's are
         its own too, so one person in a classroom cannot close the door on everybody at the address; and the
-        address has a wider count, because a reload is a new session."""
+        address has a wider count, because a reload is a new session. Of one session that count takes no more
+        than what closes the session's own door (_count_refund)."""
         names = self._refunds_of(who.owner, lane_of(who))
         if len(names) == 1:
             return [(who.owner, self.refund_hourly, self.refund_daily)]
@@ -744,6 +753,12 @@ class GenJobs:
                 db.execute("insert into req values (?,?,?,?,?,0,?)",
                            (who.owner, req["request_id"], sha, batch, json.dumps(answer), now))
             self.kinds[who.owner] = who.kind
+            # Whoever comes new counts as served just before the last pick: behind everyone who has waited since
+            # before it, ahead only of the one that pick served. Counted as never served, every newcomer (a reload
+            # is a new session) went ahead of one that had been picked once, for as long as newcomers kept coming.
+            self.served.setdefault(who.owner, self.picks - 0.5)
+            if lane:
+                self.lane_served.setdefault((who.owner, lane), self.picks - 0.5)
             self.waiting.setdefault(who.owner, []).extend(entries)
             self.waiting[who.owner].sort()
             self.wake.notify_all()
@@ -1012,7 +1027,8 @@ class GenJobs:
     def _pick(self):
         """Lock held. The next job, now `running` and counted, or None.
 
-        The owner with the fewest jobs in a worker's hands goes first, then the one served longest ago. Inside an
+        The owner with the fewest jobs in a worker's hands goes first, then the one served longest ago (one that
+        was never served counts from when it came, so it stands behind the ones that waited before it). Inside an
         owner the order is (request, draft number, item), so every sound's draft 1 comes before any draft 2, and
         the sessions of one address take turns in the same way (_turn). An owner whose results wait to be
         received is passed over. The pick and today's counts are one transaction;
@@ -1184,11 +1200,26 @@ class GenJobs:
         day = self._day(row["started"])
         self.store.add(day, "d:teachers" if row["cls"] == "pw" else "d:members", -1)
         if user:
-            for name in self._refunds_of(row["owner"], row["sess"]):
-                self.store.add(self._day(now), "rf:" + name, 1)
-                self.refunds[name] = [t for t in self.refunds.get(name, []) if now - t < 3600] + [now]
+            self._count_refund(row["owner"], row["sess"], now)
         else:
             self.store.add(day, "d:" + row["owner"], -1)
+
+    def _count_refund(self, owner: str, lane, now: float):
+        """Lock and transaction held. One refund the user caused, under the names it is counted by (_refunds_of).
+        A password session's own count takes every one. Its address takes them only up to the one that closes the
+        session's own door, in the hour and in the day: one request holds up to OWNER_ACTIVE drafts, and when all
+        of them fail, or expire unreceived in one sweep, they would pass the address's limits from one session and
+        turn everybody at the address away. The address's limits are passed by sessions that keep changing."""
+        today, own = self._day(now), self._refunds_of(owner, lane)[-1]
+        recent = lambda name: [t for t in self.refunds.get(name, []) if now - t < 3600] + [now]  # noqa: E731
+        self.refunds[own] = recent(own)
+        self.store.add(today, "rf:" + own, 1)
+        if own == owner:
+            return
+        if len(self.refunds[own]) <= self.refund_hourly + 1:
+            self.refunds[owner] = recent(owner)
+        if self.store.count(today, "rf:" + own) <= self.refund_daily + 1:
+            self.store.add(today, "rf:" + owner, 1)
 
     def _end(self, job_id: str, status: str, code: str = "", charge=None) -> tuple[bool, bool]:
         """A running job to failed or cancelled: one conditional update, and the next `charge` in the same
@@ -1374,7 +1405,8 @@ class GenJobs:
                 down = True
                 break  # the ledger is not answering; the next sweep tries again
         if not down:
-            self.refunds_down = None
+            # The outage is over, and so is its hour between ALERTs: the next one is said after its own REFUND_LATE.
+            self.refunds_down, self.refunds_said = None, 0.0
             return
         if self.refunds_down is None:
             self.refunds_down = now

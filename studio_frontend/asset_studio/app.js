@@ -523,8 +523,12 @@ ${p.form}`,
   // The approved sounds, each with the patch of the version in use: what new sounds are told to stay close to.
   // quote.js takes up to three whose patch is known, the kinds being asked for first. A change to a sound starts
   // from that sound's own patch and is given none.
+  // An approved sound that is being changed right now is still one of them: its approved version stays the one in
+  // use until a draft of the change is kept, and the sound is approved as before when nothing comes of the change
+  // (a.work.before). Going by the status alone would leave new sounds asked for meanwhile with nothing to go by.
+  const approvedInUse = (a) => a.status === 'approved' || (a.status === 'working' && !!a.work && a.work.before === 'approved');
   const genExamples = (list, o) => (o.mode === 'make' ? assetQuote.examples(list.map(soundKind),
-    assets.filter((a) => a.status === 'approved' && a.versions.length && !list.includes(a)).map((a) => { const v = version(a); return { name: nm(a), kind: soundKind(a), loop: !!a.loop, source: v.source, facts: v.measure }; })) : []);
+    assets.filter((a) => approvedInUse(a) && a.versions.length && !list.includes(a)).map((a) => { const v = version(a); return { name: nm(a), kind: soundKind(a), loop: !!a.loop, source: v.source, facts: v.measure }; })) : []);
   const gen = assetGen.create({
     store, assets: () => assets, measure: assetMeasure, peaks: assetStore.peaksOf,
     project: () => ({ game: tx(game), style: tx(brief) || '', platform, loud: [...loudRange] }), item: genItem, lang: () => lang,
@@ -1256,19 +1260,22 @@ ${p.form}`,
   // are made from the words. remakes and fills are [[sounds, words]]. However many pairs there are, the changes are
   // one request and the new sounds another. A slot named twice is made from the first words. Returns whether all of
   // it was taken.
+  // The words become a slot's description and a line in its chat only when the slot is asked for with them. While
+  // the room takes no request (the toast says why), or for a slot that cannot be asked for, the slot stays as it was:
+  // nothing was started, so there is nothing of it to see or to put back.
   function makeAsked(remakes, fills, n) {
     let taken = true;
     if (remakes.some(([list]) => list.length) && !remake(remakes, n)) taken = false;
     const words = new Map();
     for (const [list, text] of fills) {
       if (!list.some((a) => gen.free(a) && !words.has(a))) taken = false;
-      for (const a of list) {
-        if (words.has(a)) continue;
-        words.set(a, text);
-        if (text) { a.description = text; a.chat.push({ me: true, text }); }
-      }
+      for (const a of list) if (!words.has(a)) words.set(a, text);
     }
-    if (words.size && !fill([...words.keys()], null, n, (a) => words.get(a))) taken = false;
+    if (!words.size) return taken;
+    if (refuse()) return false;
+    const slots = [...words.keys()].filter(gen.free);
+    for (const a of slots) { const text = words.get(a); if (text) { a.description = text; a.chat.push({ me: true, text }); } }
+    if (!fill(slots, null, n, (a) => words.get(a))) taken = false;
     return taken;
   }
   function renderOpen(a) { if (openAsset && (!a || a === openAsset)) renderDetail(); else if (openAsset) renderHeader(); else renderBoard(); }
@@ -2118,7 +2125,9 @@ ${p.form}`,
 
   /* ---------- filling empty slots, optionally in the feel of a brought-in sound ---------- */
   // The sound a new one takes after: the one it was asked to be like, else a brought-in sound of its own group.
-  const referenceFor = (a) => (a.ref && byId(a.ref)) || assets.find((r) => r.imported && r.versions.length && r.cat === a.cat) || null;
+  // Either one only while it has a version: its measurements go along with the request, and a sound that came back
+  // as an empty slot on a later visit (its bytes were not on disk) has none to give.
+  const referenceFor = (a) => [a.ref && byId(a.ref), assets.find((r) => r.imported && r.versions.length && r.cat === a.cat)].find((r) => r && r.versions.length) || null;
   // Asks for sounds that are not made yet, all of them together. count is the drafts of each: one from a button, the
   // picker's number when the request was typed. text is the words they were asked for in, or a function that gives
   // each sound its own. Returns whether anything was asked for.

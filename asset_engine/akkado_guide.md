@@ -198,14 +198,19 @@ mixer(2, (s) -> s |> saturate(@, 2) |> @ * 0.8, "bass")  // optional per-bus FX
 
 ## Seamless loops
 
+Music loops and looping effects close in the patch:
+
 - Choose the loop length in beats, then render exactly `beats * 60 / bpm` seconds. Use a length whose seconds x 375 is an integer (the renderer works in 128-sample blocks). Safe tempos for 4-beat multiples: 60, 75, 80, 90, 96, 100, 120, 125, 144, 150, 160, 180.
 - Every pattern length must divide the loop length (a 3-beat pattern does not loop inside 8 beats).
 - Every voice must be silent at the loop point: use decaying `ar` envelopes that finish before the end, and when using `adsr` with `.gate`, end the pattern with a rest (`[g1 ~]`) so the last note has released.
 - Delay and reverb tails are cut at the end and missing at the start. In loops keep them off, or short and quiet (`wet` <= 0.2).
 - Free-running modulation must repeat with the loop: derive it from `ph = phasor(1 / loop_seconds)` (e.g. `cos(ph * 6.28318)`), or use `sine(k / loop_seconds)` with integer k.
-- A layer that never closes must run into its own start, or the loop clicks and the draft is rejected. Only two kinds do: `sine` or `tri` drones with `freq * loop_seconds` an integer and nothing after them but gain, `saturate` or periodic modulation; and noise that keeps its highs (white, `hp`, or `lp` at 3000 and up).
-- Any other sustained layer clicks: `saw` or `sqr` drones (put them through `lp`), drones through a filter, delay or reverb, dark noise (`lp` under 3000, `bp` under 2000, `moog` under 4000). Multiply it, after its last effect, by a gate that shuts exactly at the loop point: `edge = v"[1@N ~]".slow(B) as g |> adsr(g.gate, 0.005, 0.01, 1, 0.005)`, B = loop beats, N = 40 x loop_seconds - 1 (shut for the last 0.025 s). In an ambience set `bpm = 60` so B = loop_seconds. A `phasor` drifts by up to 1% of the loop and cannot do this.
-- A looping ambience gets a warning when any quarter second is more than 12 dB under its average level (gaps, deep swells, events with no bed) or its first and last quarter second differ by more than 3 dB: keep its modulation periodic and shallow.
+
+A looping ambience is closed by the server: it renders half a second past the length you return and cross-fades that extra over the start at equal power.
+
+- Write no fade in or out and no gate or silence at the loop point. Sustained layers need no closing: drones, filtered or dark noise, reverb.
+- Keep a bed sounding throughout, its level moving only a little and only with a period that fits the loop (`sine(k / loop_seconds)`, integer k): the draft gets a warning when any quarter second is more than 12 dB under its average level (gaps, deep swells, events with no bed) or its first and last quarter second differ by more than 3 dB.
+- Place events (drops, crackles) at irregular times from seeded noise, as in the rain example, so no repeat is heard.
 
 ## Common mistakes
 
@@ -296,14 +301,12 @@ f = 280 + fall * 2200
 
 ```akkado
 // Wind ambience loop. render: 8 s (loop = 8 s)
-bpm = 60                                             // 1 beat = 1 s
 master((s) -> limiter(s, -1.5, 0.1))
 ph = phasor(0.125)                                   // 0 -> 1 once per 8 s
-gust = 0.5 - 0.3 * cos(ph * 6.28318) + 0.15 * sin(ph * 18.84954)   // periodic, quietest at the seam
-edge = v"[1@319 ~]".slow(8) as g |> adsr(g.gate, 0.005, 0.01, 1, 0.005)   // dark noise: shut for the last 1/320 of the loop
+gust = 0.5 - 0.3 * cos(ph * 6.28318) + 0.15 * sin(ph * 18.84954)   // repeats with the loop
 wl = noise(0, 0, 1) |> bp(@, 350 + gust * 550, 1.5)
 wr = noise(0, 0, 2) |> bp(@, 400 + gust * 550, 1.5)
-stereo(wl, wr) * (0.15 + gust * 0.6) * edge |> out(@)
+stereo(wl, wr) * (0.15 + gust * 0.6) |> out(@)
 ```
 
 ### Rain ambience loop
