@@ -141,7 +141,7 @@ ${p.files}`,
       roles: { bed: 'All the time', scatter: 'Now and then', stem: 'Music part' }, fadeFrom: 'Starts at', fadeTo: 'Loudest at', gap: 'Every', gapUnit: 's', tempo: 'Tempo (BPM)',
       layerPlays: 'Plays', layerVol: 'Volume', layerWhen: 'When', followParam: (n) => `Follows ${n}`, layerSolo: 'Hear only this', layerMute: 'Mute',
       dynNoSounds: 'Make or import some sounds first; layers are made of them.', dynHelp: 'Move a value to hear the sound change. The game moves the same value.',
-      specField: { name: 'name', category: 'category', length: 'length', loop: 'loop', when: 'when', description: 'description' }, openAsset: 'Open', rename: 'Rename', unapprove: 'Cancel approval', menu: 'Menu', settings: 'Settings', language: 'Language', gameInfo: 'Game info', stagesLabel: 'Progress', total: (n) => `${n} in all`, approvedOf: (a, n) => `${a} of ${n} approved`, help: 'How to use', spec: 'Spec', export: 'Export',
+      logout: 'Sign out', specField: { name: 'name', category: 'category', length: 'length', loop: 'loop', when: 'when', description: 'description' }, openAsset: 'Open', rename: 'Rename', unapprove: 'Cancel approval', menu: 'Menu', settings: 'Settings', language: 'Language', gameInfo: 'Game info', stagesLabel: 'Progress', total: (n) => `${n} in all`, approvedOf: (a, n) => `${a} of ${n} approved`, help: 'How to use', spec: 'Spec', export: 'Export',
       backToMusic: 'To music studio', category: 'Category', board: 'Asset board', playAll: 'Play all', stopAll: 'Stop playing all', hoverPlay: 'Play on hover',
       acceptAll: 'Keep all', rejectAll: 'Discard all', selectAll: 'Select all', deselect: 'Deselect', approve: 'Approve', approved: 'Approved', clear: 'Clear',
       ask: 'Edit request', send: 'Send',
@@ -295,7 +295,7 @@ ${p.files}`,
       roles: { bed: '계속', scatter: '가끔', stem: '음악 파트' }, fadeFrom: '들리기 시작', fadeTo: '가장 크게', gap: '간격', gapUnit: '초', tempo: '빠르기(BPM)',
       layerPlays: '재생', layerVol: '음량', layerWhen: '언제', followParam: (n) => `${n}에 따라`, layerSolo: '이것만 듣기', layerMute: '끄기',
       dynNoSounds: '소리부터 만들거나 가져오라고. 레이어는 그 소리로 만드는 거잖아, 허접~', dynHelp: '값 막대를 움직이면 소리가 바뀌는 게 들려. 게임도 같은 값을 바꿔서 이 소리를 움직여~',
-      specField: { name: '이름', category: '분류', length: '길이', loop: '반복', when: '재생 시점', description: '설명' }, openAsset: '열기', rename: '이름 바꾸기', unapprove: '승인 취소', menu: '메뉴', settings: '설정', language: '언어', gameInfo: '게임 정보', stagesLabel: '진행 상황', total: (n) => `전체 ${n}`, approvedOf: (a, n) => `${n}개 중 ${a}개 승인`, help: '사용법', spec: '명세', export: '내보내기',
+      logout: '로그아웃', specField: { name: '이름', category: '분류', length: '길이', loop: '반복', when: '재생 시점', description: '설명' }, openAsset: '열기', rename: '이름 바꾸기', unapprove: '승인 취소', menu: '메뉴', settings: '설정', language: '언어', gameInfo: '게임 정보', stagesLabel: '진행 상황', total: (n) => `전체 ${n}`, approvedOf: (a, n) => `${n}개 중 ${a}개 승인`, help: '사용법', spec: '명세', export: '내보내기',
       backToMusic: '음악 작업실로', category: '분류', board: '에셋 보드', playAll: '전체 재생', stopAll: '전체 재생 정지', hoverPlay: '마우스 오버 시 재생',
       acceptAll: '전체 채택', rejectAll: '전체 버림', selectAll: '전체 선택', deselect: '선택 해제', approve: '승인', approved: '승인됨', clear: '해제',
       ask: '수정 요청', send: '보내기',
@@ -1937,7 +1937,7 @@ ${p.form}`,
   menu.onclick = (e) => {
     const b = e.target.closest('[data-act]'); if (!b) return;
     toggleMenu(false);
-    ({ settings: settingsDialog, spec: () => specDialog(), game: gameDialog, help: tutorial, refs: () => refDialog({ type: 'project' }) })[b.dataset.act]();
+    ({ settings: settingsDialog, spec: () => specDialog(), game: gameDialog, help: tutorial, logout: signOut, refs: () => refDialog({ type: 'project' }) })[b.dataset.act]();
   };
   addEventListener('click', (e) => { if (!menu.hidden && !e.target.closest('.menuWrap')) toggleMenu(false); });
   menu.addEventListener('keydown', (e) => {
@@ -1946,6 +1946,8 @@ ${p.form}`,
     else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus(); }
   });
 
+  // The host page owns the account: what is not saved yet is saved first, then the host signs out.
+  async function signOut() { stopSound(); queue = null; await saveNow(); parent.postMessage({ type: 'asset:logout' }, location.origin); }
   function tutorial() {
     openDialog(t('tutorialTitle')); reopen = tutorial;
     const list = el('ol', 'steps');
@@ -3152,7 +3154,7 @@ ${p.form}`,
 
   /* the host's word and the token decide which board this is (E5) */
   function leaveAccount() { if (engine) engine.stop(); try { syncLs.setItem('asset-sync.who', ''); } catch { /* nothing kept */ } reloadSync(); }
-  function syncSigned(on) { signedIn = on; if (acct && !on) leaveAccount(); else syncToken(); }
+  function syncSigned(on) { signedIn = on; $('logoutItem').hidden = !(on && inHost); if (acct && !on) leaveAccount(); else syncToken(); }
   function syncToken() {
     const id = gen.identity;
     if (!SYNC || !BOARD || !id || !booted) return;

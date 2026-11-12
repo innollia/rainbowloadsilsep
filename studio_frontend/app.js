@@ -1354,6 +1354,7 @@
   $('assetBtn').onclick = () => showAssets(true);
   addEventListener('message', (e) => {
     if (e.data?.type === 'asset:back') showAssets(false);
+    if (e.data?.type === 'asset:logout' && e.source === frame.contentWindow && e.origin === location.origin) send('logout', {});
     // Imported files sorted by Jev on the server; the answer comes back through the render args (args.classify).
     if (e.data?.type === 'asset:classify' && e.source === frame.contentWindow) send('classify', e.data.payload);
     // The asset board's assistant runs on the music screen's model choice; its answer comes back as args.asset_agent.
