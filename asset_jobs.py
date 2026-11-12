@@ -251,11 +251,12 @@ class Limits:
     daily_usd: float = 5.00       # dollars of all generation
     pw_refund_hourly: int = 36    # refunds the users caused, of all the password sessions of one address in an hour
     pw_refund_daily: int = 72     # and in a day; one session adds at most REFUND_HOURLY + 1 and REFUND_DAILY + 1
+    claude_daily: int = 300       # drafts of one account on the Claude CLI list (OLMUSE_GEN_CLAUDE_ACCOUNTS)
 
     ENV = {"account_daily": "OLMUSE_GEN_ACCOUNT_DAILY", "daily": "OLMUSE_GEN_DAILY", "pw_daily": "OLMUSE_GEN_PW_DAILY",
            "pw_all_daily": "OLMUSE_GEN_PW_ALL_DAILY", "pw_daily_usd": "OLMUSE_GEN_PW_DAILY_USD",
            "daily_usd": "OLMUSE_GEN_DAILY_USD", "pw_refund_hourly": "OLMUSE_GEN_PW_REFUND_HOURLY",
-           "pw_refund_daily": "OLMUSE_GEN_PW_REFUND_DAILY"}
+           "pw_refund_daily": "OLMUSE_GEN_PW_REFUND_DAILY", "claude_daily": "OLMUSE_GEN_CLAUDE_DAILY"}
 
     @classmethod
     def from_env(cls, env=None) -> "Limits":
@@ -401,8 +402,14 @@ class GenJobs:
 
     def __init__(self, store: GenStore, *, ledger=None, model=None, engine=None, measure=None, renders=None,
                  temp=None, limits: Limits | None = None, model_name: str = "", clock=time.time, sleep=time.sleep,
-                 free=None, workers: int = GEN_WORKERS, autostart: bool = True):
+                 free=None, workers: int = GEN_WORKERS, autostart: bool = True, claude=None, claude_accounts=()):
         self.store, self.ledger, self.model, self.engine, self.measure = store, ledger, model, engine, measure
+        # The Claude CLI lane: accounts whose email is on the list are made by `claude` (asset_generate.ClaudeCli),
+        # on the owner's subscription, and never reach the ledger. Their rows are cls 'cc'.
+        parts = claude_accounts.split(",") if isinstance(claude_accounts, str) else claude_accounts
+        self.claude = claude
+        self.claude_accounts = frozenset(str(e).strip().lower() for e in parts if str(e).strip())
+        self.claude_strikes, self.claude_until, self.claude_said = 0, 0.0, False
         self.renders = Path(renders or DEFAULT_RENDERS)
         self.temp = Path(temp or tempfile.gettempdir())
         self.limits, self.model_name = limits or Limits(), model_name
@@ -442,6 +449,10 @@ class GenJobs:
                             clock=clock, sleep=sleep, cancelled=self._stopped, free=self._free, model_name=model_name,
                             call_usd=call_usd, model_ok=self._model_ok, model_down=self._model_down,
                             engine_missing=self._engine_missing)
+        self.cc_deps = ag.Deps(model=claude, engine=engine, measure=measure, slots=self.deps.slots, clock=clock, sleep=sleep,
+                               cancelled=self._stopped, free=self._free, model_name=self._claude_name(),
+                               call_usd=0.0, model_ok=self._claude_answered, model_down=self._claude_down,
+                               engine_missing=self._engine_missing)
         self.renders.mkdir(parents=True, exist_ok=True)
         self.recover()
         if autostart:
@@ -494,6 +505,62 @@ class GenJobs:
                 log.error("ALERT asset generation model refused %d calls in a row; resting %d seconds",
                           BREAKER_STRIKES, BREAKER_SECONDS)
 
+    def cls_of(self, who: Who) -> str:
+        """The row class of who asks: 'cc' for an account on the Claude CLI list, else the token's kind."""
+        if who.kind == "acct" and self.claude_accounts and str(who.email).strip().lower() in self.claude_accounts:
+            return "cc"
+        return who.kind
+
+    def _claude_name(self) -> str:
+        """The model the Claude CLI is asked for (ClaudeCli.model), for a result's `model`."""
+        name = getattr(self.claude, "model", "")
+        return name if isinstance(name, str) else str(getattr(self.claude, "name", "") or "")
+
+    def _claude_ready(self, now: float) -> bool:
+        """Whether the Claude CLI lane takes and picks drafts: it is there, signed in, and not resting."""
+        return self.claude is not None and bool(getattr(self.claude, "ok", True)) and now >= self.claude_until
+
+    def _claude_answered(self):
+        with self.store.lock:
+            self.claude_strikes = 0
+
+    def _claude_down(self):
+        """The Claude CLI turned a call down. Signed out or gone (its ok turned False): what the listed accounts have
+        waiting fails as no_model now, and the log says ALERT once until it is back. Otherwise it counts like the
+        paid model's breaker, on its own: BREAKER_STRIKES in a row and the lane rests BREAKER_SECONDS."""
+        if not getattr(self.claude, "ok", True):
+            with self.wake:
+                said, self.claude_said = self.claude_said, True
+                self._fail_waiting([o for o in self.waiting if self.kinds.get(o) == "cc"], "no_model")
+            if not said:
+                log.error("ALERT the Claude CLI is missing or signed out; drafts of the listed accounts are off")
+            return
+        with self.store.lock:
+            self.claude_strikes += 1
+            if self.claude_strikes >= BREAKER_STRIKES:
+                self.claude_strikes, self.claude_until = 0, self.clock() + BREAKER_SECONDS
+                log.error("ALERT the Claude CLI refused %d calls in a row; the listed accounts rest %d seconds",
+                          BREAKER_STRIKES, BREAKER_SECONDS)
+
+    def _check_claude(self):
+        """No lock held. Asks the Claude CLI whether it is signed in (`claude auth status`, which spends nothing):
+        signed out, the listed accounts are turned away before a draft finds it out; back, they are taken again."""
+        check = getattr(self.claude, "check", None)
+        if not callable(check):
+            return
+        try:
+            check()
+        except Exception as exc:
+            log.error("Claude CLI check failed: %s", type(exc).__name__)
+        if getattr(self.claude, "ok", True):
+            if self.claude_said:
+                self.claude_said = False
+                log.warning("the Claude CLI is signed in again; drafts of the listed accounts are on")
+                with self.wake:
+                    self.wake.notify_all()
+        else:
+            self._claude_down()
+
     def _engine_missing(self):
         """The engine is not installed: nothing waiting can be made, so it fails now, uncharged."""
         with self.wake:
@@ -516,14 +583,19 @@ class GenJobs:
             workers = not self.threads or any(t.is_alive() for t in self.threads[1:])
             room = not self.disk_paused
         node = self._measures()
-        return {"ok": bool(model and engine and node and workers and room), "model": model, "engine": engine, "node": node,
+        said = {"ok": bool(model and engine and node and workers and room), "model": model, "engine": engine, "node": node,
                 "ledger": self.ledger is not None, "queued": queued, "running": running,
                 "disk_free_mb": self._free(self.renders) // MB}
+        if self.claude is not None or self.claude_accounts:  # whether the listed accounts' lane is up; never who is on it
+            said["claude"] = self._claude_ready(self.clock())
+        return said
 
     # ---------- price, balance, admission ----------
     def _gate(self, who: Who):
         """Why no request can be taken at all right now."""
-        if self.model is None or self.clock() < self.breaker_until:
+        cc = self.cls_of(who) == "cc"
+        down = (not self._claude_ready(self.clock())) if cc else (self.model is None or self.clock() < self.breaker_until)
+        if down:  # each lane by its own model: the Claude CLI for a listed account, the paid one for everyone else
             raise GenError(503, "no_model")
         if self.engine is None or not self.engine_ok:
             raise GenError(503, "no_engine")
@@ -532,7 +604,7 @@ class GenJobs:
             raise GenError(503, "no_measure")
         if self.disk_paused:
             raise GenError(503, "busy")
-        if who.kind == "acct" and self.ledger is None:
+        if who.kind == "acct" and not cc and self.ledger is None:
             raise GenError(503, "no_ledger")
 
     def _balance(self, who: Who, fresh: bool = False):
@@ -542,8 +614,8 @@ class GenJobs:
 
         A read the ledger did not answer is remembered for LEDGER_REST seconds, and until then this account is told
         no_ledger at once: a ledger that is down would only make each of its requests wait out the timeout again.
-        Any balance the ledger gives ends that (_set_balance)."""
-        if who.kind != "acct":
+        Any balance the ledger gives ends that (_set_balance). None for a listed account too: it pays nothing."""
+        if who.kind != "acct" or self.cls_of(who) == "cc":
             return None
         if self.ledger is None:
             raise GenError(503, "no_ledger")
@@ -577,7 +649,7 @@ class GenJobs:
         reach the ledger without passing here. A ledger that does not answer that second look leaves the
         remembered balance to decide."""
         balance = self._balance(who)
-        if who.kind != "acct":
+        if who.kind != "acct" or self.cls_of(who) == "cc":
             return balance
         now = self.clock()
         with self.store.lock:
@@ -607,6 +679,8 @@ class GenJobs:
 
     def _buckets(self, who: Who) -> list[tuple[str, int, str, str]]:
         """(counter, limit, code, whose waiting jobs count against it) for the two draft counts of this owner."""
+        if self.cls_of(who) == "cc":  # the paid model's shared count is not theirs: they do not spend its dollars
+            return [("d:" + who.owner, self.limits.claude_daily, "account_limit", "owner")]
         if who.kind == "pw":
             return [("d:" + who.owner, self.limits.pw_daily, "session_limit", "owner"),
                     ("d:teachers", self.limits.pw_all_daily, "daily_limit", "cls")]
@@ -644,8 +718,8 @@ class GenJobs:
     def _refusal(self, who: Who, new: int, cost: int, balance, now: float, at: dict):
         """Lock held, reads only. The GenError that turns `new` more drafts down, or None. In the order of E.
         Every 429 names retry_after: the seconds after which asking again can have another answer."""
-        one, day, owner = self.store.one, at["day"], who.owner
-        if who.kind == "acct" and self._short(owner, cost, balance, at["queued"]):
+        one, day, owner, cc = self.store.one, at["day"], who.owner, self.cls_of(who) == "cc"
+        if who.kind == "acct" and not cc and self._short(owner, cost, balance, at["queued"]):
             return GenError(402, "no_credits", balance=balance or 0, credits=cost)
         for left, code, limit in at["lefts"]:
             if new > left:
@@ -660,6 +734,8 @@ class GenJobs:
             oldest = one("select min(finished) from gen where status='done' and delivered is null and "
                          + ("cls='pw'" if who.kind == "pw" else "owner=?"), () if who.kind == "pw" else (owner,))
             return GenError(429, "fetch_first", retry_after=max(1, int((oldest or now) + UNFETCHED_TTL - now) + 1))
+        if cc:
+            return None  # no refunds and no dollars of the operator's: neither count can turn it away
         # The limits are passed, not met: the refund after the twelfth in an hour is the one that closes the door.
         for name, hourly, daily in self._refund_limits(who):
             recent = sorted(t for t in self.refunds.get(name, ()) if now - t < 3600)
@@ -678,7 +754,7 @@ class GenJobs:
         for name, value, top in (("items", items, ag.MAX_ITEMS), ("drafts", drafts, ag.MAX_DRAFTS)):
             if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= top:
                 raise GenError(400, "bad_request", field=name)
-        price = quote(items, drafts, who.kind == "pw")
+        price = quote(items, drafts, who.kind == "pw" or self.cls_of(who) == "cc")
         reason = None
         try:
             self._gate(who)
@@ -716,7 +792,8 @@ class GenJobs:
         req = ag.clean_request(body, who.lang)
         sha = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode("ascii")).hexdigest()
         new = len(req["items"]) * req["drafts"]
-        price = quote(len(req["items"]), req["drafts"], who.kind == "pw")
+        cls = self.cls_of(who)
+        price = quote(len(req["items"]), req["drafts"], who.kind == "pw" or cls == "cc")
         with self.store.lock:
             played = self._replay(who.owner, req["request_id"], sha)
         if played:
@@ -745,14 +822,14 @@ class GenJobs:
                         db.execute(
                             "insert into gen (id, owner, cls, batch, request_id, ref, k, n, ord, status, attempt, view, input,"
                             " cancel, charge, est, usd, bytes, created, sess) values (?,?,?,?,?,?,?,?,?,'queued',0,?,?,0,'none',0,0,0,?,?)",
-                            (job_id, who.owner, who.kind, batch, req["request_id"], item["ref"], k, req["drafts"], order,
+                            (job_id, who.owner, cls, batch, req["request_id"], item["ref"], k, req["drafts"], order,
                              held, task, now, lane))
                         entries.append((self.batches, k, order, job_id, lane))
                         made.append({"id": job_id, "ref": item["ref"], "k": k, "n": req["drafts"], "status": "queued"})
                 answer = {"batch": batch, "replayed": False, "quote": price, "jobs": made}
                 db.execute("insert into req values (?,?,?,?,?,0,?)",
                            (who.owner, req["request_id"], sha, batch, json.dumps(answer), now))
-            self.kinds[who.owner] = who.kind
+            self.kinds[who.owner] = cls
             # Whoever comes new counts as served just before the last pick: behind everyone who has waited since
             # before it, ahead only of the one that pick served. Counted as never served, every newcomer (a reload
             # is a new session) went ahead of one that had been picked once, for as long as newcomers kept coming.
@@ -950,6 +1027,7 @@ class GenJobs:
         asked whether it works, so that a server without Node takes no request at all."""
         if not self.threads:
             self._check_measure()
+            self._check_claude()
         with self.wake:
             if self.threads:
                 return
@@ -1034,15 +1112,24 @@ class GenJobs:
         received is passed over. The pick and today's counts are one transaction;
         the charge comes after it, in the worker."""
         now = self.clock()
-        if self.model is None or self.engine is None or not self.engine_ok or self.disk_paused or now < self.breaker_until:
+        if self.engine is None or not self.engine_ok or self.disk_paused:
             return None
         if not self._measures():
             return None  # nothing can be measured: what waits stays until Node is back (the sweeper asks)
+        # Each lane by its own model: the paid one, and the Claude CLI's for the listed accounts, which also never
+        # has more drafts in a worker's hands than the CLI has slots.
+        paid = self.model is not None and now >= self.breaker_until
+        cc_held = sum(n for o, n in self.active.items() if self.kinds.get(o) == "cc")
+        cc_ok = self._claude_ready(now) and cc_held < int(getattr(self.claude, "size", ag.CLAUDE_SLOTS))
         day, pw_waiting = self._day(now), None
         while True:
+            if not paid and not cc_ok:
+                return None
             chosen = None
             for owner in sorted((o for o, q in self.waiting.items() if q),
                                 key=lambda o: (self.active.get(o, 0), self.served.get(o, 0), self.waiting[o][0])):
+                if not (cc_ok if self.kinds.get(owner) == "cc" else paid):
+                    continue
                 if self._unfetched(owner) >= self.unfetched_cap:
                     continue
                 if self.kinds.get(owner) == "pw":
@@ -1053,9 +1140,10 @@ class GenJobs:
                 break
             if chosen is None:
                 return None
-            pw = self.kinds.get(chosen) == "pw"
-            if self.store.count(day, "usd:all") + self.est > self.limits.usd_all:
-                return None  # the day's dollars are spent: picking rests
+            pw, cc = self.kinds.get(chosen) == "pw", self.kinds.get(chosen) == "cc"
+            if not cc and self.store.count(day, "usd:all") + self.est > self.limits.usd_all:
+                paid = False  # the day's dollars are spent: the paid lane rests
+                continue
             if pw and self.store.count(day, "usd:pw") + self.est > self.limits.usd_pw:
                 self._fail_waiting([o for o in self.waiting if self.kinds.get(o) == "pw"], "operator_limit")
                 continue
@@ -1063,9 +1151,11 @@ class GenJobs:
             with self.store.tx() as db:
                 took = db.execute(
                     "update gen set status='running', stage='writing', attempt=1, charge=?, charge_at=?, started=?, est=?"
-                    " where id=? and status='queued' and cancel=0", ("none" if pw else "pending", now, now, self.est, job_id)).rowcount
+                    " where id=? and status='queued' and cancel=0",
+                    ("none" if pw or cc else "pending", now, now, 0 if cc else self.est, job_id)).rowcount
                 if took:
                     self.store.add(day, "d:" + chosen, 1)
+                if took and not cc:
                     self.store.add(day, "d:teachers" if pw else "d:members", 1)
                     self.store.add(day, "usd:all", self.est)
                     if pw:
@@ -1128,7 +1218,7 @@ class GenJobs:
         task = json.loads(job["input"])
         outcome = ag.run(ag.Job(id=job["id"], project=task["project"], item=task["item"], examples=task["examples"],
                                 k=job["k"], n=job["n"], lang=task.get("lang"), deadline=job["started"] + JOB_SECONDS),
-                         self.deps, lambda **told: self._report(job["id"], **told))
+                         self.cc_deps if job["cls"] == "cc" else self.deps, lambda **told: self._report(job["id"], **told))
         if outcome.status != "done":
             self._close(job, outcome.status, outcome.error)
         elif not self._keep(job, outcome, task.get("lang")):
@@ -1183,7 +1273,7 @@ class GenJobs:
         usd already holds GEN_CALL_USD for every answered call that named no cost (asset_generate._cost), so a
         provider that reports nothing cannot empty the counters; only a job that never reached the model gives
         its whole estimate back."""
-        if row["started"] is None:
+        if row["started"] is None or row["cls"] == "cc":
             return
         day, off = self._day(row["started"]), int(round((row["usd"] or 0) * 1_000_000)) - (row["est"] or 0)
         if off:
@@ -1198,6 +1288,10 @@ class GenJobs:
         if row["started"] is None:
             return
         day = self._day(row["started"])
+        if row["cls"] == "cc":  # a listed account: only its own count, and no refund limits (nothing is refunded)
+            if not user:
+                self.store.add(day, "d:" + row["owner"], -1)
+            return
         self.store.add(day, "d:teachers" if row["cls"] == "pw" else "d:members", -1)
         if user:
             self._count_refund(row["owner"], row["sess"], now)
@@ -1314,6 +1408,7 @@ class GenJobs:
         now, drop = self.clock(), []
         self._check_engine()
         self._check_measure()
+        self._check_claude()
         with self.wake:
             lost = [r["id"] for r in self.store.all("select id from gen where status='running' and started<=?", (now - STALE_RUNNING,))
                     if not self._is_held(r["id"])]

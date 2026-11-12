@@ -16,10 +16,12 @@ comes back is bound to a schema, and the only part used is the Akkado source, wh
 or runs in its cage. The worst outcome is a wrong sound or a failure that is refunded."""
 from __future__ import annotations
 
+import contextlib
 import io
 import json
 import logging
 import math
+import os
 import re
 import shutil
 import subprocess
@@ -914,6 +916,179 @@ class NodeLint:
             return found
         finally:
             shutil.rmtree(folder, ignore_errors=True)
+
+
+# ---------- the Claude Code CLI on this PC (the owner's subscription) ----------
+CLAUDE_MODEL = "sonnet"   # OLMUSE_GEN_CLAUDE_MODEL; never fable
+CLAUDE_SLOTS = 2          # OLMUSE_GEN_CLAUDE_SLOTS: CLI calls at once
+CLAUDE_CHECK_TIMEOUT = 20
+# What the CLI is given of the API's environment: enough for Windows, the user's home (where it keeps its sign-in)
+# and a proxy. No key, token or switch of this server or of a Claude session around it goes through.
+CLAUDE_ENV_KEEP = ("PATH", "PATHEXT", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "USERPROFILE", "HOMEDRIVE",
+                   "HOMEPATH", "HOME", "APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "PROGRAMFILES", "PROGRAMFILES(X86)",
+                   "PROGRAMW6432", "TEMP", "TMP", "USERNAME", "USERDOMAIN", "COMPUTERNAME", "OS", "PROCESSOR_ARCHITECTURE",
+                   "NUMBER_OF_PROCESSORS", "LANG", "XDG_CONFIG_HOME", "CLAUDE_CONFIG_DIR", "HTTP_PROXY", "HTTPS_PROXY",
+                   "NO_PROXY", "NODE_EXTRA_CA_CERTS")
+CLAUDE_ENV_SET = {"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "DISABLE_AUTOUPDATER": "1"}
+CLAUDE_SIGNED_OUT = ("not logged in", "/login", "invalid api key", "oauth token", "authentication", "unauthorized",
+                     "please log in", "401")
+CLAUDE_LIMIT = ("usage limit", "hit your limit", "limit reached", "rate limit", "rate_limit", "429")
+CLAUDE_BUSY = ("overloaded", "529", "500", "502", "503", "504", "timed out", "timeout", "econnreset", "enotfound",
+               "network", "connection")
+
+
+def claude_model(value) -> str:
+    """The model the CLI is asked for: OLMUSE_GEN_CLAUDE_MODEL, else sonnet. A fable model is never used."""
+    name = str(value or "").strip() or CLAUDE_MODEL
+    if "fable" in name.lower():
+        log.error("OLMUSE_GEN_CLAUDE_MODEL names a fable model, which is not used here; %s stays", CLAUDE_MODEL)
+        return CLAUDE_MODEL
+    return name
+
+
+def claude_env(base=None) -> dict:
+    """The CLI's whole environment: CLAUDE_ENV_KEEP from base (os.environ), and CLAUDE_ENV_SET."""
+    base = os.environ if base is None else base
+    upper = {str(k).upper(): v for k, v in base.items()}
+    return {**{k: upper[k] for k in CLAUDE_ENV_KEEP if upper.get(k)}, **CLAUDE_ENV_SET}
+
+
+def _claude_key(text: str) -> str:
+    """The ModelError key for what the CLI said when it failed."""
+    low = text.lower()
+    if any(hint in low for hint in CLAUDE_LIMIT):
+        return "claudecli_quota"
+    if any(hint in low for hint in CLAUDE_SIGNED_OUT):
+        return "claudecli_auth"
+    if any(hint in low for hint in CLAUDE_BUSY):
+        return "claudecli_conn"
+    return "claudecli_failed"
+
+
+class ClaudeCli:
+    """model() for Deps: the Claude Code CLI installed on this PC, signed in with the owner's subscription, in
+    headless mode. Each call is one `claude -p` in an empty temp folder with the environment of claude_env: no
+    tools, no MCP, no skills, hooks or CLAUDE.md (--safe-mode), no session kept, the Akkado guide as the whole system
+    prompt (a file, the guide is long) and the reply bound to the schema by --json-schema; the prompt goes in on
+    stdin. At most `size` calls run at once over every job.
+
+    Its calls cost no dollars here (last_usage says free): the subscription pays. ok turns False when the CLI cannot
+    be started or says it is signed out, and True again with check() (`claude auth status`) or an answered call."""
+
+    name = "claude-cli"
+
+    def __init__(self, command=("claude",), model: str = CLAUDE_MODEL, slots: int = CLAUDE_SLOTS, system=None,
+                 environ=None):
+        self.command, self.model, self.size = list(command), claude_model(model), max(1, int(slots))
+        self.system = GUIDE.read_text(encoding="utf-8") if system is None else system
+        self.environ, self.ok = environ, True
+        self.slots = threading.BoundedSemaphore(self.size)
+
+    def __call__(self):
+        return ClaudeCall(self)
+
+    def args(self, system_file: str, schema: dict) -> list:
+        return self.command + ["-p", "--output-format", "json", "--json-schema", json.dumps(sb.strict_schema(schema)),
+                               "--model", self.model, "--effort", EFFORT, "--tools", "", "--no-session-persistence",
+                               "--safe-mode", "--strict-mcp-config", "--disable-slash-commands",
+                               "--system-prompt-file", system_file]
+
+    def check(self) -> bool:
+        """Whether the CLI starts and is signed in with a claude.ai account (not a key). Spends nothing."""
+        try:
+            done = subprocess.run(self.command + ["auth", "status", "--json"], capture_output=True, timeout=CLAUDE_CHECK_TIMEOUT,
+                                  env=claude_env(self.environ), stdin=subprocess.DEVNULL, cwd=tempfile.gettempdir(),
+                                  creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            said = json.loads(done.stdout.decode("utf-8", "replace"))
+            method = str(said.get("authMethod") or "")
+            self.ok = said.get("loggedIn") is True and "api" not in method.lower() and "key" not in method.lower()
+        except (OSError, subprocess.TimeoutExpired, ValueError, AttributeError):
+            self.ok = False
+        return self.ok
+
+    @staticmethod
+    def _stop(process):
+        if process.poll() is None:
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True, check=False,
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            else:
+                process.kill()
+        with contextlib.suppress(Exception):
+            process.communicate(timeout=5)
+
+    def ask(self, call, prompt: str, schema: dict) -> dict:
+        began = time.monotonic()
+        if not self.slots.acquire(timeout=max(0.0, call.timeout)):
+            raise sb.ModelError("claudecli_conn", detail="every CLI slot stayed busy")
+        # Named like the adapter's folders, so the restart clean-up removes one that a killed process left.
+        folder = tempfile.mkdtemp(prefix="olmuse-nkido-claude-")
+        try:
+            work = Path(folder, "work")
+            work.mkdir()
+            system = Path(folder, "system.md")
+            system.write_text(self.system, encoding="utf-8")
+            left = max(1.0, call.timeout - (time.monotonic() - began))
+            try:
+                process = subprocess.Popen(self.args(str(system), schema), cwd=str(work), env=claude_env(self.environ),
+                                           stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            except OSError:
+                self.ok = False
+                raise sb.ModelError("claudecli_missing") from None
+            try:
+                out, err = process.communicate(prompt.encode("utf-8"), timeout=left)
+            except subprocess.TimeoutExpired:
+                self._stop(process)
+                raise sb.ModelError("claudecli_conn", detail=f"no answer in {left:.0f} seconds") from None
+        finally:
+            self.slots.release()
+            shutil.rmtree(folder, ignore_errors=True)
+        return self._read(out.decode("utf-8", "replace"), err.decode("utf-8", "replace"), process.returncode)
+
+    def _read(self, out: str, err: str, code: int) -> dict:
+        try:
+            data = json.loads(out)
+        except ValueError:
+            data = None
+        if not isinstance(data, dict):
+            key = _claude_key(err)
+            if key == "claudecli_auth":
+                self.ok = False
+            # stderr only scrubbed and cut: it can carry a token or an address
+            raise sb.ModelError(key, code=code, detail=sb.redact(err)[:200])
+        text = str(data.get("result") or "")
+        if data.get("is_error") or (str(data.get("subtype", "success")) != "success"
+                                    and not isinstance(data.get("structured_output"), dict)):
+            key = _claude_key(text + " " + str(data.get("subtype") or ""))
+            if key == "claudecli_auth":
+                self.ok = False
+            elif key == "claudecli_failed" and str(data.get("subtype") or "").startswith("error_max_structured"):
+                key = "claudecli_parse"
+            raise sb.ModelError(key, detail=sb.redact(text)[:200])
+        self.ok = True
+        reply = data.get("structured_output")
+        if not isinstance(reply, dict):
+            try:
+                reply = json.loads(text.strip())
+            except ValueError:
+                reply = None
+        if not isinstance(reply, dict):
+            raise sb.ModelError("claudecli_parse")
+        return reply
+
+
+class ClaudeCall:
+    """One job's model on a ClaudeCli: timeout is set by the job before each ask; last_usage says free."""
+
+    name = ClaudeCli.name
+
+    def __init__(self, cli: ClaudeCli):
+        self.cli, self.timeout, self.last_usage = cli, MODEL_TIMEOUT, {}
+
+    def ask(self, prompt: str, schema: dict, name: str = "reply") -> dict:
+        self.last_usage = {"free": True}  # answered or not, nothing of the day's dollars
+        return self.cli.ask(self, prompt, schema)
 
 
 # ---------- fakes: tests, and a server started with OLMUSE_GEN_FAKE=1 ----------

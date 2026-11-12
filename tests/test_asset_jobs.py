@@ -1787,3 +1787,161 @@ def test_a_balance_read_that_comes_back_after_a_charge_does_not_undo_it(bench):
     b.ledger.real.grant("a@b.c", 3)
     b.later(aj.BALANCE_RECHECK)
     assert b.jobs.quote_for(a, 3, 1)["balance"] == 3 and b.jobs.status(a, [])["credits"] == 3
+
+
+# ---------- accounts on the Claude CLI list (the owner's subscription, no credits) ----------
+class Claude:
+    """A stand-in for asset_generate.ClaudeCli: a FakeModel per call, ok and size like the real one."""
+
+    def __init__(self, script=(), size=2, gate=None):
+        self.model, self.ok, self.size, self.checks = ag.FakeModel(script, cost=0.0, gate=gate), True, size, 0
+        self.name = "sonnet"
+
+    def __call__(self):
+        return self.model
+
+    def check(self):
+        self.checks += 1
+        return self.ok
+
+
+LISTED = "jam@b.c"
+
+
+def claude_bench(bench, claude=None, accounts=(LISTED,), **options):
+    b = bench(**options)
+    b.claude = claude or Claude()
+    b.jobs.stop()
+    b.jobs = aj.GenJobs(b.store, ledger=b.ledger, model=b.jobs.model, engine=b.engine, measure=lint, renders=b.jobs.renders,
+                        temp=b.jobs.temp, limits=b.jobs.limits, model_name=MODEL, clock=lambda: b.now[0], sleep=b.sleep,
+                        free=lambda path: 100 * aj.GB, autostart=options.get("autostart", False), workers=options.get("workers", 1),
+                        claude=b.claude, claude_accounts=accounts)
+    return b
+
+
+def test_a_listed_account_is_made_by_the_claude_cli_and_never_reaches_the_ledger(bench):
+    b = claude_bench(bench, accounts=(" JAM@b.c ", "other@x.y"))
+    jam = b.who(LISTED)
+    quote = b.jobs.quote_for(jam, 2, 1)
+    assert (quote["unit"], quote["credits"], quote["free"], quote["balance"], quote["ok"]) == (0, 0, True, None, True)
+    ids = b.send(jam, rid="j", items=2, free=True)
+    assert b.jobs.drain() == 2
+    assert [(b.row(i)["status"], b.row(i)["charge"], b.row(i)["cls"]) for i in ids] == [("done", "none", "cc")] * 2
+    assert b.ledger.calls == [] and len(b.claude.model.prompts) == 2 and b.model.prompts == []
+    assert (b.jobs.count("d:" + jam.owner), b.jobs.count("d:members"), b.jobs.count("usd:all")) == (2, 0, 0)
+    assert b.jobs.status(jam, ids)["credits"] is None and [v["refund"] for v in b.jobs.status(jam, ids)["jobs"]] == ["none"] * 2
+    assert refused(b.jobs.submit, jam, body(rid="paid", items=1))[:2] == (409, "quote_changed")  # it is priced 0
+
+
+def test_an_account_not_on_the_list_is_charged_and_made_by_the_paid_model_as_before(bench):
+    b = claude_bench(bench)
+    a = b.who()
+    assert b.jobs.quote_for(a, 1, 1)["credits"] == 1
+    ids = b.send(a)
+    b.jobs.drain()
+    assert (b.row(ids[0])["status"], b.row(ids[0])["charge"], b.row(ids[0])["cls"]) == ("done", "charged", "acct")
+    assert b.ledger.named("charge") == ["gen:" + ids[0]] and len(b.model.prompts) == 1 and b.claude.model.prompts == []
+    assert b.jobs.count("d:members") == 1 and b.jobs.count("usd:all") > 0
+    # A password session is not an account, so the list never reaches it.
+    pw = b.send(PW, rid="pw", free=True)
+    b.jobs.drain()
+    assert b.row(pw[0])["cls"] == "pw" and len(b.model.prompts) == 2
+
+
+def test_a_listed_accounts_failed_draft_asks_the_ledger_nothing(bench):
+    b = claude_bench(bench, engine=[BROKEN(), BROKEN(), BROKEN()])
+    jam = b.who(LISTED)
+    ids = b.send(jam, free=True)
+    b.jobs.drain()
+    view = b.view(jam, ids[0])
+    assert (view["status"], view["error"]["code"], view["refund"]) == ("failed", "make_failed", "none")
+    assert b.ledger.calls == [] and b.row(ids[0])["charge"] == "none" and b.jobs.count("rf:" + jam.owner) == 0
+    assert b.jobs.count("d:" + jam.owner) == 1  # the subscription was spent on it
+    b.later(aj.UNFETCHED_TTL + 1)
+    b.jobs.sweep()
+    assert b.ledger.calls == []
+
+
+def test_a_listed_account_has_its_own_daily_cap(bench, monkeypatch):
+    assert aj.Limits().claude_daily == 300
+    assert aj.Limits.from_env({"OLMUSE_GEN_CLAUDE_DAILY": "5"}).claude_daily == 5
+    b = claude_bench(bench, limits=aj.Limits(claude_daily=3, account_daily=1))
+    jam = b.who(LISTED)
+    b.send(jam, rid="a", items=2, free=True)
+    b.jobs.drain()
+    assert b.jobs.quote_for(jam, 2, 1)["reason"] == "account_limit"
+    status, code, extras = refused(b.jobs.submit, jam, body(rid="b", items=2, free=True))
+    assert (status, code, extras["left_today"]) == (429, "account_limit", 1)
+    assert len(b.send(jam, rid="c", items=1, free=True)) == 1
+    # The paid lane's caps are not the list's: account_daily is 1 and the members' count is untouched.
+    assert b.jobs.count("d:members") == 0 and len(b.send(b.who(), rid="d")) == 1
+
+
+def test_a_listed_account_works_without_the_paid_model_and_ledger(bench):
+    b = claude_bench(bench, model=False, ledger=None)
+    jam, a = aj.Who("acct", "acct:jam", LISTED, "en"), aj.Who("acct", "acct:a", "a@b.c", "en")
+    ids = b.send(jam, free=True)
+    assert b.jobs.drain() == 1 and b.row(ids[0])["status"] == "done"
+    assert refused(b.jobs.submit, a, body(rid="x"))[:2] == (503, "no_model")
+
+
+def test_when_the_claude_cli_is_down_only_the_listed_accounts_are_turned_away(bench, caplog):
+    claude = Claude()
+    b = claude_bench(bench, claude=claude)
+    jam, a = b.who(LISTED), b.who()
+    claude.ok = False
+    assert refused(b.jobs.submit, jam, body(rid="j", free=True))[:2] == (503, "no_model")
+    assert b.jobs.quote_for(jam, 1, 1)["reason"] == "no_model"
+    assert b.jobs.quote_for(a, 1, 1)["ok"] is True and len(b.send(a)) == 1
+    assert b.jobs.drain() == 1 and b.jobs.health()["ok"] is True and b.jobs.health()["claude"] is False
+    claude.ok = True
+    assert b.jobs.health()["claude"] is True and len(b.send(jam, rid="j2", free=True)) == 1
+
+
+def test_a_claude_cli_that_signs_out_mid_draft_fails_the_listed_queue_with_an_alert(bench, caplog):
+    claude = Claude()
+
+    def signed_out(prompt):
+        claude.ok = False
+        return sb.ModelError("claudecli_auth")
+    claude.model.script = [signed_out]
+    b = claude_bench(bench, claude=claude)
+    jam, a = b.who(LISTED), b.who()
+    ids = b.send(jam, rid="j", items=3, free=True)
+    paid = b.send(a)
+    with caplog.at_level("ERROR"):
+        b.jobs.drain()
+    assert [b.row(i)["error"] for i in ids] == ["no_model"] * 3 and b.ledger.named("refund") == []
+    assert b.row(paid[0])["status"] == "done" and "ALERT" in caplog.text and "Claude" in caplog.text
+    assert b.jobs.count("d:" + jam.owner) == 0  # not the user's doing: nothing stays counted
+    claude.ok = True  # signed in again: the sweeper's check takes it back
+    b.jobs.sweep()
+    assert claude.checks >= 1 and len(b.send(jam, rid="j2", free=True)) == 1
+
+
+def test_the_claude_lane_rests_on_its_own_after_three_refusals_in_a_row(bench, caplog):
+    claude = Claude([sb.ModelError("claudecli_failed")] * 3)
+    b = claude_bench(bench, claude=claude)
+    jam, a = b.who(LISTED), b.who()
+    b.send(jam, rid="j", items=3, free=True)
+    with caplog.at_level("ERROR"):
+        b.jobs.drain()
+    assert "ALERT" in caplog.text
+    assert refused(b.jobs.submit, jam, body(rid="j2", free=True))[:2] == (503, "no_model")
+    assert len(b.send(a)) == 1 and b.jobs.drain() == 1  # the paid lane does not rest with it
+    b.later(aj.BREAKER_SECONDS)
+    assert len(b.send(jam, rid="j3", free=True)) == 1
+
+
+def test_no_more_listed_drafts_run_at_once_than_the_cli_has_slots(bench):
+    gate = threading.Event()
+    claude = Claude(size=1, gate=gate)
+    b = claude_bench(bench, claude=claude, autostart=True, workers=3)
+    jam, a = b.who(LISTED), b.who()
+    ids = b.send(jam, rid="j", items=2, free=True)
+    until(lambda: claude.model.entered.is_set())
+    paid = b.send(a)
+    until(lambda: b.row(paid[0])["status"] == "done")  # the paid lane is not held up by it
+    assert sorted(b.row(i)["status"] for i in ids) == ["queued", "running"]
+    gate.set()
+    until(lambda: all(b.row(i)["status"] == "done" for i in ids))

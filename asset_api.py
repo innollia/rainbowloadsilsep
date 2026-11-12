@@ -7,7 +7,8 @@ because uvicorn would otherwise put the X-Forwarded-For of a request from 127.0.
 caller's address would then not be the one address() reads (CF-Connecting-IP, believed from the tunnel only).
 The public API is always on 8502. OLMUSE_API_PORT names another port for an API beside it (run_local.ps1).
 
-    GET  /health                 no token: {ok, model, engine, node, ledger, queued, running, disk_free_mb}
+    GET  /health                 no token: {ok, model, engine, node, ledger, queued, running, disk_free_mb}, and claude
+                                 (the lane of OLMUSE_GEN_CLAUDE_ACCOUNTS is up) when that list is set
     GET  /quote?items=N&drafts=D
     POST /jobs                   the body asset_generate.clean_request checks
     POST /jobs/status            {ids} or {request_id}
@@ -146,6 +147,8 @@ class Deps:
     boards: abd.BoardStore | None = None  # None: every board route is 404 not_found
     board_sync: bool = False               # OLMUSE_BOARD_SYNC=1; off, every board route is 403 sync_off
     board_accounts: object = ""            # OLMUSE_BOARD_ACCOUNTS: the emails that may sync; empty is every account
+    claude: object = None                  # asset_generate.ClaudeCli: the model of the listed accounts
+    claude_accounts: object = ""           # OLMUSE_GEN_CLAUDE_ACCOUNTS: emails made by `claude` without credits
 
 
 def listed(value) -> tuple:
@@ -361,7 +364,8 @@ class Api:
         self.jobs = aj.GenJobs(aj.GenStore() if deps.store is None else deps.store, ledger=deps.ledger, model=deps.model,
                                engine=deps.engine, measure=deps.measure, renders=deps.renders, temp=deps.temp,
                                limits=deps.limits, model_name=deps.model_name, clock=deps.clock, sleep=deps.sleep,
-                               free=deps.free, workers=deps.workers, autostart=deps.autostart)
+                               free=deps.free, workers=deps.workers, autostart=deps.autostart, claude=deps.claude,
+                               claude_accounts=listed(deps.claude_accounts))
 
     def close(self):
         """Lets the lanes' threads go. The jobs and their store are stopped and closed by whoever made them."""
@@ -673,6 +677,11 @@ def real_deps(env=None, log_to=None) -> Deps:
     database (so a local or scripted run keeps its boards in .studio-data/local), its bytes in OLMUSE_BOARD_BLOBS,
     else asset-blobs beside that, with OLMUSE_BOARD_LIMITS over its ceilings.
 
+    With OLMUSE_GEN_CLAUDE_ACCOUNTS (emails, comma separated) those accounts are made by the Claude Code CLI on this PC
+    (asset_generate.ClaudeCli): OLMUSE_GEN_CLAUDE_EXE (claude), OLMUSE_GEN_CLAUDE_MODEL (sonnet, never fable),
+    OLMUSE_GEN_CLAUDE_SLOTS (2); their daily cap is Limits.claude_daily (OLMUSE_GEN_CLAUDE_DAILY). With
+    OLMUSE_GEN_FAKE=1 the scripted model stands in for it too.
+
     The database is OLMUSE_GEN_DB, else .studio-data/asset-gen.db. A run that is not the public one, on the
     scripted model or over this PC's own ledger file, gets .studio-data/local/asset-gen.db instead: whoever opens
     a database fails what is queued or running in it and expires what nobody received, and a local ledger answers
@@ -717,6 +726,15 @@ def real_deps(env=None, log_to=None) -> Deps:
             log.error("ALERT no model key (OLMUSE_GEN_KEY or OPENROUTER_API_KEY); asset generation is off")
     if problem:
         log.error("ALERT %s; asset generation for signed-in accounts is off", problem)
+    accounts, claude = get("OLMUSE_GEN_CLAUDE_ACCOUNTS"), None
+    if accounts:
+        try:
+            slots = max(1, int(get("OLMUSE_GEN_CLAUDE_SLOTS") or ag.CLAUDE_SLOTS))
+        except ValueError:
+            log.error("OLMUSE_GEN_CLAUDE_SLOTS is not a number; %d stays", ag.CLAUDE_SLOTS)
+            slots = ag.CLAUDE_SLOTS
+        claude = ag.FakeModel if fake else ag.ClaudeCli(command=[get("OLMUSE_GEN_CLAUDE_EXE", "claude")],
+                                                       model=ag.claude_model(get("OLMUSE_GEN_CLAUDE_MODEL")), slots=slots)
     secret, store = asset_token.load_secret(env=env), aj.GenStore(database)
     sync, boards = get("OLMUSE_BOARD_SYNC") == "1", None
     if sync:  # off, the board database is not even opened
@@ -730,7 +748,7 @@ def real_deps(env=None, log_to=None) -> Deps:
                 model=model, engine=engine, measure=ag.NodeLint(get("OLMUSE_NODE", "node")), limits=aj.Limits.from_env(env),
                 model_name=name, hosts=get("OLMUSE_API_HOSTS") or hosts_at(asset_token.api_port(env)),
                 origins=get("OLMUSE_API_ORIGINS", HOME), boards=boards, board_sync=sync,
-                board_accounts=get("OLMUSE_BOARD_ACCOUNTS"))
+                board_accounts=get("OLMUSE_BOARD_ACCOUNTS"), claude=claude, claude_accounts=accounts)
 
 
 # ---------- the app ----------

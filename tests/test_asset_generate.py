@@ -4,7 +4,12 @@ import hashlib
 import io
 import json
 import math
+import os
 import shutil
+import sys
+import threading
+import time
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -992,3 +997,155 @@ def test_fake_model_plays_its_script_then_fits_the_request():
     free, silent = ag.FakeModel([GOOD]), ag.FakeModel([GOOD], cost=None)
     free.ask("p", ag.SCHEMA), silent.ask("p", ag.SCHEMA)
     assert free.last_usage == {"cost": 0.0, "free": True} and silent.last_usage == {}  # free says so; None names no cost
+
+
+# ---------- the Claude Code CLI provider (a stand-in script, never the real CLI) ----------
+FAKE_CLI = Path(__file__).resolve().parent / "fake_claude_cli.py"
+
+
+def cli(tmp_path, slots=2, model="sonnet", base=None, **plan):
+    """A ClaudeCli over fake_claude_cli.py with this plan. Returns (provider, the file it writes down what it got)."""
+    record = tmp_path / "record.json"
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(json.dumps({"record": str(record), **plan}), encoding="utf-8")
+    environ = {"PATH": os.environ.get("PATH", ""), "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""),
+               "USERPROFILE": str(tmp_path), "ANTHROPIC_API_KEY": "sk-ant-api03-the-paid-key-0123456789",
+               "OPENROUTER_API_KEY": "sk-or-v1-the-other-key-0123456789", "CLAUDECODE": "1",
+               "CLAUDE_CODE_ENTRYPOINT": "cli", "OLMUSE_GEN_KEY": "x", "STRUDEL_CREDITS_TOKEN": "t", **(base or {})}
+    made = ag.ClaudeCli(command=[sys.executable, str(FAKE_CLI), str(plan_path)], model=model, slots=slots,
+                        system="THE GUIDE", environ=environ)
+    return made, record
+
+
+def test_claude_cli_answers_the_structured_output_and_runs_bare(tmp_path):
+    made, record = cli(tmp_path, answer=GOOD)
+    one = made()
+    one.timeout = 30
+    prompt = "REQUEST\n" + "x" * 40_000  # longer than a Windows command line may be
+    assert one.ask(prompt, ag.SCHEMA, "akkado_patch") == GOOD and one.last_usage == {"free": True}
+    got = json.loads(record.read_text(encoding="utf-8"))
+    args = got["args"]
+    assert got["stdin"] == prompt and not any(prompt[:20] in a for a in args)  # the prompt on stdin only
+    assert args[0] == "-p" and args[args.index("--output-format") + 1] == "json"
+    assert json.loads(args[args.index("--json-schema") + 1])["required"] == ["source", "seconds", "bpm"]
+    assert args[args.index("--model") + 1] == "sonnet" and args[args.index("--tools") + 1] == ""
+    assert {"--no-session-persistence", "--safe-mode", "--strict-mcp-config", "--disable-slash-commands"} <= set(args)
+    assert args[args.index("--effort") + 1] == ag.EFFORT
+    system = Path(args[args.index("--system-prompt-file") + 1])
+    assert got["files"] == [] and Path(got["cwd"]).name == "work" and Path(got["cwd"]).parent == system.parent
+    assert not system.parent.exists()  # the folder is gone afterwards
+    env = got["env"]
+    for secret in ("ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "OLMUSE_GEN_KEY",
+                   "STRUDEL_CREDITS_TOKEN"):
+        assert secret not in env
+    assert env["USERPROFILE"] == str(tmp_path) and env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] == "1"
+
+
+def test_claude_cli_reads_a_plain_json_reply_strictly(tmp_path):
+    reply = {"type": "result", "subtype": "success", "is_error": False, "result": json.dumps(GOOD)}
+    made, _ = cli(tmp_path, stdout=json.dumps(reply))
+    assert made().ask("p", ag.SCHEMA) == GOOD
+    for text in ("Here it is: " + json.dumps(GOOD), "[1, 2]", ""):
+        made, _ = cli(tmp_path, stdout=json.dumps({**reply, "result": text}))
+        with pytest.raises(sb.ModelError) as caught:
+            made().ask("p", ag.SCHEMA)
+        assert caught.value.key == "claudecli_parse" and caught.value.key.endswith(ag.UNREADABLE)
+    made, _ = cli(tmp_path, stdout="not json at all")
+    with pytest.raises(sb.ModelError) as caught:
+        made().ask("p", ag.SCHEMA)
+    assert caught.value.key == "claudecli_failed"
+
+
+@pytest.mark.parametrize("said, key, down", [
+    ("Claude AI usage limit reached|1767225600", "claudecli_quota", False),
+    ("You've hit your limit · resets 3pm", "claudecli_quota", False),
+    ("Invalid API key · Please run /login", "claudecli_auth", True),
+    ("Not logged in · Please run /login", "claudecli_auth", True),
+    ("API Error: 529 Overloaded", "claudecli_conn", False),
+    ("Something else went wrong", "claudecli_failed", False)])
+def test_claude_cli_errors_become_the_providers_usual_model_errors(tmp_path, said, key, down):
+    made, _ = cli(tmp_path, stdout=json.dumps({"type": "result", "subtype": "success", "is_error": True, "result": said}), code=1)
+    with pytest.raises(sb.ModelError) as caught:
+        made().ask("p", ag.SCHEMA)
+    assert caught.value.key == key and made.ok is (not down)
+    assert sb.transient(caught.value) is (key in ("claudecli_quota", "claudecli_conn"))
+
+
+def test_claude_cli_missing_or_slow_or_noisy(tmp_path, caplog):
+    made = ag.ClaudeCli(command=[str(tmp_path / "no-such-claude.exe")], system="g")
+    with pytest.raises(sb.ModelError) as caught:
+        made().ask("p", ag.SCHEMA)
+    assert caught.value.key == "claudecli_missing" and made.ok is False
+    slow, _ = cli(tmp_path, sleep=20, answer=GOOD)
+    one = slow()
+    one.timeout = 1.5
+    started = time.monotonic()
+    with pytest.raises(sb.ModelError) as caught:
+        one.ask("p", ag.SCHEMA)
+    assert caught.value.key == "claudecli_conn" and sb.transient(caught.value) and time.monotonic() - started < 10
+    secret = "sk-ant-oat01-" + "s" * 40
+    noisy, _ = cli(tmp_path, stderr=f"token {secret} for someone@example.com refused", code=2)
+    with caplog.at_level("DEBUG"), pytest.raises(sb.ModelError) as caught:
+        noisy().ask("p", ag.SCHEMA)
+    told = str(caught.value.fields) + caplog.text
+    assert caught.value.key == "claudecli_failed" and secret not in told and "someone@example.com" not in told
+
+
+def test_claude_cli_runs_at_most_its_slots_at_once(tmp_path):
+    times = tmp_path / "times"
+    times.mkdir()
+    made, _ = cli(tmp_path, slots=2, sleep=1.0, answer=GOOD, times=str(times), record="")
+    out = []
+
+    def ask():
+        one = made()
+        one.timeout = 30
+        out.append(one.ask("p", ag.SCHEMA))
+    threads = [threading.Thread(target=ask) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(60)
+    assert out == [GOOD] * 4
+    events = sorted(((float(at), word) for word, at, _ in (f.name.split() for f in times.iterdir())),
+                    key=lambda e: (e[0], e[1] == "start"))
+    assert len(events) == 8
+    running = most = 0
+    for _, word in events:
+        running += 1 if word == "start" else -1
+        most = max(most, running)
+    assert 1 <= most <= 2  # Windows may start a process seconds late, so two at once is not always seen
+    held, _ = cli(tmp_path, slots=1, answer=GOOD)
+    assert held.slots.acquire(timeout=1)  # the one slot is busy: a call waits for it no longer than its timeout
+    one = held()
+    one.timeout = 0.5
+    with pytest.raises(sb.ModelError) as caught:
+        one.ask("p", ag.SCHEMA)
+    assert caught.value.key == "claudecli_conn" and sb.transient(caught.value)
+    held.slots.release()
+    assert one.ask("p", ag.SCHEMA) == GOOD
+
+
+def test_claude_cli_model_is_sonnet_unless_told_and_never_fable(caplog):
+    assert ag.claude_model("") == "sonnet" == ag.claude_model(None) and ag.claude_model(" opus ") == "opus"
+    with caplog.at_level("ERROR"):
+        assert ag.claude_model("fable") == "sonnet" and ag.claude_model("claude-fable-5") == "sonnet"
+    assert "fable" in caplog.text.lower()
+
+
+def test_claude_cli_check_asks_whether_it_is_signed_in_with_the_subscription(tmp_path):
+    made, _ = cli(tmp_path)
+    assert made.check() is True and made.ok is True
+    made, _ = cli(tmp_path, auth={"loggedIn": False})
+    assert made.check() is False and made.ok is False
+    made, _ = cli(tmp_path, auth={"loggedIn": True, "authMethod": "api_key"})
+    assert made.check() is False
+    assert ag.ClaudeCli(command=[str(tmp_path / "none.exe")], system="g").check() is False
+
+
+def test_a_draft_through_the_claude_cli_provider_is_free(tmp_path):
+    made, _ = cli(tmp_path, answer=GOOD)
+    deps = ag.Deps(model=made, engine=ag.FakeEngine(), measure=Lint(), free=lambda path: 10 ** 12, model_name="sonnet",
+                   call_usd=0.03)
+    out = ag.run(ag.Job(id="j1", project=PROJECT, item=item()), deps)
+    assert (out.status, out.usd, out.result["source"]) == ("done", 0.0, GOOD["source"])

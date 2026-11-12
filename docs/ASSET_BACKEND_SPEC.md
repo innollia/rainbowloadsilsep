@@ -12,7 +12,7 @@
 
 ## A. 프로세스와 배포
 
-- **파일(저장소 루트, 모두 streamlit을 import하지 않는다):** `asset_token.py`(서명, 검증, 비밀, 포트, 호스트 도우미), `asset_jobs.py`(저장소, 요금, 큐, 작업자, 청소기), `asset_generate.py`(프롬프트, 묻기·렌더·접기·다듬기·측정·고치기 루프, `NodeLint`, `FakeModel`, `FakeEngine`), `asset_api.py`(`create_app(deps)`, `real_deps(env)`, 모듈 수준 `app`).
+- **파일(저장소 루트, 모두 streamlit을 import하지 않는다):** `asset_token.py`(서명, 검증, 비밀, 포트, 호스트 도우미), `asset_jobs.py`(저장소, 요금, 큐, 작업자, 청소기), `asset_generate.py`(프롬프트, 묻기·렌더·접기·다듬기·측정·고치기 루프, `NodeLint`, `ClaudeCli`, `FakeModel`, `FakeEngine`), `asset_api.py`(`create_app(deps)`, `real_deps(env)`, 모듈 수준 `app`).
 - **프로세스:** `python -m uvicorn asset_api:app --host 127.0.0.1 --port 8502 --workers 1 --no-access-log --no-proxy-headers`. 큐가 메모리에 있으므로 worker는 1개다. `--no-proxy-headers`를 빼면 uvicorn이 `X-Forwarded-For`를 소켓 상대 자리에 넣어 B절의 접속 IP 규칙이 깨진다. 모듈 수준 `app`은 import할 때 아무것도 열지 않고, 서버가 시작할 때 `real_deps()`로 작업 관리자를 만들고 멈출 때 끝낸다. `/docs`와 `/openapi.json`은 끈다.
 - **포트:** 운영 API는 항상 8502다. 다른 포트는 `OLMUSE_API_PORT`로 주고 `asset_token.api_port()` 하나가 읽는다. API의 Host 기본값, `run_api.ps1`, 페이지가 넘기는 `api` 주소가 같은 값을 쓴다.
 - **설정:** env에서 읽는다. 모델 키, 장부 토큰, 장부 pepper 셋만 env에 없을 때 `~/.all-tomorrow` 파일에서 읽는다. 그 밖은 env뿐이라 실행 스크립트가 지운 스위치(`OLMUSE_GEN_FAKE`, `STRUDEL_LOCAL_LEDGER`)가 파일에서 되살아나지 않는다. `st.secrets`는 읽지 않는다.
@@ -30,10 +30,14 @@
 | `OLMUSE_API_ORIGINS` | `https://olmuse.app` |
 | `OLMUSE_ASSET_TOKEN_SECRET` | 없으면 파일 `.studio-data/asset_token.key` |
 | `OLMUSE_NODE` | `node` |
-| `OLMUSE_GEN_FAKE` | 없음. `1`이면 대본 모델과 사인파 엔진을 쓴다 |
+| `OLMUSE_GEN_FAKE` | 없음. `1`이면 대본 모델과 사인파 엔진을 쓴다(명단 계정의 모델도 대본 모델) |
+| `OLMUSE_GEN_CLAUDE_ACCOUNTS` | 없음. 쉼표로 나눈 이메일. E2절의 명단 |
+| `OLMUSE_GEN_CLAUDE_EXE` | `claude` |
+| `OLMUSE_GEN_CLAUDE_MODEL` | `sonnet`. fable이 든 이름은 버리고 `sonnet`을 쓴다 |
+| `OLMUSE_GEN_CLAUDE_SLOTS` | 2 |
 | 한도 | E절 표. 음수이거나 유한한 수가 아닌 값은 버리고 기본값을 쓴다 |
 
-- **`run_api.ps1`:** `param([switch]$Public)`과 `while ($true)` 루프. 포트는 `OLMUSE_API_PORT`, 없으면 8502다. 포트가 이미 듣고 있으면 5초 쉬고 다시 본다. 그 포트를 쥔 프로세스의 명령줄에 `asset_api:app`이 없으면 pid마다 한 번 `console.err.log`에 `ALERT` 한 줄을 쓴다. 듣는 것이 없으면 uvicorn을 띄우고, 끝나면 쉬었다 다시 띄운다. 쉬는 시간은 2초이고, 30초 안에 끝나는 시작이 이어지는 동안 4, 8, 16, 32, 60초로 늘며, 30초 넘게 버틴 시작 뒤에는 다시 2초다. `-Public`은 아무것도 바꾸지 않는다. `run_public.ps1`이 자기 루프를 알아보는 표식이다. 콘솔은 `.studio-data\logs\api\console.out.log`, `console.err.log`.
+- **`run_api.ps1`:** `OLMUSE_BOARD_SYNC`, `OLMUSE_BOARD_ACCOUNTS`, `OLMUSE_GEN_CLAUDE_ACCOUNTS`, `OLMUSE_GEN_CLAUDE_DAILY`, `OLMUSE_GEN_CLAUDE_MODEL`, `OLMUSE_GEN_CLAUDE_SLOTS`, `OLMUSE_GEN_CLAUDE_EXE`는 창의 env에 없으면 `~/.all-tomorrow/olmuse-board.env`(`NAME=value` 줄)에서 읽어 env에 둔다. API는 env에서만 읽는다. `param([switch]$Public)`과 `while ($true)` 루프. 포트는 `OLMUSE_API_PORT`, 없으면 8502다. 포트가 이미 듣고 있으면 5초 쉬고 다시 본다. 그 포트를 쥔 프로세스의 명령줄에 `asset_api:app`이 없으면 pid마다 한 번 `console.err.log`에 `ALERT` 한 줄을 쓴다. 듣는 것이 없으면 uvicorn을 띄우고, 끝나면 쉬었다 다시 띄운다. 쉬는 시간은 2초이고, 30초 안에 끝나는 시작이 이어지는 동안 4, 8, 16, 32, 60초로 늘며, 30초 넘게 버틴 시작 뒤에는 다시 2초다. `-Public`은 아무것도 바꾸지 않는다. `run_public.ps1`이 자기 루프를 알아보는 표식이다. 콘솔은 `.studio-data\logs\api\console.out.log`, `console.err.log`.
 - **`run_public.ps1`:**
   - 전체 실행은 API를 멈추지 않는다. 명령줄이 `-File <이 폴더의 run_api.ps1> -Public`인 powershell 프로세스가 하나도 없을 때만 `Env:OLMUSE_GEN_FAKE`와 `Env:OLMUSE_API_PORT`를 지우고 `run_api.ps1 -Public`을 숨김 창으로 띄운다. 파일 이름만 명령줄에 든 창이나 손으로 다른 포트에 돌린 루프는 그 루프로 치지 않는다. 서버 감시가 이 스크립트를 다시 돌려도 진행 중인 유료 작업이 죽지 않는다.
   - 새 스위치 `-ApiOnly`만 API를 멈춘다. 그 루프를 먼저 멈추고, 명령줄에 `asset_api:app`이 든 python을 모두 멈춘 뒤(듣고 있는 것과 아직 뜨는 중인 것. 이 PC에서 `run_local.ps1`이 띄운 API도 여기에 든다) 루프를 다시 띄우고 끝낸다. 8502를 API가 아닌 프로그램이 쥐고 있으면 그 프로그램은 멈추지 않고, 루프를 띄운 뒤 오류로 끝낸다. `-ServerOnly`는 지금처럼 Streamlit만 다시 띄운다.
@@ -55,7 +59,7 @@
   - uvicorn을 루프 없이 같은 콘솔에 띄우고 스크립트가 끝날 때 멈춘 뒤 이 네 env를 지운다.
   - 토큰 메시지의 `api`는 `STRUDEL_LOCAL_AI`일 때 `http://127.0.0.1:<OLMUSE_API_PORT>/api/asset`, 아니면 `/api/asset`이다.
   - 출처 목록에 olmuse.app이 아닌 항목이 있을 때만 CORS 미들웨어를 붙인다. 그때는 Host 검사를 CORS 바깥에서 한 번 더 해서 허용되지 않은 Host의 preflight가 403 `bad_host`를 받는다.
-- **상태 확인:** `GET /api/asset/health`, 인증 없음. `{ok, model, engine, node, ledger, queued, running, disk_free_mb}`. 참·거짓과 개수만 담는다. `ok`는 `model`, `engine`, `node`가 참이고 작업자 스레드가 살아 있으며 디스크 때문에 쉬는 중이 아닐 때 참이다. `model`은 모델 차단기가 쉬는 동안 거짓이다. `ok`가 거짓이어도 HTTP 200이다. Host와 `Content-Length` 검사는 거친다. 자기 스레드 2개에서 돌고 대기 상한이 없다.
+- **상태 확인:** `GET /api/asset/health`, 인증 없음. `{ok, model, engine, node, ledger, queued, running, disk_free_mb}`, 그리고 E2절의 명단이 있을 때만 `claude`(그 줄이 받는 중인지). 참·거짓과 개수만 담고 명단의 이메일은 담지 않는다. `claude`는 `ok`에 들지 않는다. `ok`는 `model`, `engine`, `node`가 참이고 작업자 스레드가 살아 있으며 디스크 때문에 쉬는 중이 아닐 때 참이다. `model`은 모델 차단기가 쉬는 동안 거짓이다. `ok`가 거짓이어도 HTTP 200이다. Host와 `Content-Length` 검사는 거친다. 자기 스레드 2개에서 돌고 대기 상한이 없다.
 - **로그:** `server_ops.setup_logging(<DB 파일 옆의 logs/api>)`. 운영은 `.studio-data/logs/api`, 로컬과 `OLMUSE_GEN_FAKE`는 `.studio-data/local/logs/api`다. Streamlit의 `logs/olmuse.log`와 다른 폴더라 자정 회전이 서로를 막지 않는다. 이메일, 토큰, 키, 요청 글, 모델 원문은 로그에 쓰지 않는다. 예외는 클래스 이름과 프레임만 쓴다.
   - 시작 실패는 `ALERT the asset api could not start: <클래스와 프레임>` 한 줄이다. 바로 앞 시작과 프레임이 같으면 `<클래스>, as before`만 쓴다. 마지막 프레임은 로그 폴더의 `start-failed` 파일에 두고 시작에 성공하면 지운다.
 - **다른 서버로 옮길 때:** env와 리버스 프록시의 경로 규칙 하나(`/api/asset/` → 8502)를 옮긴다. `nkido.run_caged`는 Windows 작업 개체를 쓰므로 Linux에서는 같은 제한(시간, 메모리, 자식 프로세스 금지)을 새로 써야 하고 nkido의 Linux 빌드와 Node가 필요하다. 이 명세의 범위 밖이다.
@@ -105,7 +109,7 @@
 
 **엔드포인트**
 1. `GET /health`: A절.
-2. `GET /quote?items=N&drafts=D`(`items` 1..64, `drafts` 1..4) → 200 `{items, drafts, unit, credits, free, balance|null, left_today, room, ok, reason|null}`. `free`는 `pw`에서 참이다. `room`은 이 주인이 지금 더 넣을 수 있는 작업 수다. `ok:false`면 `reason`에 3번 표의 코드가 온다. 장부가 없거나 답하지 않을 때만 200이 아니라 503 `no_ledger`다. 잔액은 E절의 캐시에서 온다.
+2. `GET /quote?items=N&drafts=D`(`items` 1..64, `drafts` 1..4) → 200 `{items, drafts, unit, credits, free, balance|null, left_today, room, ok, reason|null}`. `free`는 `pw`와 E2절의 명단 계정에서 참이고 그때 `unit`과 `credits`는 0, 명단 계정의 `balance`는 null이다. `room`은 이 주인이 지금 더 넣을 수 있는 작업 수다. `ok:false`면 `reason`에 3번 표의 코드가 온다. 장부가 없거나 답하지 않을 때만 200이 아니라 503 `no_ledger`다. 잔액은 E절의 캐시에서 온다.
 3. `POST /jobs`:
    ```
    {request_id (클라이언트 uuid, <=64), expect_credits (정수, 필수), drafts: 1..4, lang,
@@ -270,6 +274,27 @@
   - 비밀번호 세션: 세션별로 같은 12와 24(`rf:<owner>/<세션>`), 그리고 주소(IP 묶음)별로 시간당 36, 하루 72(`rf:<owner>`). 세션의 수에는 전부 더하고, 주소의 수에는 한 세션이 시간당 13개, 하루 25개(그 세션 자신의 문을 닫는 환불)까지만 더한다. 한 묶음이 통째로 실패하거나 만료돼도 한 세션이 교실 전체의 문을 닫지 못하고, 새로고침으로 세션을 바꿔도 주소의 수는 남아 세션을 계속 바꾸면 주소의 한도가 찬다. `pw`는 장부 환불이 없어도 센다.
   - 이런 환불은 전체 통(`d:members`, `d:teachers`)에서 1을 도로 빼고 주인 통에는 남긴다. 그 밖의 끝(`no_model`, `no_engine`, `no_ledger`, `no_credits`, `operator_limit`, `restarted`, `internal`, `busy`)은 세지 않고 두 통 모두에서 뺀다.
 - **멱등:** `request_id`는 같은 묶음을 가리키고 ref `gen:<작업 id>`는 장부에서 차감과 환불 모두 멱등이다. 다시 보낸 POST나 작업자 충돌이 두 번 차감하지 못한다.
+
+## E2. Claude CLI 명단 계정
+
+`OLMUSE_GEN_CLAUDE_ACCOUNTS`에 이메일이 있는 로그인 계정은 크레딧 없이, 이 PC에 설치된 Claude Code CLI(주인의 구독)로 만든다. 비밀번호 세션과 명단 밖의 계정은 위 절들 그대로다.
+
+- **판정:** 토큰의 `kind`가 `acct`이고 이메일(앞뒤 공백 제거, 소문자)이 명단에 있으면 그 요청의 행은 `cls='cc'`다. API를 다시 띄워야 명단이 바뀐다.
+- **요금:** 견적은 `free:true`, `unit` 0, `credits` 0이다. 장부를 부르지 않는다(잔액 읽기, 차감, 환불 모두). 장부가 없어도 받는다. `charge`는 늘 `none`, `est`와 `usd`는 0이고 `usd:all`·`usd:pw`에 더하지 않는다. 그래서 운영자 달러 상한(`operator_limit`)과 402가 없다.
+- **한도:** 계정별 시안 `d:<owner>` 하나만 본다. 한도는 `OLMUSE_GEN_CLAUDE_DAILY`(기본 300)이고 넘으면 429 `account_limit`. `d:members`에는 세지 않는다. 대기 상한, 활성 상한, 미수령 몫, 집는 순서는 다른 계정과 같다. 환불이 없으므로 환불 한도도 없다. 사용자 쪽 끝(`make_failed`, `timeout`, 실행 중 취소, 미수령 만료)은 `d:<owner>`에 남고, 그 밖의 끝은 뺀다.
+- **모델:** `ClaudeCli`(`asset_generate.py`). 작업마다 `ClaudeCall`을 주고 `ask(prompt, schema, name) -> dict`는 다른 공급자와 같다. 한 번의 호출은 다음 명령 하나다. 프롬프트는 stdin으로만 넣고, Akkado 안내서는 임시 폴더의 `system.md`로 넘긴다.
+
+  `claude -p --output-format json --json-schema <SCHEMA, additionalProperties false> --model <모델> --effort low --tools "" --no-session-persistence --safe-mode --strict-mcp-config --disable-slash-commands --system-prompt-file <임시 폴더>/system.md`
+
+  - 작업 폴더는 빈 `<임시 폴더>/work`이고 호출이 끝나면 폴더째 지운다. 이름이 `olmuse-nkido-claude-`로 시작해 재시작 청소가 남은 것을 지운다.
+  - env는 `CLAUDE_ENV_KEEP`(Windows에 필요한 것, 사용자 홈, 프록시)만 넘기고 `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `DISABLE_AUTOUPDATER=1`을 더한다. `ANTHROPIC_API_KEY` 같은 키, 이 서버의 비밀, 바깥 Claude 세션의 변수는 넘기지 않으므로 CLI는 저장된 구독 로그인만 쓴다.
+  - 답: 결과 JSON의 `structured_output`이 객체면 그것이다. 없으면 `result` 글 전체를 JSON으로 읽어 객체일 때만 쓴다. 아니면 `claudecli_parse`(시도 하나를 쓴다).
+  - 오류: 시간 초과, 연결, 5xx, 과부하는 `claudecli_conn`, 사용 한도는 `claudecli_quota`(둘 다 일시적), 로그아웃·인증 실패는 `claudecli_auth`, 실행 파일이 없으면 `claudecli_missing`, 그 밖은 `claudecli_failed`. stderr는 `sb.redact`로 지우고 200자로 잘라 오류 필드에만 두며 로그에 쓰지 않는다.
+  - 호출의 시간 제한은 작업이 주는 `timeout`(120초와 작업의 남은 시간 중 작은 쪽)이고, 넘으면 프로세스 트리를 끝낸다. 동시 호출은 `OLMUSE_GEN_CLAUDE_SLOTS`(기본 2)까지이고, 빈자리를 그 시간 안에 못 얻으면 `claudecli_conn`. 집기도 명단 계정의 실행 중 시안이 이 수에 차면 명단 계정을 건너뛰고 다른 계정을 집는다.
+  - `last_usage`는 늘 `{"free": true}`라 달러 계수에 들지 않는다.
+- **꺼짐과 복구:** 실행 파일이 없거나 로그아웃이면 `ok`가 거짓이 된다. 그동안 명단 계정의 생성 요청은 503 `no_model`, `/quote`의 `reason`도 `no_model`이고 명단 계정의 대기 작업은 `failed: no_model`이 된다. 로그에 `ALERT the Claude CLI is missing or signed out ...`을 한 번 쓴다. 작업자를 띄울 때와 청소기가 돌 때마다 `claude auth status --json`(호출 비용 없음)으로 `loggedIn`이 참이고 `authMethod`가 키가 아닌지 보고, 돌아와 있으면 재시작 없이 다시 받는다.
+- **차단기:** D절의 모델 차단기와 같은 규칙을 따로 센다. 이 줄의 거절 3번이면 명단 계정만 60초 쉬고 `ALERT the Claude CLI refused ...`를 쓴다. 유료 모델의 차단기와 서로 막지 않는다. 사용 한도에 걸리면 3초 뒤 한 번 다시 하고 그래도 같으면 `failed: no_model`이며, 이어지면 차단기가 60초씩 쉬게 한다. 한도가 풀릴 때까지 명단 계정의 시안은 이렇게 실패한다.
+- **속도:** 짧은 sfx 시안 하나가 CLI 시작과 sonnet의 답을 합쳐 약 6초(호출 하나 5.6초, 렌더와 측정 포함 6.2초, `tools/claude_cli_trial.py`)이고, 고치기가 들면 호출마다 그만큼 더 든다. 긴 음악이나 앰비언스는 더 걸린다. 동시 호출 상한 때문에 명단 계정 전체가 한 번에 2개씩 나아간다.
 
 ## F. 브라우저
 

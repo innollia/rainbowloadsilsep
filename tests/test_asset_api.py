@@ -1312,3 +1312,49 @@ def test_the_run_scripts_are_powershell_that_parses():
     done = subprocess.run([exe, "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, encoding="utf-8",
                           errors="replace", timeout=60)
     assert done.returncode == 0, done.stdout + done.stderr
+
+
+# ---------- accounts on the Claude CLI list ----------
+class Claude:
+    def __init__(self):
+        self.model, self.ok, self.size = ag.FakeModel(cost=0.0), True, 2
+
+    def __call__(self):
+        return self.model
+
+
+def test_a_listed_account_is_quoted_nothing_and_its_sound_is_made_without_the_ledger(bench):
+    claude = Claude()
+    b = bench(claude=claude, claude_accounts="Jam@b.c, other@x.y")
+    jam, a = b.token("jam@b.c"), b.token()
+    quote = b.get("/quote?items=2&drafts=1", jam).json()
+    assert (quote["unit"], quote["credits"], quote["free"], quote["ok"]) == (0, 0, True, True)
+    ids = b.make(jam, items=2, credits=0)
+    assert b.jobs.drain() == 2 and b.ledger.calls == [] and len(claude.model.prompts) == 2
+    assert [v["status"] for v in b.views(jam, ids)] == ["done", "done"]
+    assert b.get("/quote?items=1&drafts=1", a).json()["credits"] == 1  # everyone else pays as before
+    health = b.get("/health").json()
+    assert health["claude"] is True and set(health) == {"ok", "model", "engine", "node", "ledger", "queued", "running",
+                                                         "disk_free_mb", "claude"}
+
+
+def test_real_deps_reads_the_claude_list_and_its_settings(tmp_path, monkeypatch):
+    monkeypatch.setattr(asset_api, "LOCAL_FILES", tmp_path / "home")
+    monkeypatch.setattr(asset_api, "DATA", tmp_path / "data")
+    base = {"OLMUSE_ASSET_TOKEN_SECRET": "x" * 40, "OLMUSE_GEN_DB": str(tmp_path / "gen.db")}
+
+    def read(**env):
+        deps = asset_api.real_deps({**base, **env})
+        deps.store.close()
+        return deps
+
+    plain = read()
+    assert plain.claude is None and asset_api.listed(plain.claude_accounts) == ()
+    on = read(OLMUSE_GEN_CLAUDE_ACCOUNTS="A@b.c,jam@b.c", OLMUSE_GEN_CLAUDE_MODEL="opus", OLMUSE_GEN_CLAUDE_SLOTS="3",
+              OLMUSE_GEN_CLAUDE_DAILY="40", OLMUSE_GEN_CLAUDE_EXE="C:/tools/claude.exe")
+    assert isinstance(on.claude, ag.ClaudeCli) and asset_api.listed(on.claude_accounts) == ("a@b.c", "jam@b.c")
+    assert (on.claude.model, on.claude.size, on.claude.command, on.limits.claude_daily) == ("opus", 3, ["C:/tools/claude.exe"], 40)
+    assert read(OLMUSE_GEN_CLAUDE_ACCOUNTS="a@b.c", OLMUSE_GEN_CLAUDE_MODEL="fable").claude.model == "sonnet"
+    defaults = read(OLMUSE_GEN_CLAUDE_ACCOUNTS="a@b.c").claude
+    assert (defaults.model, defaults.size, defaults.command) == ("sonnet", 2, ["claude"])
+    assert read(OLMUSE_GEN_CLAUDE_ACCOUNTS="a@b.c", OLMUSE_GEN_FAKE="1").claude is ag.FakeModel

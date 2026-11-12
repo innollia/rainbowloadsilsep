@@ -15,8 +15,11 @@ if ($said -match '^[0-9]{1,5}$' -and [int]$said -ge 1 -and [int]$said -le 65535)
 # Board sync (docs/ASSET_SYNC_SPEC.md): OLMUSE_BOARD_SYNC and OLMUSE_BOARD_ACCOUNTS come from this window's environment,
 # else from ~/.all-tomorrow/olmuse-board.env (NAME=value lines), so that the server watch's reruns of run_public.ps1 keep
 # them. The API reads both from its environment only; the allowed emails stay in its memory. -ApiOnly reads them again.
+# The Claude CLI lane (docs/ASSET_BACKEND_SPEC.md, E2): OLMUSE_GEN_CLAUDE_ACCOUNTS, the emails made by this PC's `claude`
+# on the owner's subscription without credits, and its settings, come from the same two places in the same way.
 $boardFile = Join-Path $HOME '.all-tomorrow\olmuse-board.env'
-foreach ($name in 'OLMUSE_BOARD_SYNC', 'OLMUSE_BOARD_ACCOUNTS') {
+foreach ($name in 'OLMUSE_BOARD_SYNC', 'OLMUSE_BOARD_ACCOUNTS', 'OLMUSE_GEN_CLAUDE_ACCOUNTS', 'OLMUSE_GEN_CLAUDE_DAILY',
+                  'OLMUSE_GEN_CLAUDE_MODEL', 'OLMUSE_GEN_CLAUDE_SLOTS', 'OLMUSE_GEN_CLAUDE_EXE') {
   if (-not "$([Environment]::GetEnvironmentVariable($name))".Trim() -and (Test-Path $boardFile)) {
     $line = Get-Content $boardFile | Where-Object { $_ -match "^\s*(export\s+)?$name\s*=" } | Select-Object -First 1
     if ($line) { [Environment]::SetEnvironmentVariable($name, $line.Split('=', 2)[1].Trim().Trim('"', "'")) }
