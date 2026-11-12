@@ -337,6 +337,10 @@ def ask_text(project: dict, examples: list, item: dict, k: int = 1, n: int = 1) 
         "what it should sound like. REQUEST.project is the game and its style. REQUEST.references and "
         "REQUEST.style_ref describe sounds to take after. REQUEST.examples are sounds this game already approved: "
         "stay in their family.",
+        "What it should sound like comes from REQUEST.item.description and from when it plays. The id and the name "
+        "are labels from the game's own vocabulary (a genre term such as barrage, bullet, parry or shot names a "
+        "game mechanic, not a sound source): never take the material of the sound from them when the description "
+        "says what the sound is.",
         KIND_LINES[kind],
     ]
     if kind == "music":

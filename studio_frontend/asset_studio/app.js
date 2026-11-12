@@ -190,7 +190,7 @@ Fields
   - length: target length (seconds). Effects at most ${p.dur}s, ambience an unbroken loop of 8 or 16 seconds
   - loop: whether it repeats. Always true for ambience
   - when: the moment in the game when it plays
-  - description: what it sounds like
+  - description: what it sounds like, in terms of the sound itself (what makes it, how long, how hard). A game term in the id or name (barrage, bullet, parry) is not a sound: say what is actually heard
 - questions: things the user must decide
 
 Do not reference tracks or samples with unclear licenses. Available materials: ${p.licenses}.
@@ -344,7 +344,7 @@ ${p.files}`,
   - length: 목표 길이(초). 효과음은 ${p.dur}초 이하, 환경음은 끊기지 않는 반복 구간 8초나 16초
   - loop: 반복 재생 여부. 환경음은 언제나 true
   - when: 게임의 어떤 순간에 나는 소리인지
-  - description: 어떤 소리인지
+  - description: 어떤 소리인지. 소리 자체로 적어 주세요(무엇이 내는 소리인지, 얼마나 길고 센지). id나 name의 게임 용어(탄막, 탄, 패링)는 소리가 아니니, 실제로 들리는 것을 적어 주세요
 - questions: 사용자가 정해야 할 것
 
 저작권이 불분명한 곡이나 샘플은 참조하지 마세요. 쓸 수 있는 재료는 ${p.licenses}입니다.
