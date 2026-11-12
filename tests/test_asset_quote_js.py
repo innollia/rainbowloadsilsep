@@ -1,5 +1,5 @@
 """What asking for sounds costs in the asset room (quote.js, and app.js where it is shown), under Node: the number in
-the five labels that carry one, the draft picker that follows a count written in the request (in the dock and in the
+the four labels that carry one, the draft picker that follows a count written in the request (in the dock and in the
 open sound), the request that waits when the assistant's answer costs more than the number that was showing at the
 press and is later made as that answer asked, a price that has not come, putting an answer back, the approved sounds
 a new one is told to stay close to, and several sounds changed at once that each end on their own. The page runs on
@@ -239,7 +239,7 @@ def test_the_labels_carry_a_number_which_comes_with_an_account_and_follows_a_cha
     assert got["free"] == ["Drafts", "Make all", [], ["GET /quote?items=1&drafts=1"]]
     assert got["acct"] == ["Drafts · 6 credits", "Make all · 3 credits", ["fillBtn", "segLabel"], ["GET /quote?items=1&drafts=1"] * 2]
     assert got["three"] == "Drafts · 9 credits" and got["two"] == "Drafts · 6 credits" and got["renewed"] == ["Drafts · 6 credits", 2]
-    # only the picker's label, #fillBtn and #likeThis name credits here (#expandBtn is on the sample board, below)
+    # only the picker's label, #fillBtn and #likeThis name credits here
     assert got["open"] == ["Drafts in this feel · 2 credits", "Drafts · 2 credits", ["fillBtn", "likeThis", "segLabel", "segLabel"]]
     assert got["changed"] == {"button": "Make all · 9 credits", "seg": "Drafts · 18 credits", "said": "server says quote_changed", "expected": 3, "status": ["pending"] * 3}
     assert got["notAgain"] == [1, ["pending"] * 3, "Make all · 9 credits"]
@@ -273,14 +273,17 @@ def test_the_make_button_of_an_empty_sound_shows_what_its_one_draft_takes_and_as
     assert got["made"] == [["sfx_hit"], 1, 2, False]
 
 
-def test_the_sample_board_prices_the_rest_and_one_credit_is_said_in_the_singular():
+def test_a_first_visit_has_nothing_to_price_and_one_credit_is_said_in_the_singular():
+    first = run_page(TOOLS + r"""
+    await hand();
+    out.empty = [tiles().length, seg(), numbered(), !!$('fillBtn'), !!$('expandBtn')];
+    """)
+    assert first["empty"] == [0, "Drafts", [], False, False]
     got = run_page(TOOLS + r"""
     await hand();
-    out.rest = [$('expandBtn').textContent, $('expandBtn').disabled, seg(), numbered()];
-    tiles().find((t) => t.dataset.status === 'draft').focus();
+    tileOf('sfx_three').focus();
     out.one = seg();                                                      // the focused sound is the one a request is for
-    """)
-    assert got["rest"] == ["Make the rest · 24 credits", True, "Drafts", ["expandBtn"]]
+    """, before=SAVED)
     assert got["one"] == "Drafts · 1 credit"
 
 
@@ -1088,7 +1091,7 @@ def test_the_page_loads_quote_js_between_the_generator_and_the_page_and_keeps_th
         assert outside not in quote, outside
 
 
-def test_the_words_are_in_both_languages_and_only_the_five_labels_are_priced():
+def test_the_words_are_in_both_languages_and_only_the_four_labels_are_priced():
     app = read("app.js")
     for key in ("agentHeld:", "agentOver:", "noPrice:", "noLink:", "withCredits:"):
         assert app.count(key) == 2, key
@@ -1105,8 +1108,8 @@ def test_the_words_are_in_both_languages_and_only_the_five_labels_are_priced():
     assert "assetQuote.label(label, gen.quoteOf(count, n)" in app
     # the page cannot run without quote.js, so nothing in it asks whether quote.js is there
     assert "quoteKit" not in app and "window.assetQuote" not in app and "heldAsk &&" not in app and "if (heldAsk)" not in app
-    # the labels that are priced: the picker's, and the four buttons that make sounds by themselves, all by one path
-    assert re.findall(r"quoted\(el\('button', '\w+'\), '(\w+)'", app) == ["fillAll", "makeRest", "likeThis", "makeOne"]
+    # the labels that are priced: the picker's, and the three buttons that make sounds by themselves, all by one path
+    assert re.findall(r"quoted\(el\('button', '\w+'\), '(\w+)'", app) == ["fillAll", "likeThis", "makeOne"]
     assert "t('makeOne')" not in app
     assert app.count("priced(t('drafts')") == 2 and "el('span', 'segLabel', priced(t('drafts')" in app
     # gen.js reads the price with the token and until it has it; the page draws the labels when the token is taken and

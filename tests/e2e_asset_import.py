@@ -173,9 +173,11 @@ def main():
         page.goto(url)
         hand(page, api)
 
-        # First visit: the tutorial opens and offers Import; the header and board offer it too.
+        # First visit: an empty board of the user's own, and the tutorial opens and offers Import; the header does too.
         page.wait_for_selector("#dialog[open] #tutorialImport")
-        check("first screen offers import", page.is_visible("#importBtn") and page.is_visible(".importHint"))
+        check("first screen is an empty board", page.locator(".tile").count() == 0 and page.inner_text("#gameTitle") == "새 게임", page.inner_text("#gameTitle"))
+        check("first screen offers import and nothing else to start from",
+              page.is_visible("#importBtn") and page.locator("#dialog[open] .dlgRow button").count() == 1 and page.locator("#tutorialBlank").count() == 0)
         page.click("#tutorialImport")
         page.wait_for_selector("#dialog[open] #pickFolder")
 
@@ -186,7 +188,7 @@ def main():
         g = groups(page)
         check("categories guessed from names", "Sword swing 01" in g.get("전투", []) and "Btn press" in g.get("UI", []) and "Forest loop" in g.get("환경", []), json.dumps(g, ensure_ascii=False))
         check("brought-in mark on tiles", page.locator(".tile.imported .origin").first.inner_text() == "직접 가져옴")
-        check("demo board left", page.locator(".tile").count() == 4)
+        check("the folder's sounds are the board", page.locator(".tile").count() == 4)
         page.wait_for_selector("#dialog[open] .justRow")
         check("unsure category is flagged", page.locator(".justRow .catPick.unsure").count() >= 1)
         page.locator(".justRow", has_text="btn_press.wav").locator("input.grow").fill("버튼 누름")
@@ -311,8 +313,8 @@ def main():
         shown, told = (tile.get_attribute("data-issues") or "").split(), lint_ids(hot, tile.get_attribute("data-id"))
         check("a rule-breaking sound shows what asset_lint.js finds", shown == told and {"peak", "lic"} <= set(shown), f"board {shown}, command line {told}")
 
-        # Starting over with nothing: the game window offers an empty board beside the samples. The one sound here is
-        # the user's own, so the page asks before it goes; after the reset the board is empty and stays empty.
+        # Starting over with nothing: the game window offers one way, an empty board. The one sound here is the user's
+        # own, so the page asks before it goes; after the reset the board is empty and stays empty.
         asked = []
         hot_page.on("dialog", lambda d: (asked.append(d.message), d.accept()))
         hot_page.keyboard.press("Escape")  # the report of the import is still up
@@ -320,6 +322,8 @@ def main():
         hot_page.click("#menuBtn")
         hot_page.click("#menu [data-act=game]")
         hot_page.wait_for_selector("#dialog[open] #startBlank")
+        check("the game window has one way to start again", hot_page.locator("#dialog[open] button", has_text="처음부터").count() == 1
+              and hot_page.locator("#dialog[open] button", has_text="샘플").count() == 0)
         with hot_page.expect_navigation():
             hot_page.click("#startBlank")
         hot_page.wait_for_function("document.querySelector('#gameTitle').textContent === '새 게임'", timeout=15000)
@@ -331,17 +335,15 @@ def main():
             hot_page.wait_for_timeout(50)
         hot_page.reload()
         hot_page.wait_for_function("document.querySelector('#gameTitle').textContent === '새 게임'", timeout=15000)
-        check("the empty board is what comes back, not the samples", hot_page.locator(".tile").count() == 0)
-        # The first screen offers the same start: nothing of the user's is there yet, so nothing is asked.
+        check("the empty board is what comes back", hot_page.locator(".tile").count() == 0)
+        # A first screen is that empty board already: a folder brought in names it.
         first = browser.new_page(viewport={"width": 1440, "height": 900})
         first.on("pageerror", lambda e: errors.append(str(e)))
         first.on("dialog", lambda d: (asked.append(d.message), d.accept()))
         first.goto(url)
-        first.wait_for_selector("#dialog[open] #tutorialBlank")
-        with first.expect_navigation():
-            first.click("#tutorialBlank")
-        first.wait_for_function("document.querySelector('#gameTitle').textContent === '새 게임'", timeout=15000)
-        check("the first screen starts on an empty board without asking", first.locator(".tile").count() == 0 and len(asked) == 1, asked)
+        first.wait_for_selector("#dialog[open] #tutorialImport")
+        first.keyboard.press("Escape")
+        check("the first screen is an empty board without asking", first.locator(".tile").count() == 0 and first.inner_text("#gameTitle") == "새 게임" and len(asked) == 1, asked)
         first.set_input_files("#importFolder", str(game))
         first.wait_for_function("document.querySelectorAll('.tile.imported').length === 4", timeout=15000)
         check("an empty board takes its name from the first folder", first.inner_text("#gameTitle") == "MyGame", first.inner_text("#gameTitle"))

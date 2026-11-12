@@ -1,9 +1,10 @@
 """The board as records (board.js) under Node: the text form the server compares, the page's snapshot as records and back
 onto the live objects, fitting a big sound record, the three-way merge of each row of the sync spec's G table, the
-repairs that run after a merge, the untouched sample board, and the bytes a record points at."""
+repairs that run after a merge, the untouched board, and the bytes a record points at."""
 import json, pathlib, subprocess
 
 ROOT = pathlib.Path(__file__).parents[1] / "studio_frontend" / "asset_studio"
+LEGACY = pathlib.Path(__file__).parent / "js" / "legacy_sounds.js"  # the stand-in sounds boards saved by earlier pages hold
 FILES = ("data.js", "store.js", "board.js")
 
 HELPERS = r"""
@@ -68,7 +69,7 @@ def node(script):
 
 
 def run(body):
-    src = "globalThis.window = globalThis;\n" + "\n".join((ROOT / f).read_text(encoding="utf-8") for f in FILES) + HELPERS
+    src = "globalThis.window = globalThis;\n" + "\n".join((ROOT / f).read_text(encoding="utf-8") for f in FILES) + "\n" + LEGACY.read_text(encoding="utf-8") + HELPERS
     return node(src + "\n(async () => {\nconst out = {};\n" + body + "\nconsole.log(JSON.stringify(out));\n})().catch((e) => { console.error(e); process.exit(1); });")
 
 
@@ -138,10 +139,10 @@ def test_records_patched_onto_an_empty_page_make_the_same_records_and_patching_a
     assert got["removed"] == [False, ["ui", "bgm"]]
 
 
-def test_every_field_of_the_sample_board_and_of_a_new_slot_is_shared_or_kept_on_the_device():
+def test_every_field_of_an_old_sample_board_and_of_a_new_slot_is_shared_or_kept_on_the_device():
     got = run(r"""
     const m = model();
-    m.assets = window.STUDIO_DATA.ASSETS.map((d) => ({ ...d, key: 's_' + d.id, status: d.sample ? 'draft' : 'pending', versions: [], current: 0, drafts: [], pick: -1, chat: [], progress: 0 }));
+    m.assets = window.LEGACY_SOUNDS.ASSETS.map((d) => ({ ...d, key: 's_' + d.id, status: d.sample ? 'draft' : 'pending', versions: [], current: 0, drafts: [], pick: -1, chat: [], progress: 0 }));
     // what app.js's blank() and intake() put on a sound
     m.assets.push(sound('kx', { imported: true, file: 'a.wav', license: '', holder: '', guessed: true, autoCat: true, when: '', description: '', ref: 's_ui_click', tempo: 100, length: 2, prompt: 'p' }));
     out.none = B.strays(snap(m));
@@ -317,8 +318,12 @@ def test_revert_fields_only_takes_back_what_still_holds_the_answers_value():
     assert got["gone"] == {}  or got["gone"] == {"when": None}
 
 
-def test_pristine_is_only_the_untouched_sample_board():
+def test_pristine_is_an_untouched_empty_board_or_an_untouched_sample_board_an_earlier_page_saved():
     got = run(r"""
+    const empty = (fn) => { const m = model(); fn(m); return B.pristine(snap(m)); };
+    out.empty = [empty(() => {}), empty((m) => { m.vals.game = 'Renamed'; m.cats.push({ id: 'ui', name: 'UI', kind: 'sfx', hue: '#fff' }); }),
+      empty((m) => { m.assets.push(sound('k1')); }), empty((m) => { m.trash.push(sound('k2', { trashedAt: 1 })); }), empty((m) => { m.refs.push({ id: 'r' }); }),
+      empty((m) => { m.dynamics.push({ id: 'dyn_x', params: [] }); })];
     const base = () => { const m = model(); m.vals.demo = true; m.assets = [sound('s_a', { sample: true, versions: [leg('sv_s_a', 1)] }), sound('s_b', { sample: true, status: 'pending' })]; return m; };
     const p = (fn) => { const m = base(); fn(m); return B.pristine(snap(m)); };
     out.r = [p(() => {}), p((m) => { m.vals.demo = false; }), p((m) => { m.trash.push(sound('s_c', { sample: true, trashedAt: 1 })); }), p((m) => { m.refs.push({ id: 'r' }); }),
@@ -329,6 +334,8 @@ def test_pristine_is_only_the_untouched_sample_board():
     # renaming a sample keeps the board a sample board (clearBoard's own check is the record against the module's);
     # the page's own empty stand-in slots (s_ keys, no sample flag) belong to the sample board, until one is made
     assert got["r"] == [True, False, False, False, False, False, False, False, True, True, False]
+    # an empty board nobody has put anything on, whatever it is called
+    assert got["empty"] == [True, True, False, False, False, False]
 
 
 def test_shas_of_a_record_in_upload_order_and_the_keys_the_server_holds():

@@ -1,5 +1,5 @@
 """The asset room's board kept in step between two computers of one account, in a real browser (docs/ASSET_SYNC_SPEC.md
-K, the browser check, and scenes 15, 19 and 22). Two browser contexts are the two computers; each page is opened at the
+K, the browser check, and scenes 15, 19 and 22, a folder joining the board). Two browser contexts are the two computers; each page is opened at the
 top level, so it is its own host page: an init script answers its asset:ready the way studio_frontend/app.js would,
 with the AI switch, "signed in" and an account token for the local API (boards on, a temp folder, a free port).
 
@@ -168,26 +168,28 @@ def main():
             pa.on("pageerror", lambda e: errors.append("A: " + str(e)))
             pb.on("pageerror", lambda e: errors.append("B: " + str(e)))
 
-            # A: a visitor with an untouched sample board signs in; the first edit makes it the account's first board.
+            # A: a visitor with an untouched empty board signs in; the first sounds put on it make it the account's first board.
             pa.goto(url)
             a = room(pa)
             a.wait_for_selector("#dialog[open]")
             a.page.keyboard.press("Escape")
-            ids = [i for i, _ in a.evaluate(NAMES)]
-            sample = names(a)
-            check("signed in with an untouched sample board, nothing is made yet", boards()["boards"] == [], boards())
-            # Renaming a sample leaves it a sample board (the contract's pristine, E5): still nothing on the server.
-            rename(a, ids[0], "A가 바꾼 이름")
+            check("the first screen is an empty board", a.locator("#board .tile").count() == 0 and a.inner_text("#gameTitle") == "새 게임", a.inner_text("#gameTitle"))
+            check("signed in with an untouched empty board, nothing is made yet", boards()["boards"] == [], boards())
             a.wait_for_timeout(3000)
-            check("a renamed sample alone makes no board", boards()["boards"] == [], boards())
-            # Work: the assistant adds a reference to the project. The board becomes the account's first board.
-            ask(a, "레퍼런스 하나 달아 줘", [{"op": "add_ref", "target": "project", "kind": "text", "name": "분위기", "text": "밝고 짧게"}])
+            check("an untouched empty board alone makes no board", boards()["boards"] == [], boards())
+            # Work: a list of what the game needs becomes eight empty slots. The board becomes the account's first board.
+            a.click("#importBtn")
+            a.fill("#listIn", "\n".join(["하나", "둘", "셋", "넷", "다섯", "여섯", "일곱", "여덟"]))
+            a.click("#addSlots")
             account_board(a)
             listed = boards()
-            check("the first edit made the sample board the account's first board", len(listed["boards"]) == 1 and listed["home"] == listed["boards"][0]["id"], listed)
-            check("the board is still the one that was edited", names(a).get(ids[0]) == "A가 바꾼 이름", names(a))
+            check("the first sounds made the empty board the account's first board", len(listed["boards"]) == 1 and listed["home"] == listed["boards"][0]["id"], listed)
+            ids = [i for i, _ in a.evaluate(NAMES)]
+            start_names = names(a)
+            check("the board is still the one that was worked on", len(ids) == 8 and "여덟" in start_names.values(), start_names)
+            rename(a, ids[0], "A가 바꾼 이름")
 
-            # B: another computer of the account with its own untouched samples opens the account's board.
+            # B: another computer of the account, on an empty board of its own, opens the account's board.
             pb.goto(url)
             b = room(pb)
             account_board(b)
@@ -208,7 +210,7 @@ def main():
             a.wait_for_timeout(5000)
             a.page.keyboard.type("다", delay=80)
             held = a.evaluate("() => [document.activeElement?.className, document.activeElement?.value]")
-            check("typing goes on while a change comes in", held == ["dName", sample[ids[2]] + "가나다"], held)
+            check("typing goes on while a change comes in", held == ["dName", start_names[ids[2]] + "가나다"], held)
             a.click("#boardBack")
             check("what came in shows once the field is let go", shows(a, "입력 중에 온 이름", 6000), names(a))
 
@@ -233,9 +235,9 @@ def main():
             a.evaluate("() => document.querySelector('#toast button').click()")
             a.wait_for_timeout(500)
             got = names(a)
-            check("scene 15: undo puts back what still holds the answer", got.get(ids[5]) == sample[ids[5]], got.get(ids[5]))
+            check("scene 15: undo puts back what still holds the answer", got.get(ids[5]) == start_names[ids[5]], got.get(ids[5]))
             check("scene 15: a teammate's later edit stays", got.get(ids[6]) == "팀원6", got.get(ids[6]))
-            check("scene 15: the other computer ends the same", shows(b, sample[ids[5]], 8000) and names(b).get(ids[6]) == "팀원6", names(b))
+            check("scene 15: the other computer ends the same", shows(b, start_names[ids[5]], 8000) and names(b).get(ids[6]) == "팀원6", names(b))
 
             # Scene 19: a bundle does not replace a board that has sounds.
             before = names(a)
@@ -247,41 +249,39 @@ def main():
                 said = False
             check("scene 19: a bundle on a board with sounds is refused and says so", said and names(a) == before, a.inner_text("#toast"))
 
-            # Scene 22: B renamed samples; A brings a folder in, which clears the stand-in board. Renamed samples go to
-            # the trash on both computers, untouched ones are gone.
+            # A brings a folder in: its sounds join the board, on both computers.
             a.set_input_files("#importFolder", str(game))
             a.wait_for_function("document.querySelectorAll('.tile.imported').length === 2", timeout=15000)
             a.page.keyboard.press("Escape")
             try:
-                b.wait_for_function("document.querySelectorAll('#board .tile').length === 2", timeout=10000)
-                only = True
+                b.wait_for_function("document.querySelectorAll('#board .tile').length === 10", timeout=10000)
+                both = True
             except Exception:
-                only = False
-            check("scene 22: the other computer gets the folder in place of the samples", only, names(b))
-            b.wait_for_timeout(1000)
-            b.locator("text=휴지통").last.click()
-            b.wait_for_selector("#dialog[open]")
-            binned = b.inner_text("#dialog")
-            b.page.keyboard.press("Escape")
-            check("scene 22: samples renamed elsewhere are in the trash, untouched ones are not", "B가 바꾼 이름" in binned and "팀원6" in binned and sample[ids[7]] not in binned, binned)
+                both = False
+            check("a folder brought in joins the board on the other computer too", both and shows(b, "팀원6", 1000), names(b))
 
-            # The game info dialog lists the boards; an empty board is a new board, and the old one opens again.
+            # The game info dialog lists the boards; an empty board is a new board once a sound is on it, and the old one opens again.
             a.click("#menuBtn")
             a.click("[data-act='game']")
             a.wait_for_selector("#dialog[open] .boardRow.here", timeout=10000)
             state = a.inner_text("#dialog .boardRow.here")
-            check("the board list shows this board and how far it is sent", all(x in state for x in ("Folder", "소리 2개", "동기화됨")), state)
+            check("the board list shows this board and how far it is sent", all(x in state for x in ("Folder", "소리 10개", "동기화됨")), state)
+            check("the game window has one way to start again", a.locator("#dialog[open] button", has_text="샘플").count() == 0)
             first = boards()["home"]
             a.evaluate("() => { window.__before = 1; }")
             a.click("#startBlank")
             account_board(a, mark=True)
             a.wait_for_timeout(2500)
-            for _ in range(20):  # the new board goes up with the engine's first round
+            check("an untouched empty board is not a board of the account yet", len(boards()["boards"]) == 1 and a.locator("#board .tile").count() == 0, [len(boards()["boards"]), names(a), a.inner_text("#gameTitle")])
+            a.click("#importBtn")
+            a.fill("#listIn", "새 소리")
+            a.click("#addSlots")
+            for _ in range(20):  # the new board goes up with the engine's next round
                 if len(boards()["boards"]) == 2:
                     break
                 time.sleep(0.5)
-            check("an empty board is a new board of the account; the other board stays", len(boards()["boards"]) == 2 and a.locator("#board .tile").count() == 0, [len(boards()["boards"]), names(a), a.inner_text("#gameTitle")])
-            check("the other computer keeps its board", b.locator("#board .tile").count() == 2)
+            check("with a sound on it the empty board is a new board of the account; the other board stays", len(boards()["boards"]) == 2 and boards()["home"] == first, boards())
+            check("the other computer keeps its board", b.locator("#board .tile").count() == 10)
             a.click("#menuBtn")
             a.click("[data-act='game']")
             a.wait_for_selector("#dialog[open] .boardRow:not(.here) button", timeout=10000)
@@ -290,12 +290,12 @@ def main():
             account_board(a, mark=True)
             check("the first board opens again from the list", a.locator(".tile.imported").count() == 2 and boards()["home"] == first, boards())
 
-            # Signing out: the page shows a board without an account.
+            # Signing out: the page shows a board without an account, which is an empty one.
             pa.evaluate("() => signed(false)")
             a.wait_for_function("localStorage.getItem('asset-sync.who') === ''", timeout=10000)
             a.wait_for_load_state("load")
             a.wait_for_timeout(2500)
-            check("signed out, the page shows a board without the account's sounds", a.locator(".tile.imported").count() == 0 and a.locator("#board .tile").count() > 0, names(a))
+            check("signed out, the page shows a board without the account's sounds", a.locator("#board .tile").count() == 0, names(a))
 
             check("no page errors", not errors, errors[:3])
         finally:

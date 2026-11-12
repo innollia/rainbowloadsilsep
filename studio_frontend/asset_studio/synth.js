@@ -1,4 +1,5 @@
-// Placeholder sound for the shell, synthesised from data.js so tiles, waveforms and measurements are real signals.
+// The sound of a legacy version (the stand-in sounds boards saved by earlier pages still hold), synthesised from its
+// layers so tiles, waveforms and measurements are real signals.
 (() => {
   const RATE = 22050;
   const FOLD = 0.5; // seconds rendered past a loop and folded back onto its head

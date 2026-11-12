@@ -18,7 +18,7 @@
 //   the assets whose records the server took, purge(keys) (sounds deleted for good), fetch(key) -> bytes | null,
 //   status() -> { state, changes, sounds: [sent, all], blocked }, flush(ms) -> { ok, reason }, peers() (for
 //   gen.handover), done() (an upload engine: resolves when all of it is on the server), record (the sync record).
-// Also: record(...) a new sync record, dbName, sampleName, newBoard, newDev, scan(indexedDB, who), list(call),
+// Also: record(...) a new sync record, dbName, newBoard, newDev, scan(indexedDB, who), list(call),
 // open(call, board), pointer helpers.
 (function (factory) {
   const api = factory();
@@ -42,7 +42,6 @@
   const hex = (n, random = Math.random) => Array.from({ length: n }, () => Math.floor(random() * 16).toString(16)).join('');
   const newBoard = (random) => hex(32, random), newDev = (random) => hex(16, random);
   const dbName = (who, board) => `${DB}.${who}.${String(board).slice(0, 12)}`;
-  const sampleName = (who, random) => `${DB}.${who}.d${hex(6, random)}`;
   // make: what the first POST /boards says ({ first, home }), purge: sounds deleted for good still to be sent.
   function record(o) {
     const x = o || {};
@@ -105,7 +104,7 @@
     let lastReq = -Infinity, activity = -Infinity, failSince = 0, toldOff = false, backoff = 0, rest = 0, lastLost = -Infinity, toldFull = false;
     let hasBoard = store && store.restored === 'restored', healAt = now() + HEAL_MS, touched = true, firstPull = !S || !S.pulled;
     // A database that was opened empty to receive a board that is already on the server: once received, what the page
-    // started with and the server does not have (the sample board) is not this board's.
+    // started with and the server does not have (an empty board) is not this board's.
     const fresh = !!S && !S.pulled && !!S.made && !S.seed && store && store.restored === 'empty';
     let server = { up: 0, now: 0, at: 0, peers: [] }, sending = { sent: 0, all: 0 };
     const draw = new Set();
@@ -517,7 +516,7 @@
       if (!eligible()) { settleReady(); return; }
       if (!(await boardThere()) && (!S.made || S.pulled)) { settleReady(); return; } // nothing on disk: nothing goes up
       if (!S.made) {
-        if (S.seed === 'sample' && board.pristine(d.snapshot())) { settleReady(); return; } // an untouched sample never goes up
+        if (S.seed && board.pristine(d.snapshot())) { settleReady(); return; } // an untouched board never goes up
         if (!(await make())) return;
       }
       if (!upload && !(await pull())) return;
@@ -587,7 +586,7 @@
     // Before the page goes to another board: everything (but what the server refused for good) is sent first.
     async function flush(ms = 5000) {
       if (!S || off || old) return { ok: true, reason: '' };
-      if (S.seed === 'sample' && !S.made && board.pristine(d.snapshot())) return { ok: true, reason: '' };
+      if (S.seed && !S.made && board.pristine(d.snapshot())) return { ok: true, reason: '' };
       const end = now() + ms;
       for (;;) {
         await tick();
@@ -623,5 +622,5 @@
     };
   }
 
-  return { create, record, dbName, sampleName, newBoard, newDev, scan, list, open, pointer, PROTO, OPS_MAX, CHUNK_MAX, BLOB_MAX };
+  return { create, record, dbName, newBoard, newDev, scan, list, open, pointer, PROTO, OPS_MAX, CHUNK_MAX, BLOB_MAX };
 });

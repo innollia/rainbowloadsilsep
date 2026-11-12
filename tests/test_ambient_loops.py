@@ -2,11 +2,12 @@
 import json, pathlib, subprocess
 
 ROOT = pathlib.Path(__file__).parents[1] / "studio_frontend" / "asset_studio"
+LEGACY = pathlib.Path(__file__).parent / "js" / "legacy_sounds.js"
 FILES = ("data.js", "synth.js", "measure.js")
-# The sample sounds are judged by the one table the room, the command line and the server use (assetMeasure.lint).
+# The stand-in sounds that boards saved by earlier pages hold (tests/js/legacy_sounds.js) are judged by the one table the room, the command line and the server use (assetMeasure.lint).
 # Only the rules about the sound itself count here: its id and its sources say nothing about how it loops.
 HEAD = """
-const { ASSETS } = window.STUDIO_DATA;
+const { ASSETS } = window.LEGACY_SOUNDS;
 const synth = window.synth, M = window.assetMeasure;
 const ofSound = new Set(M.RULES.filter((r) => !r.text).map((r) => r.id));
 const failedOf = (a, m) => M.lint({ music: !!a.music, loop: !!a.loop, id: a.id }, m).filter((i) => ofSound.has(i.id)).map((i) => i.id);
@@ -24,7 +25,7 @@ console.log(JSON.stringify(out));
 
 
 def node(body):
-    src = "globalThis.window = globalThis;\n" + "\n;\n".join((ROOT / f).read_text(encoding="utf-8") for f in FILES) + "\n;\n" + HEAD + body
+    src = "globalThis.window = globalThis;\n" + "\n;\n".join((ROOT / f).read_text(encoding="utf-8") for f in FILES) + "\n;\n" + LEGACY.read_text(encoding="utf-8") + "\n;\n" + HEAD + body
     run = subprocess.run(["node", "-"], input=src, capture_output=True, text=True, encoding="utf-8", check=True)  # stdin: Windows caps a command line at 32K
     return json.loads(run.stdout)
 

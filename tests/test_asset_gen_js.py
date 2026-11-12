@@ -342,6 +342,19 @@ own('clearTimeout', clearT);
   }
 })(INDEX_HTML);
 """
+# A board an earlier page saved while it opened on stand-in sounds (tests/js/legacy_sounds.js), nobody having touched
+# it: its eight samples made by the room's own synth (legacy versions, their recipe only) waiting for a check, the
+# other sounds empty slots. The page opens it as it opens any saved board.
+OLD_BOARD = (pathlib.Path(__file__).parent / "js" / "legacy_sounds.js").read_text(encoding="utf-8") + r"""
+{
+  const { GAME, BRIEF, ASSETS } = window.LEGACY_SOUNDS;
+  const old = (d) => ({ ...structuredClone(d), key: 's_' + d.id, status: d.sample ? 'draft' : 'pending', current: 0, drafts: [], pick: -1, chat: [], hasSource: false,
+    versions: d.sample ? [{ id: 'sv_s_' + d.id, at: 0, note: { key: 'firstVersion' }, change: {}, engine: 'legacy', sources: S.sourcesFor(d) }] : [] });
+  disk.stores.set('board', new Map([['board', { v: S.SNAPSHOT, game: GAME, brief: BRIEF, platform: 'mobile', demo: true, stage: 'sample', loud: [-20, -16],
+    trash: [], projectRefs: [], agentLog: [], dynamics: [], assets: ASSETS.map(old) }]]));
+  disk.stores.set('audio', new Map());
+}
+"""
 PAGE_FILES = ("data.js", "synth.js", "importer.js", "godot.js", "unreal_py.js", "unreal.js", "refs.js", "measure.js", "store.js", "board.js", "gen.js", "sync.js", "quote.js")
 
 
@@ -1806,11 +1819,11 @@ PAGE_STORY = r"""
     const credits = () => { $('exportBtn').click(); const text = document.querySelector('.creditsText').textContent; return text; };
     const ONE = 'sfx_ui_confirm';
 
-    // Without a token: the sample board is there and checked, and asking for a sound says that AI is off.
-    out.start = { tiles: tiles().length, count: count(), issues: [...new Set(tiles().filter((t) => t.dataset.issues !== undefined).map((t) => t.dataset.issues))], withIssues: tiles().filter((t) => t.dataset.issues !== undefined).length };
+    // Without a token: the old sample board is there and checked, and asking for a sound says that AI is off.
+    out.start = { tiles: tiles().length, count: count(), issues: [...new Set(tiles().filter((t) => t.dataset.issues !== undefined).map((t) => t.dataset.issues))].sort(), withIssues: tiles().filter((t) => t.dataset.issues !== undefined).length };
     $('approveAll').click();
-    $('expandBtn').click();
-    out.off = { said: said(), calls: api.calls.length, count: count(), button: !!$('expandBtn') };
+    $('fillBtn').click();
+    out.off = { said: said(), calls: api.calls.length, count: count(), button: !!$('fillBtn') };
     await ask(ONE, 'a soft bell');
     out.offAsk = { said: said(), count: count(), calls: api.calls.length };
     out.credits = credits(); $('dialog').close();
@@ -1858,14 +1871,14 @@ PAGE_STORY = r"""
     out.trashed = { cancel: api.posted('/jobs/cancel'), job: api.jobs.get('job5').status, tile: !!tileOf(GONE), tiles: tiles().length };
 
     // The rest of the board, one draft a sound.
-    $('expandBtn').click();
+    $('fillBtn').click();
     await until(() => api.posted('/jobs').length === 4);
     const third = api.posted('/jobs')[3];
     out.expand = { items: third.items.length, drafts: third.drafts, credits: third.expect_credits, kinds: [...new Set(third.items.map((i) => i.kind))].sort(), working: count().working, said: said() };
     for (const [id, j] of api.jobs) if (j.status === 'queued') api.finish(id, id === 'job6' ? 2 : 0);
     await advance(1500);
     await until(() => !count().working);
-    out.made = { count: count(), button: !!$('expandBtn'), lic: tiles().filter((t) => (t.dataset.issues || '').split(' ').includes('lic')).length };
+    out.made = { count: count(), button: !!$('fillBtn'), lic: tiles().filter((t) => (t.dataset.issues || '').split(' ').includes('lic')).length };
 
     // Credits: the sources of what is approved, then the encoder of the chosen format.
     $('approveAll').click();
@@ -1885,16 +1898,17 @@ PAGE_STORY = r"""
 
 
 def test_the_page_makes_changes_and_credits_sounds_through_the_generator():
-    """app.js as the browser runs it, on the stand-in DOM: no token, then a token, a first sound in two drafts, a change
-    that is dropped, the rest of the board, and the credits. What a real browser adds (layout, sound, files) is not here."""
-    got = run_page(PAGE_STORY)
+    """app.js as the browser runs it, on the stand-in DOM, over a sample board an earlier page saved: no token, then a
+    token, a first sound in two drafts, a change that is dropped, the rest of the board, and the credits. What a real
+    browser adds (layout, sound, files) is not here."""
+    got = run_page(PAGE_STORY, before=OLD_BOARD)
     off = 'AI is not connected here, so sounds cannot be made. Links and notes ("note: …") are still saved as references.'
     synth = "olmuse built-in synth\n  License: -\n  Holder: -\n"
     nkido = "nkido (Akkado, Cedar)\n  Use: Sound synthesis engine\n  License: MIT\n  Holder: Moritz Laass\n"
     head = "Starlight Garden sound asset license notice\n\n"
 
-    # The sample board: its eight samples are made by the room's own synth and pass every rule.
-    assert got["start"] == {"tiles": 32, "count": {"draft": 8, "pending": 24}, "issues": [""], "withIssues": 8}
+    # The old sample board: its eight samples are rendered by the room's own synth from their saved recipes and checked.
+    assert got["start"] == {"tiles": 32, "count": {"draft": 8, "pending": 24}, "issues": ["", "dc", "peak clip", "peak clip loud"], "withIssues": 8}
     # Without a token nothing is asked for and nothing changes; the room says AI is off, and still credits what it has.
     assert got["off"] == {"said": off, "calls": 0, "count": {"approved": 8, "pending": 24}, "button": True}
     assert got["offAsk"] == {"said": off, "count": {"approved": 8, "pending": 24}, "calls": 0}
@@ -1920,7 +1934,7 @@ def test_the_page_makes_changes_and_credits_sounds_through_the_generator():
     assert got["trashed"] == {"cancel": [{"ids": ["job5"]}], "job": "cancelled", "tile": False, "tiles": 31}
 
     # The rest of the board is one request, one draft a sound.
-    assert got["expand"] == {"items": 22, "drafts": 1, "credits": 22, "kinds": ["amb", "music", "sfx"], "working": 22, "said": "Making 22 in the sample style"}
+    assert got["expand"] == {"items": 22, "drafts": 1, "credits": 22, "kinds": ["amb", "music", "sfx"], "working": 22, "said": "Making 22"}
     assert got["made"] == {"count": {"approved": 8, "draft": 23}, "button": False, "lic": 0}
 
     # Credits are the sources of what is approved, each once, and the encoders only when the format needs them.
@@ -1945,22 +1959,23 @@ AI_OFF = 'AI is not connected here, so sounds cannot be made. Links and notes ("
 def test_a_request_typed_in_the_dock_that_the_room_cannot_take_says_why_and_not_that_sounds_are_being_made():
     """The saved board could not be read, so nothing is saved or made on this visit, and a token is there. A request for
     a picked sound is answered with that reason. It used to be answered "Remaking 1 sound." over a POST that never went."""
-    got = run_page(PAGE_TOOLS + r"""
-    out.start = said();
+    got = run_page(PAGE_TOOLS.split("    const MADE")[0] + r"""
+    out.start = [said(), tiles().length];
     hand();
     await until(() => api.calls.length > 0);
-    type(MADE, 'make it brighter'); await advance(0);
-    out.made = [said(), tileOf(MADE).dataset.status];
+    // the page is on an empty board: a slot comes from a list
+    $('importBtn').click(); $('listIn').value = 'Bell'; $('listIn').fire('input'); $('addSlots').click(); await settle();
+    const EMPTY = tiles()[0].dataset.id;
     type(EMPTY, 'a soft bell'); await advance(0);
     out.empty = [said(), tileOf(EMPTY).dataset.status];
     // A link is still a reference: that needs no generation.
-    type(MADE, 'https://example.com/ref'); await advance(0);
+    type(EMPTY, 'https://example.com/ref'); await advance(0);
     out.link = said();
     out.calls = api.paths();
     """, before="disk.stores.set('board', new Map([['board', { v: 2, assets: 'not a list' }]])); disk.stores.set('audio', new Map());")
     failed = "The saved board could not be opened, so nothing is saved on this visit. Reloading the page may open it again."
-    assert got["start"] == failed
-    assert got["made"] == [failed, "draft"] and got["empty"] == [failed, "pending"]
+    assert got["start"] == [failed, 0]
+    assert got["empty"] == [failed, "pending"]
     assert got["link"].startswith("Saved it as a reference.") and got["calls"] == ["GET /quote?items=1&drafts=1"]
 
 
@@ -2005,25 +2020,25 @@ HOST_STORY = r"""
     await settle();
     out.closed = [$('detailView').hidden, tileOf(EMPTY).dataset.status];
 
-    // The rest of the sample board is being made when the user's own list replaces the board: those jobs are cancelled.
+    // The rest of the board is being made when a bundle replaces the board: those jobs are cancelled.
     $('approveAll').click();
-    $('expandBtn').click();
+    $('fillBtn').click();
     await until(() => api.posted('/jobs').length === 2);
     const asked = api.posted('/jobs')[1].items.length, ids = [...api.jobs.values()].filter((j) => j.request === api.posted('/jobs')[1].request_id).map((j) => j.id);
     $('importBtn').click();
-    $('listIn').value = 'Jump land\nCoin pickup'; $('listIn').fire('input');
-    $('addSlots').click();
-    await settle();
+    $('importFiles').files = [new File([JSON.stringify({ game: 'Other game', assets: [{ id: 'sfx_jump', name: 'Jump land', category: 'char' }, { id: 'sfx_coin', name: 'Coin pickup', category: 'ui' }] })], 'game-audio.spec.json')];
+    $('importFiles').fire('change');
+    for (let i = 0; i < 50 && !tileOf('sfx_coin'); i++) { await settle(); await advance(0); } // a bundle of two takes a breath between its sounds
     const looks = api.posted('/jobs/status').length;
     await advance(30000);
     out.replaced = { asked, ids: ids.length, cancel: api.posted('/jobs/cancel').map((b) => b.ids.length), same: JSON.stringify(api.posted('/jobs/cancel').flatMap((b) => b.ids).sort()) === JSON.stringify(ids.slice().sort()),
       jobs: [...new Set(ids.map((id) => api.jobs.get(id).status))], tiles: tiles().length, count: count(), looksAfter: api.posted('/jobs/status').length - looks };
 
-    // The sound the generator made for the sample board was paid for: it is in the trash, not gone, and can be put back.
+    // The sound the generator made for the old board was paid for: it is in the trash, not gone, and can be put back.
     const bin = () => $('side').querySelectorAll('button').find((b) => b.title === 'Trash');
     out.binned = [bin().getAttribute('aria-label'), tileOf(EMPTY) === null];
     await advance(600);
-    await until(() => { const b = disk.stores.get('board').get('board'); return !!b && !b.demo && (b.trash || []).length === 1; });
+    await until(() => { const b = disk.stores.get('board').get('board'); return !!b && (b.trash || []).length === 1; });
     const kept = disk.stores.get('board').get('board').trash[0];
     out.binnedOnDisk = [kept.id === EMPTY, kept.versions.map((v) => v.engine), disk.stores.get('audio').has(kept.versions[0].key)];
     bin().click();
@@ -2033,7 +2048,7 @@ HOST_STORY = r"""
 
 
 def test_inside_the_host_page_a_turned_away_request_keeps_its_reason_a_typed_request_keeps_its_input_and_a_replaced_board_cancels_its_jobs():
-    got = run_page("const AI_OFF = " + json.dumps(AI_OFF) + ";\n" + PAGE_TOOLS + HOST_STORY, before="const hostBox = []; own('parent', { postMessage: (m) => hostBox.push(m) });")
+    got = run_page("const AI_OFF = " + json.dumps(AI_OFF) + ";\n" + PAGE_TOOLS + HOST_STORY, before=OLD_BOARD + "const hostBox = []; own('parent', { postMessage: (m) => hostBox.push(m) });")
     assert got["ready"] is True
     # The answer said sounds were being remade; nothing was asked for, and the toast says why (with the undo when there is one).
     assert got["turned"] == [AI_OFF, False, 0] and got["turnedWithUndo"] == [True, True] and got["plain"] == "It is the confirm sound."
@@ -2068,14 +2083,12 @@ BOARD_REPLACED = r"""
     type(THREE, 'a click'); await advance(0);
     await until(() => api.posted('/jobs').length === 3);
 
-    // The user's own list replaces the sample board.
-    $('importBtn').click();
-    $('listIn').value = 'Jump land\nCoin pickup'; $('listIn').fire('input');
-    $('addSlots').click();
-    await settle();
+    // A bundle replaces the board.
+    const open = async (spec, id) => { $('importBtn').click(); $('importFiles').files = [new File([JSON.stringify(spec)], 'game-audio.spec.json')]; $('importFiles').fire('change'); for (let i = 0; i < 50 && !tileOf(id); i++) { await settle(); await advance(0); } };
+    await open({ game: 'Mine', assets: [{ id: 'sfx_jump', name: 'Jump land', category: 'char' }, { id: 'sfx_coin', name: 'Coin pickup', category: 'ui' }] }, 'sfx_coin');
     out.list = [tiles().length, count(), api.posted('/jobs/cancel'), api.jobs.get('job4').status, bin().getAttribute('aria-label')];
     await advance(600);
-    await until(() => { const b = onDisk(); return !!b && !b.demo && (b.trash || []).length === 2; });
+    await until(() => { const b = onDisk(); return !!b && b.assets.length === 2 && (b.trash || []).length === 2; });
     out.listTrash = inTrash();
     out.listSounds = onDisk().trash.flatMap((a) => a.versions).every((v) => disk.stores.get('audio').has(v.key));
 
@@ -2096,10 +2109,10 @@ BOARD_REPLACED = r"""
 
 
 def test_sounds_the_generator_made_go_to_the_trash_when_the_board_is_replaced_and_drafts_under_review_go_as_versions():
-    """Leaving the sample board (a list, a folder) and opening a bundle empty the board. What the generator made was paid
-    for, so it is in the trash afterwards and can be put back; the trash keeps versions only, so drafts that were still
-    under review are there as versions. What was still being made is cancelled, and everything else goes as before."""
-    got = run_page(PAGE_TOOLS + BOARD_REPLACED)
+    """Opening a bundle empties the board. What the generator made was paid for, so it is in the trash afterwards and can
+    be put back; the trash keeps versions only, so drafts that were still under review are there as versions. What was
+    still being made is cancelled, and everything else goes as before."""
+    got = run_page(PAGE_TOOLS + BOARD_REPLACED, before=OLD_BOARD)
     assert got["list"] == [2, {"pending": 2}, [{"ids": ["job4"]}], "cancelled", "Trash 2"]
     made = [["one", "draft", ["job1"], 0, 0, False], ["two", "draft", ["job2", "job3"], 0, 0, False]]
     assert got["listTrash"] == made and got["listSounds"] is True
@@ -2110,6 +2123,7 @@ def test_sounds_the_generator_made_go_to_the_trash_when_the_board_is_replaced_an
 
 def test_start_again_cancels_what_is_being_made_and_then_empties_what_was_saved():
     got = run_page(PAGE_TOOLS + r"""
+    let asked = 0; own('confirm', () => { asked++; return true; });
     hand();
     await until(() => api.calls.length > 0);
     type(EMPTY, 'a soft bell'); await advance(0);
@@ -2119,38 +2133,43 @@ def test_start_again_cancels_what_is_being_made_and_then_empties_what_was_saved(
     out.before = [tileOf(EMPTY).dataset.status, api.jobs.get('job1').status, disk.stores.get('board').size > 0];
     let reloads = 0; location.reload = () => { reloads++; };
     $('menu').fire('click', { target: document.querySelector('#menu [data-act=game]') });
-    $('dialog').querySelectorAll('button').find((b) => b.textContent === 'Start again from samples').click();
+    out.buttons = $('dialog').querySelectorAll('button').map((b) => b.textContent).filter((x) => /board|sample/i.test(x));
+    $('dialog').querySelectorAll('button').find((b) => b.textContent === 'Start with an empty board').click();
     await until(() => reloads === 1);
     const cancel = api.calls.find((c) => c.path === '/jobs/cancel');
-    out.again = [api.posted('/jobs/cancel'), cancel.keepalive, api.jobs.get('job1').status, disk.stores.get('board').size, disk.stores.get('audio').size];
-    """)
+    out.again = [api.posted('/jobs/cancel'), cancel.keepalive, api.jobs.get('job1').status, disk.stores.get('board').size, disk.stores.get('audio').size, asked];
+    """, before=OLD_BOARD)
     assert got["before"] == ["working", "queued", True]
-    # the cancel is sent so that it outlives the page (keepalive), and nothing of the old board is left on disk
-    assert got["again"] == [[{"ids": ["job1"]}], True, "cancelled", 0, 0]
+    # one way to start again, and it is to an empty board
+    assert got["buttons"] == ["Start with an empty board"]
+    # the cancel is sent so that it outlives the page (keepalive), and nothing of the old board is left on disk; none of
+    # the old board's sounds is the user's own (made by the generator or brought in), so nothing is asked first
+    assert got["again"] == [[{"ids": ["job1"]}], True, "cancelled", 0, 0, 0]
 
 
 def test_what_only_the_page_can_do_with_drafts_and_boards_is_written_as_the_spec_asks():
     """Read from app.js, as Node has no way to press these: review with nothing picked, dropping drafts, a bundle opened."""
     app = (ROOT / "app.js").read_text(encoding="utf-8")
-    settle = app[app.index("function settle(a, keep) {"):app.index("function expand() {")]
+    settle = app[app.index("function settle(a, keep) {"):app.index("/* ---------- dock ---------- */")]
     # "Keep" with no version and no draft picked throws nothing away; the guard comes before anything is dropped
     assert "if (keep && !a.versions.length && a.drafts.length && !a.drafts[a.pick]) { a.pick = 0; renderOpen(); return; }" in settle
     assert settle.index("a.pick = 0; renderOpen(); return;") < settle.index("a.drafts = [];")
     # dropping drafts cancels nothing at the server (spec F: cancelling belongs to the trash and to starting again)
     assert "gen.drop([a])" in settle and "gen.cancel(" not in settle
-    # a board that is replaced (the sample board left, a bundle opened) is emptied in one place: what was being made
-    # for it is cancelled first, and what the generator made goes to the trash before the rest goes
-    clear = app[app.index("function clearBoard() {"):app.index("function leaveDemo(name) {")]
+    # a board that is replaced (a bundle opened) is emptied in one place: what was being made for it is cancelled
+    # first, and what the generator made goes to the trash before the rest goes
+    clear = app[app.index("function clearBoard() {"):app.index("function nameBoard(name) {")]
     assert clear.index("gen.cancel([...assets]);") < clear.index("toTrash(made);") < clear.rindex("assets.length = 0;")
-    leave = app[app.index("function leaveDemo(name) {"):app.index("async function decode(bytes)")]
     bundle = app[app.index("async function openBundle(spec, files"):app.index("function addSlots(list) {")]
-    for body in (leave, bundle):
-        assert "clearBoard();" in body and "assets.length = 0" not in body
+    assert "clearBoard();" in bundle and "assets.length = 0" not in bundle
+    # a list or sound files are added to the board, never put in place of it
+    for start, end in (("async function addSounds(files", "async function openBundle("), ("function addSlots(list) {", "/* ---------- filling empty slots")):
+        assert "clearBoard()" not in app[app.index(start):app.index(end)]
     # the trash still cancels, and "start again" cancels in forget() itself, before the store is emptied
     assert "gen.cancel(list);" in app[app.index("function toTrash(list) {"):app.index("function removeAssets(list)")]
     forget = app[app.index("async function forget() {"):app.index("/* ---------- host page")]
     assert forget.index("gen.cancel([...assets, ...trash])") < forget.index("store.clear()")
-    assert "await forget(); location.reload();" in app
+    assert "await forget();\n    location.reload();" in app
 
 
 # ---------- a board kept in step with the server (docs/ASSET_SYNC_SPEC.md H) ----------
@@ -2472,3 +2491,19 @@ def test_a_cut_short_first_unreal_write_is_resumed_by_the_plugin_descriptor_and_
     got = run_page("const importer = window.assetImporter;\n" + FOLDER_CUT_STORY)
     assert got["resumed"][0] is True, got["resumed"]
     assert got["foreign"] == ["Could not write to the game folder: Plugins/OlmuseAudio", 0]
+
+
+def test_a_first_visit_opens_on_an_empty_board_and_the_tutorial_and_game_info_offer_no_stand_in_board():
+    """Nothing saved: no sounds, the categories as they come, the game called a new one. The tutorial speaks of the
+    user's own sounds only and offers Import; the game info has the one way to start again, on an empty board."""
+    got = run_page(PAGE_TOOLS.split("    const MADE")[0] + r"""
+    out.board = [tiles().length, $('gameTitle').textContent, !!$('fillBtn'), !!$('approveAll'), $('side').querySelectorAll('button').map((b) => b.title).filter(Boolean)];
+    $('menu').fire('click', { target: document.querySelector('#menu [data-act=help]') });
+    out.help = [$('dialog').querySelectorAll('button').filter((b) => b.textContent).map((b) => [b.id, b.textContent]), $('dialog').querySelectorAll('li b').map((b) => b.textContent)];
+    $('dialog').close();
+    $('menu').fire('click', { target: document.querySelector('#menu [data-act=game]') });
+    out.game = $('dialog').querySelectorAll('button').filter((b) => b.textContent).map((b) => [b.id, b.textContent]);
+    """)
+    assert got["board"] == [0, "New game", False, False, ["All", "UI", "Combat", "Character", "Ambience", "Music", "Add group"]]
+    assert got["help"] == [[["tutorialImport", "Import"]], ["Bring in what you have", "Get a spec", "Revise", "Export"]]
+    assert got["game"] == [["startBlank", "Start with an empty board"]]

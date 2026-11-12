@@ -540,7 +540,22 @@ def test_versions_dropped_here_go_back_in_and_the_other_edits_stay():
     assert got["server"] == [["vk5", "w2"], "Renamed", True]
 
 
-def test_an_untouched_sample_board_never_goes_up_and_one_with_work_does():
+def test_an_untouched_empty_board_never_goes_up_and_one_with_a_sound_does():
+    got = run(r"""
+    const srv = fakeServer();
+    const a = await device(srv, 'A', { seed: 'blank', make: { first: false, home: false } });
+    await a.save();
+    a.m.vals.game = 'Renamed'; a.m.cats.push({ id: 'x', name: 'X', kind: 'sfx', hue: '#9' }); await a.save(); // a name and a group are not work
+    await a.tick();
+    out.empty = [srv.calls.length, a.engine.pending, (await a.engine.flush(100)).ok];
+    a.m.assets.push(sound('k1')); await a.save(); await a.tick();
+    out.work = [srv.calls[0].path, srv.calls[0].body.home, srv.boards.size];
+    """)
+    assert got["empty"] == [0, False, True]
+    assert got["work"] == ["/boards", False, 1]
+
+
+def test_an_untouched_sample_board_an_earlier_page_saved_never_goes_up_and_one_with_work_does():
     got = run(r"""
     const srv = fakeServer();
     const a = await device(srv, 'A', { seed: 'sample', make: { first: false, home: false } });
@@ -605,7 +620,7 @@ def test_the_pointer_lost_the_newest_database_of_the_account_is_found_by_listing
     out.none = await Y.scan({ open: idb.open }, WHO);
     const ls = new Map(), store = { getItem: (k) => (ls.has(k) ? ls.get(k) : null), setItem: (k, v) => ls.set(k, v) };
     out.pointer = [Y.pointer.read(store), Y.pointer.write(store, { anon: 'olmuse-asset-board', accts: { [WHO]: { db: out.found[0] } } }), Y.pointer.read(store)];
-    out.names = [Y.dbName(WHO, 'b'.repeat(32)), /^olmuse-asset-board\.c0ffee00c0ffee00\.d[0-9a-f]{6}$/.test(Y.sampleName(WHO)), /^[0-9a-f]{32}$/.test(Y.newBoard()), /^[0-9a-f]{16}$/.test(Y.newDev())];
+    out.names = [Y.dbName(WHO, 'b'.repeat(32)), !('sampleName' in Y), /^[0-9a-f]{32}$/.test(Y.newBoard()), /^[0-9a-f]{16}$/.test(Y.newDev())];
     """)
     assert got["found"] == ["olmuse-asset-board.c0ffee00c0ffee00.bbbbbbbbbbbb", "olmuse-asset-board.c0ffee00c0ffee00.aaaaaaaaaaaa"]
     assert got["none"] is None
@@ -867,7 +882,8 @@ def test_two_computers_through_the_scenes_of_the_contract():
       await b.tick(); await a.tick(); await b.tick();
       return [b.m.assets.length, b.find('k1').name, b.find('k2').name, b.find('k1').loop, a.toasts];
     });
-    // 16. "start with an empty board": a new board for this computer only, home stays; offline it does not move
+    // 16. "start with an empty board": a new board for this computer only, which goes up once a sound is on it; home
+    // stays; offline it does not move
     await scene(16, async (ctx) => {
       const [a, b] = await pair(ctx);
       const home = a.engine.record.board;
@@ -876,16 +892,16 @@ def test_two_computers_through_the_scenes_of_the_contract():
       ctx.srv.down = false;
       const online = await a.engine.flush(2000);
       const blank = await device(ctx.srv, 'A2', { seed: 'blank', make: { first: false, home: false } });
-      blank.m.cats.push({ id: 'x', name: 'X', kind: 'sfx', hue: '#9' }); await blank.save(); await blank.tick();
+      blank.m.assets.push(sound('kn')); await blank.save(); await blank.tick();
       ctx.board = home;
       return [offline, online, ctx.srv.boards.size, ctx.srv.home === home, b.m.assets.length];
     });
-    // 17. "start again from samples": nothing goes up, home stays
+    // 17. "start with an empty board" and nothing put on it: nothing goes up, home stays
     await scene(17, async (ctx) => {
       const [a, b] = await pair(ctx);
       const home = ctx.srv.home, before = ctx.srv.calls.length;
-      const s = await device(ctx.srv, 'A3', { seed: 'sample', make: { first: false, home: false } });
-      s.m.vals.demo = true; s.m.assets.push(sound('s_one', { sample: true })); await s.save(); await s.tick();
+      const s = await device(ctx.srv, 'A3', { seed: 'blank', make: { first: false, home: false } });
+      s.m.cats.push({ id: 'x', name: 'X', kind: 'sfx', hue: '#9' }); await s.save(); await s.tick();
       return [ctx.srv.calls.length - before, ctx.srv.home === home, ctx.srv.boards.size];
     });
     // 18. a computer with real work comes to an account that has a board: home opens, its own board goes up apart

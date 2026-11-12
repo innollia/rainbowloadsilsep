@@ -2,7 +2,7 @@
 // from the host page nothing is made, and the board still opens, plays, imports, checks and exports.
 (() => {
   const $ = (id) => document.getElementById(id);
-  const { GAME, BRIEF, CATEGORIES, ASSETS, LICENSES } = window.STUDIO_DATA;
+  const { CATEGORIES, LICENSES } = window.STUDIO_DATA;
   const { PROFILES } = assetMeasure;
   // Groups belong to the project: a spec or the user can add, rename and remove them. kind says how a sound in it behaves.
   const KIND_OF = { ui: 'sfx', combat: 'sfx', char: 'sfx', env: 'amb', bgm: 'music' };
@@ -149,15 +149,13 @@ ${p.files}`,
       sec: (s) => `${s}s`,
       previous: 'Previous', newVersion: 'New version', keep: 'Keep', drop: 'Discard',
       approveAll: 'Approve all', leftToCheck: (n) => `${n} to check`,
-      samplesDone: (n, rest) => `All ${n} samples approved. The other ${rest} will be made in this style.`,
-      samplesProgress: (n, done, rest) => `${done} of ${n} samples approved. Listen and approve them, and the other ${rest} will be made in the same style.`,
-      makeRest: 'Make the rest', all: 'All', statusHead: 'Status',
+      all: 'All', statusHead: 'Status',
       counts: (n, ok) => `${n} total · ${ok} approved`, reviewCount: (n) => `${n} to review`, selected: (n) => `${n} selected`,
       askSelected: (n) => `Request for the ${n} selected`, askOne: (name) => `Request for ${name}`, askNone: 'Pick an asset to send a request',
       drafts: 'Drafts', draftCount: (i) => `${i}`, draftCountLabel: 'Number of drafts', draftNote: (text, k) => `${text} · draft ${k}`, makeOne: 'Make it',
       withCredits: (label, n) => `${label} · ${n} credit${n === 1 ? '' : 's'}`,
       madeDrafts: (n) => `Made ${n} drafts. Listen and keep one.`, madeOne: 'Made a new version. Compare it with the previous one.',
-      expanding: (n) => `Making ${n} in the sample style`, firstVersion: 'First version', fromSpec: 'Created from spec',
+      firstVersion: 'First version', fromSpec: 'Created from spec',
       play: 'Play', stop: 'Stop', toBoard: 'Back to board', prevAsset: 'Previous asset', nextAsset: 'Next asset',
       peak: (v) => `Peak ${v} dB`, loud: (v) => `Loudness ${v} LUFS`, loop: 'Loop', oneShot: 'One shot', spectrum: 'Spectrum',
       tracks: (n) => `${n} track${n === 1 ? '' : 's'}`,
@@ -209,7 +207,7 @@ ${p.form}`,
       gameFolder: 'Game folder', folderHelp: 'Link it and every approval is written straight into the game with these settings.', linkFolder: 'Link folder',
       folderLinked: (n) => `Linked to ${n}. Approving writes there.`, unlinkFolder: 'Unlink', folderFailed: (m) => `Could not write to the game folder: ${m}`, folderDenied: 'No permission to write to the folder.',
       inBundle: 'In the bundle', bundleItems: ['Approved sound files audio/*.wav', 'Spec game-audio.spec.json, which Import reads back', 'CREDITS.md and lint-report.json'], licenses: 'Licenses',
-      exportBundle: 'Export bundle', exported: (n) => `Bundled ${n} sounds`, restart: 'Start again from samples', startBlank: 'Start with an empty board', blankGame: 'New game',
+      exportBundle: 'Export bundle', exported: (n) => `Bundled ${n} sounds`, startBlank: 'Start with an empty board', blankGame: 'New game',
       confirmBlank: (n) => `This deletes the ${n === 1 ? 'sound' : n + ' sounds'} you have here, the trash included. This cannot be undone.`,
       importShort: 'Import', importTitle: 'Bring in what you already have', importIntro: 'Already made sounds, or have a list of what the game needs? Start from there.',
       dropHere: 'Drop sound files, a folder or an exported bundle',
@@ -223,7 +221,7 @@ ${p.form}`,
       nameLabel: 'Name', guessed: 'Guessed, check it', licenseLater: 'License (fill in later)', holderLater: 'Holder', licenseOf: (n) => `License of ${n}`,
       originHead: 'Source', fillLeft: (n) => `${n} empty slot${n === 1 ? '' : 's'} to make.`, fillAll: 'Make all', filling: (n) => `Making ${n}`,
       likeThis: 'Drafts in this feel', likeName: (n) => `${n} (like)`, likeMade: (n) => `Making ${n} in this feel`, promptHead: 'AI prompt',
-      fromPrompt: 'Made from the prompt', importedNote: 'Brought in', fromBundle: 'From the bundle', importHint: 'Already have sounds or a sound list? Drop them here or use Import at the top.',
+      fromPrompt: 'Made from the prompt', importedNote: 'Brought in', fromBundle: 'From the bundle',
       importing: (i, n) => `Bringing in ${i} of ${n}`, skipped: (n, why) => `Skipped ${n}: ${why}`,
       whyType: (n) => `${n} not sound files`, whyBig: (n) => `${n} over 50 MB or past 500 MB in all`, whyBad: (n) => `${n} could not be read`, whyMany: (n) => `${n} past the first 2000`,
       pruned: (n) => `Storage was full, so ${n} old discarded drafts were cleared.`, saveFull: 'Storage is full and the board could not be saved. Export a bundle to keep it.',
@@ -243,8 +241,6 @@ ${p.form}`,
       steps: [
         ['Bring in what you have', 'Already have sounds, a list of the sounds the game needs, or a bundle exported here? Import puts them on the board.'],
         ['Get a spec', 'From Spec in the top-right menu, copy the prompt, send it to the AI agent working on your game, and paste back the spec it returns.'],
-        ['Check samples', 'Key sounds come first. Hover over a tile to listen, then approve.'],
-        ['Make the rest', 'The rest are made at once in the style of the approved samples.'],
         ['Revise', 'Clicking a tile selects it and plays it. Pick several and write what to change. Raise the draft count to compare several options. Press and hold to open it large.'],
         ['Export', 'Approved sounds are bundled with the license notice. The AI finishes spec checks before it hands over a sound.'],
       ],
@@ -307,15 +303,13 @@ ${p.files}`,
       sec: (s) => `${s}초`,
       previous: '이전', newVersion: '새 버전', keep: '채택', drop: '버림',
       approveAll: '전체 승인', leftToCheck: (n) => `확인할 소리 ${n}개`,
-      samplesDone: (n, rest) => `샘플 ${n}개 다 승인했네? 이 스타일로 나머지 ${rest}개도 만들어 줄게~`,
-      samplesProgress: (n, done, rest) => `샘플 ${n}개 중에 ${done}개 승인했네. 들어 보고 다 승인하면 나머지 ${rest}개도 같은 스타일로 만들어 줄게~`,
-      makeRest: '나머지 만들기', all: '전체', statusHead: '상태',
+      all: '전체', statusHead: '상태',
       counts: (n, ok) => `전체 ${n} · 승인 ${ok}`, reviewCount: (n) => `검토 ${n}개`, selected: (n) => `${n}개 선택`,
       askSelected: (n) => `선택한 ${n}개에 보낼 요청`, askOne: (name) => `${name}에 보낼 요청`, askNone: '에셋을 골라서 요청을 보내 봐, 허접~',
       drafts: '시안', draftCount: (i) => `${i}개`, draftCountLabel: '시안 개수', draftNote: (text, k) => `${text} · 시안 ${k}`, makeOne: '만들기',
       withCredits: (label, n) => `${label} · ${n} 크레딧`,
       madeDrafts: (n) => `시안 ${n}개 만들어 줬으니까 들어 보고 하나 골라 봐~`, madeOne: '새 버전 만들어 줬어~ 이전 거랑 비교나 해 봐♡',
-      expanding: (n) => `샘플 스타일로 ${n}개 만들어 줄게~`, firstVersion: '첫 버전', fromSpec: '명세에서 생성',
+      firstVersion: '첫 버전', fromSpec: '명세에서 생성',
       play: '재생', stop: '정지', toBoard: '보드로', prevAsset: '이전 에셋', nextAsset: '다음 에셋',
       peak: (v) => `최대 ${v} dB`, loud: (v) => `음량 ${v} LUFS`, loop: '루프', oneShot: '한 번 재생', spectrum: '스펙트럼',
       tracks: (n) => `트랙 ${n}개`,
@@ -367,7 +361,7 @@ ${p.form}`,
       gameFolder: '게임 폴더', folderHelp: '연결해 두면 승인할 때마다 이 설정대로 게임 폴더에 바로 써 줄게~', linkFolder: '폴더 연결',
       folderLinked: (n) => `${n} 폴더에 연결됨. 승인하면 바로 저장돼~`, unlinkFolder: '연결 끊기', folderFailed: (m) => `게임 폴더에 못 썼어: ${m}`, folderDenied: '폴더에 쓸 권한이 없어~',
       inBundle: '묶음에 들어가는 것', bundleItems: ['승인한 소리 파일 audio/*.wav', '명세 game-audio.spec.json (가져오기로 다시 읽음)', 'CREDITS.md와 lint-report.json'], licenses: '저작권',
-      exportBundle: '묶음 내보내기', exported: (n) => `소리 ${n}개 묶어 줬어~`, restart: '샘플 단계부터 다시', startBlank: '빈 보드로 처음부터', blankGame: '새 게임',
+      exportBundle: '묶음 내보내기', exported: (n) => `소리 ${n}개 묶어 줬어~`, startBlank: '빈 보드로 처음부터', blankGame: '새 게임',
       confirmBlank: (n) => `지금 있는 소리 ${n}개가 휴지통까지 다 지워져~ 되돌리지도 못하는데 진짜 할 거야?`,
       importShort: '가져오기', importTitle: '이미 만든 작업 가져오기', importIntro: '만들어 둔 소리나 게임에 필요한 소리 목록 있으면 거기서 시작해 봐~',
       dropHere: '소리 파일이나 폴더, 내보낸 묶음을 여기다 놔 봐~',
@@ -381,7 +375,7 @@ ${p.form}`,
       nameLabel: '이름', guessed: '대충 짐작한 분류니까 똑바로 확인해~', licenseLater: '라이선스 (나중에 적어도 돼요)', holderLater: '저작권자', licenseOf: (n) => `${n} 라이선스`,
       originHead: '출처', fillLeft: (n) => `만들 빈 칸 ${n}개야~`, fillAll: '모두 만들기', filling: (n) => `${n}개를 만드는 중`,
       likeThis: '이 느낌으로 시안', likeName: (n) => `${n} 느낌`, likeMade: (n) => `이 느낌으로 ${n}개 만들어 줄게~`, promptHead: 'AI 프롬프트',
-      fromPrompt: '프롬프트로 생성', importedNote: '직접 가져옴', fromBundle: '묶음에서 가져옴', importHint: '이미 만든 소리나 소리 목록 있어? 여기다 끌어다 놓든가 위쪽 가져오기를 눌러 봐~',
+      fromPrompt: '프롬프트로 생성', importedNote: '직접 가져옴', fromBundle: '묶음에서 가져옴',
       importing: (i, n) => `가져오는 중 ${i}/${n}`, skipped: (n, why) => `${n}개 건너뜀: ${why}`,
       whyType: (n) => `소리 파일 아님 ${n}`, whyBig: (n) => `50MB 넘음·합계 500MB 넘음 ${n}`, whyBad: (n) => `읽지 못함 ${n}`, whyMany: (n) => `2000개 넘음 ${n}`,
       pruned: (n) => `저장 공간이 모자라서 옛날에 버린 시안 ${n}개는 치워 버렸어~`, saveFull: '저장 공간이 꽉 차서 자동 저장 못 했거든? 내보내기로 묶음부터 받아 둬~',
@@ -401,8 +395,6 @@ ${p.form}`,
       steps: [
         ['가진 것 가져오기', '만들어 둔 소리나 게임에 필요한 소리 목록, 여기서 내보낸 묶음 있으면 가져오기로 보드에 올려 봐~'],
         ['명세 받기', '오른쪽 위 메뉴의 명세에서 프롬프트 복사해서 게임 작업하는 AI 에이전트한테 보내고, 돌아온 명세를 붙여 넣어 봐~'],
-        ['샘플 확인', '대표 소리가 먼저 나와~ 타일에 마우스 올려서 들어 보고 승인해♡'],
-        ['나머지 만들기', '승인한 샘플 스타일로 나머지도 한 번에 만들어 줄게~'],
         ['고치기', '타일 누르면 선택되고 소리가 나~ 여러 개 고르고 바꿀 내용 적어 봐. 시안 개수 늘리면 여러 안 비교해서 고를 수 있고, 길게 누르면 크게 열려♡'],
         ['내보내기', '승인한 소리를 저작권 고지랑 같이 묶어 줄게~ 규격 검사는 AI가 소리 내놓기 전에 다 끝내 두거든.'],
       ],
@@ -428,13 +420,13 @@ ${p.form}`,
   const stems = ['#E8AE72', '#87B9E8', '#8CCDB2', '#C7A0E8', '#F3C978'];
 
   /* ---------- state ---------- */
-  // The stand-in sounds have fixed keys (s_<id>), and a sample's first version a fixed id and time, so every computer
-  // makes the same records of them (docs/ASSET_SYNC_SPEC.md E4).
-  const assets = ASSETS.map((d) => ({ ...d, key: 's_' + d.id, status: d.sample ? 'draft' : 'pending', versions: [], current: 0, drafts: [], pick: -1, chat: [], progress: 0 }));
+  // The board starts empty: no sounds, the categories as they come, the game called a new one.
+  const assets = [];
   const byId = (id) => assets.find((a) => a.id === id);
-  let stage = 'sample', filter = { cat: null, status: null, imported: false }, focused = null, anchor = null, openAsset = null, detailTab = 'chat';
-  // The board starts on stand-in work. The first import of the user's own work replaces it.
-  let game = GAME, brief = BRIEF, platform = 'mobile', demo = true;
+  let stage = 'expand', filter = { cat: null, status: null, imported: false }, focused = null, anchor = null, openAsset = null, detailTab = 'chat';
+  let game = Object.fromEntries(LANGS.map((l) => [l, TEXT[l].blankGame])), brief = '', platform = 'mobile';
+  // A field of boards saved by earlier pages, kept as it was read so their records stay the same. Nothing reads it.
+  let demo = false;
   const selected = new Set();
   // drafts: the number the draft picker shows, the one place the number of drafts of a request is read from.
   // pickedDrafts: the number picked by hand, which the picker goes back to when a request names none in words.
@@ -484,44 +476,7 @@ ${p.form}`,
   // the id against the project's id rule, and its sources (a version with none recorded is a `lic` issue).
   const broken = (a, v) => assetMeasure.lint({ music: !!a.music, loop: !!a.loop, id: a.id, sources: v.sources }, v.measure, { loud: loudRange, idRule, catIds: cats.map((c) => c.id) });
 
-  /* ---------- the sample board: the room's own synth makes its sounds and reworks them until they pass ---------- */
-  const MAX_CHECKS = 6;
-  // What the synth makes is a legacy version: its recipe (change + note) is what gets saved.
-  const build = (a, change, note) => { const sound = assetStore.shape(synth.render(a, change)); return { id: store.newId(), engine: 'legacy', sources: assetStore.sourcesFor(a), sound, note, change, at: new Date(), peaks: synth.peaks(sound.mix, 200), measure: synth.measure(sound) }; };
-  // The recipe changed so that what broke a rule no longer does.
-  function reworked(m, change, left) {
-    const next = { ...change }, has = (id) => left.some((r) => r.id === id);
-    if (has('loud')) { const [low, high] = loudRange; next.level = (next.level ?? 1) * 10 ** (((low + high) / 2 - m.loud) / 20); }
-    if (has('peak') || has('clip')) next.ceiling = 10 ** ((limitOf('peak') - 0.2) / 20);
-    if (has('dc')) next.dc = true;
-    if (has('lead') || has('tail')) {
-      const [front = 0, back = 0] = next.trim || [];
-      next.trim = [front + (has('lead') ? Math.max(0, m.lead / 1000 - 0.005) : 0), back + (has('tail') ? Math.max(0, m.tail / 1000 - 0.05) : 0)];
-    }
-    return next;
-  }
-  // A sample whose id breaks the id rule is renamed. Returns whether it was.
-  function repaired(a, left) {
-    if (!left.some((r) => r.id === 'name')) return false;
-    const old = a.id; a.id = makeId(nm(a), a.cat, new Set(assets.filter((x) => x !== a).map((x) => x.id)));
-    if (focused === old) focused = a.id;
-    return true;
-  }
-  function checked(a, change, note) {
-    let v = build(a, change, note);
-    for (let i = 0; i < MAX_CHECKS; i++) {
-      const left = broken(a, v);
-      if (!left.length) break;
-      const named = repaired(a, left), next = reworked(v.measure, v.change, left);
-      if (!named && JSON.stringify(next) === JSON.stringify(v.change)) break;
-      v = build(a, next, note);
-    }
-    return v;
-  }
-  function make(a, change = {}, note = { key: 'firstVersion' }) {
-    a.versions.push(checked(a, change, note));
-    a.current = a.versions.length - 1;
-  }
+  /* ---------- versions ---------- */
   const version = (a) => a.versions[a.current];
   // A restored legacy version is only its recipe (change + note); it is rendered the first time it is heard.
   // nkido and import versions are never rendered: tiles, checks and the spec read their stored peaks and measure, and
@@ -533,7 +488,6 @@ ${p.form}`,
   const hasSound = (a) => a.versions.length > 0 || (a.pick >= 0 && !!a.drafts[a.pick]);
   const issues = (a) => (hasSound(a) ? broken(a, heard(a)) : []);
   const approve = (a) => { a.status = 'approved'; toFolder([a]); };
-  assets.filter((a) => a.sample).forEach((a) => { make(a); a.versions[0].id = 'sv_' + a.key; a.versions[0].at = new Date(0); });
 
   /* ---------- generation (gen.js): asking the API for sounds, bringing them back, picking work up after a reload ---------- */
   const refBrief = (r) => ({ kind: r.kind, name: r.name || '', url: r.url || '', note: r.note || '', summary: r.summary || '' });
@@ -605,8 +559,8 @@ ${p.form}`,
   const refusal = () => { const key = cannot(); return key && key !== 'wait' ? genText(key) : ''; };
 
   /* ---------- what a request costs (quote.js): the number in a label, and the request that waits ---------- */
-  // Five labels carry a number and nothing else does: the draft picker's (the sounds picked x the drafts of each), and
-  // #fillBtn, #expandBtn, #likeThis and #makeOne (the sounds each would make, one draft a sound). The number is
+  // Four labels carry a number and nothing else does: the draft picker's (the sounds picked x the drafts of each), and
+  // #fillBtn, #likeThis and #makeOne (the sounds each would make, one draft a sound). The number is
   // gen.quoteOf(), the same sum generate() sends. A session that pays nothing, a price not known yet and nothing to
   // make show none.
   const priced = (label, count, n = 1) => assetQuote.label(label, gen.quoteOf(count, n), (text, credits) => t('withCredits', text, credits));
@@ -803,37 +757,20 @@ ${p.form}`,
     assets.filter(hasSound).forEach(drawTile);
     renderSide(); renderHeader(); syncDock();
   }
-  function importHint() {
-    const box = el('div', 'banner importHint'), text = el('span', '', t('importHint'));
-    text.style.flex = '1'; box.append(text);
-    return box;
-  }
   function banner() {
     const unchecked = assets.filter((a) => a.status === 'draft');
     const box = el('div', 'banner'); box.style.cssText = 'display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px';
     const all = el('button', 'ghost', t('approveAll')); all.id = 'approveAll'; all.onclick = () => { unchecked.forEach(approve); renderBoard(); };
-    if (stage !== 'sample') {
-      const out = [], empty = assets.filter((a) => a.status === 'pending');
-      if (empty.length) {
-        const row = box.cloneNode(), text = el('span', '', t('fillLeft', empty.length)), go = quoted(el('button', 'primary'), 'fillAll', empty.length);
-        text.style.flex = '1'; go.id = 'fillBtn'; go.onclick = () => fill(empty); row.append(text, go); out.push(row);
-      }
-      if (unchecked.length) {
-        const text = el('span', '', t('leftToCheck', unchecked.length)); text.style.flex = '1';
-        box.append(text, all); out.push(box);
-      }
-      return out;
+    const out = [], empty = assets.filter((a) => a.status === 'pending');
+    if (empty.length) {
+      const row = box.cloneNode(), text = el('span', '', t('fillLeft', empty.length)), go = quoted(el('button', 'primary'), 'fillAll', empty.length);
+      text.style.flex = '1'; go.id = 'fillBtn'; go.onclick = () => fill(empty); row.append(text, go); out.push(row);
     }
-    if (demo) return [importHint(), sampleBanner(box, all)];
-    return [sampleBanner(box, all)];
-  }
-  function sampleBanner(box, all) {
-    const samples = assets.filter((a) => a.sample), done = samples.filter((a) => a.status === 'approved').length, rest = assets.filter((a) => a.status === 'pending').length;
-    const text = el('span', '', done === samples.length ? t('samplesDone', samples.length, rest) : t('samplesProgress', samples.length, done, rest));
-    text.style.flex = '1';
-    const go = quoted(el('button', 'primary'), 'makeRest', rest); go.id = 'expandBtn'; go.disabled = done !== samples.length; go.onclick = expand;
-    box.append(text, all, go);
-    return box;
+    if (unchecked.length) {
+      const text = el('span', '', t('leftToCheck', unchecked.length)); text.style.flex = '1';
+      box.append(text, all); out.push(box);
+    }
+    return out;
   }
   const STATUS_HUE = { approved: 'var(--ok)', draft: 'var(--warn)', review: 'var(--work)', working: 'var(--work)', flagged: 'var(--err)', pending: 'var(--disabled)' };
   function renderSide() {
@@ -939,14 +876,11 @@ ${p.form}`,
   }
   // One sound at a time, for people without an agent writing a spec: an empty slot named in place.
   function addSound(cat) {
-    leaveDemoKeep();
     const name = t('newSound'), a = blank({ id: makeId(name, cat), name, cat, music: kindOf(cat) === 'music', loop: kindOf(cat) !== 'sfx' });
-    assets.push(a); if (stage === 'sample' && !assets.some((x) => x.sample)) stage = 'expand';
+    assets.push(a);
     filter = { cat: filter.cat && under(cat, filter.cat) ? filter.cat : null, status: null, imported: false }; renderBoard();
     const tile = tileOf(a); tile?.scrollIntoView({ block: 'nearest' }); renameTile(a, true);
   }
-  // Leaving the stand-in board by building one's own keeps what is there (unlike an import, which replaces it).
-  function leaveDemoKeep() { if (demo) demo = false; }
   function newCat() { const c = addCat(t('newCat')); renderBoard(); catDialog(c, true); }
   function catDialog(c, fresh = false) {
     openDialog(t('catSettings')); reopen = () => catDialog(c);
@@ -1337,14 +1271,6 @@ ${p.form}`,
     a.drafts = []; a.pick = -1; a.status = !a.versions.length ? 'pending' : keep ? 'approved' : 'draft';
     if (sounding(a)) stopSound();
     renderOpen();
-  }
-  // After the samples are approved: the rest of the board is made, one draft a sound.
-  function expand() {
-    const rest = assets.filter((a) => a.status === 'pending');
-    if (refuse()) return;
-    stage = 'expand'; stopSound();
-    if (rest.length) { toast(t('expanding', rest.length)); gen.generate(rest, { mode: 'make', text: '', drafts: 1 }); } // draws the board itself
-    else renderBoard();
   }
 
   /* ---------- dock ---------- */
@@ -1901,13 +1827,11 @@ ${p.form}`,
         for (const r of spec.references) if (r && (r.note || r.url)) projectRefs.push({ id: newRefId(), kind: r.url ? 'link' : 'text', name: String(r.name || '').slice(0, 80), note: String(r.note || ''), url: String(r.url || ''), at: Date.now(), by: 'spec' });
         syncRefs();
       }
-      demo = false;
       for (const c of specCats) { const have = catOf(c.id); if (have) { if (c.name) have.name = c.name; if (KINDS.includes(c.kind)) have.kind = c.kind; } else addCat(c.name || c.id, c.kind, c.id); }
       for (const c of specCats) if (c.parent && catOf(c.parent) && !under(c.parent, c.id)) catOf(c.id).parent = c.parent;
       for (const id of newCats) if (!catOf(id)) addCat(id, KIND_OF[id] || (spec.assets.find((x) => x.category === id)?.loop ? 'amb' : 'sfx'), id);
       // What the spec adds arrives as empty slots, the way a pasted list does: their sounds are made when asked for.
       added.forEach((x) => { x.category ||= cats[0].id; assets.push(blank({ id: x.id, name: x.name, cat: x.category, music: kindOf(x.category) === 'music', loop: !!x.loop || kindOf(x.category) === 'amb', length: x.length, when: x.when || '', description: x.description || '' })); });
-      if (added.length && stage === 'sample') stage = 'expand';
       changed.forEach((x) => { const a = byId(x.id); for (const k of specDiff(a, x)) a[SPEC_KEYS[k]] = k === 'loop' ? !!x.loop : x[k] ?? ''; });
       if (remove) toTrash(gone);
       dlg.close(); renderBoard(); toast(remove && gone.length ? t('specAppliedTrash', added.length, gone.length) : t('specApplied', added.length), 5000);
@@ -1965,9 +1889,8 @@ ${p.form}`,
     openDialog(tx(game)); reopen = gameDialog;
     dlg.append(el('p', '', tx(brief)));
     if (acct) boardList();
-    const b = el('button', '', t('restart')); b.onclick = acct ? newSample : async () => { takeBlank(); await forget(); location.reload(); };
     const e = el('button', '', t('startBlank')); e.id = 'startBlank'; e.onclick = startBlank;
-    dlg.append(b, ' ', e);
+    dlg.append(e);
     dlg.showModal();
   }
 
@@ -2029,8 +1952,7 @@ ${p.form}`,
     for (const [what, how] of t('steps')) { const li = el('li'); li.append(el('b', '', what), el('span', '', how)); list.append(li); }
     const row = el('div', 'dlgRow'), b = el('button', 'primary', t('importShort')); b.id = 'tutorialImport';
     b.onclick = () => { dlg.close(); importDialog(); };
-    const e = el('button', '', t('startBlank')); e.id = 'tutorialBlank'; e.onclick = startBlank;
-    row.append(e, b); dlg.append(list, row); dlg.showModal();
+    row.append(b); dlg.append(list, row); dlg.showModal();
   }
 
   /* ---------- bringing existing work in ---------- */
@@ -2039,14 +1961,13 @@ ${p.form}`,
   const takenIds = () => new Set(assets.map((a) => a.id));
   const base = (path) => path.split(/[\\/]/).pop();
   const stem = (path) => base(path).replace(/\.[^.]+$/, '');
-  // The board is replaced (the sample board left, a bundle opened). Sounds still being made go with it: their jobs
+  // The board is replaced (a bundle opened). Sounds still being made go with it: their jobs
   // are cancelled, as in the trash. Sounds the generator made were paid for, so they go to the trash, where they can
   // be put back. The trash keeps versions only: drafts still under review go there as versions of their sound.
   function clearBoard() {
     gen.cancel([...assets]);
-    // An account's board: the stand-in sounds nobody touched are deleted for good on every computer, everything else
-    // goes to the trash (another computer may have renamed a sample: it is kept).
-    if (acct) { const plain = assets.filter(untouched); purgeKeys(plain); toTrash(assets.filter((a) => !plain.includes(a))); assets.length = 0; return; }
+    // An account's board: everything goes to the trash.
+    if (acct) { toTrash([...assets]); assets.length = 0; return; }
     const made = assets.filter((a) => [...a.versions, ...a.drafts].some((v) => v.engine === 'nkido'));
     for (const a of made) {
       if (!a.drafts.length) continue;
@@ -2059,13 +1980,8 @@ ${p.form}`,
     toTrash(made);
     assets.length = 0;
   }
-  // Leaves the stand-in board the first time the user's own work comes in.
-  function leaveDemo(name) {
-    if (!demo) { if (name && unnamed()) game = name; return; } // an empty board takes the name of the first folder brought in
-    demo = false; stopSound(); queue = null; selected.clear(); filter = { cat: null, status: null, imported: false };
-    clearBoard(); stage = 'expand';
-    if (name) { game = name; brief = ''; }
-  }
+  // A board still called a new game takes the name of the first folder brought in.
+  function nameBoard(name) { if (name && unnamed()) game = name; }
   // A mono copy at the synth's rate, which is what the facts of a reference file are read from.
   async function decode(bytes) {
     const ac = new OfflineAudioContext(1, 1, 22050);
@@ -2130,7 +2046,7 @@ ${p.form}`,
       if (files.length > 1) { toast(t('importing', i + 1, files.length), 0); await breathe(); }
       try {
         const v = await importVersion(await f.bytes(), 'importedNote', { imported: true }), path = root ? f.path.slice(root.length + 1) : f.path, secs = v.seconds;
-        if (!left) { leaveDemo(root); left = true; taken = takenIds(); }
+        if (!left) { nameBoard(root); left = true; taken = takenIds(); }
         const guess = importer.guessCategory(path, secs), cat = fitCat(guess.cat), sure = guess.sure, name = importer.guessName(path);
         const loopy = kindOf(cat) !== 'sfx' || /loop/i.test(path);
         const a = blank({ id: makeId(name, cat, taken), name, cat, music: kindOf(cat) === 'music', loop: loopy, imported: true, file: f.path, license: '', holder: '', guessed: !sure, status: 'approved' });
@@ -2138,7 +2054,6 @@ ${p.form}`,
         assets.push(a); added.push(a);
       } catch { sk.bad++; }
     }
-    if (added.length && stage === 'sample') stage = 'expand';
     renderOpen();
     report(added.length ? t('importedN', added.length) : t('nothingToImport'), sk);
     if (added.length) { importDialog(added); askJev(added); }
@@ -2147,7 +2062,6 @@ ${p.form}`,
   async function openBundle(spec, files, sk = tally()) {
     // An account's board is not replaced by a bundle while it holds sounds: it opens on an empty board (G).
     if (acct && assets.length) { toast(t('bundleNeedsBlank'), 5000); return; }
-    leaveDemo();
     clearBoard(); selected.clear(); stopSound(); // the bundle replaces the board
     game = spec.game || game; brief = spec.style || '';
     const target = PROFILES.find((f) => f.id === spec.platform);
@@ -2179,13 +2093,11 @@ ${p.form}`,
   }
   // The pasted list becomes empty slots that "Fill with AI" makes.
   function addSlots(list) {
-    leaveDemo();
     const taken = takenIds();
     for (const x of list) {
       const cat = fitCat(x.cat), id = x.id && !taken.has(x.id) ? (taken.add(x.id), x.id) : makeId(x.name, cat, taken);
       assets.push(blank({ id, name: x.name, cat, loop: x.loop, music: kindOf(cat) === 'music', when: x.when, description: x.description, length: x.length }));
     }
-    if (stage === 'sample') stage = 'expand';
     renderOpen(); toast(t('slotsAdded', list.length));
   }
 
@@ -2746,8 +2658,8 @@ ${p.form}`,
     try { dir = await window.showDirectoryPicker({ id: 'olmuse-game', mode: 'readwrite' }); }
     catch (e) { if (e?.name !== 'AbortError') toast(t('folderFailed', e.message || e), 6000); return; }
     gameDir = dir; folderEngine = exportOpts.engine; keepDir(dir);
-    // A board still on the stand-in samples starts from what the folder has; a board with work in it fills the folder.
-    if (demo) {
+    // An empty board starts from what the folder has; a board with work in it fills the folder.
+    if (!assets.length && !trash.length) {
       const found = await readFolder(dir).catch(() => []);
       if (found.length) { if (dlg.open) dlg.close(); await intake(found); folderEngine = exportOpts.engine; keepDir(dir); } else exportDialog();
       return;
@@ -3025,7 +2937,7 @@ ${p.form}`,
       gen.check(); // a draft whose sound found room only now counts as received
     }).catch(() => {});
   }
-  function autosave() { if (!store.writable) return; clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 500); if (engine) engine.nudge(); else if (sampleWatch) sampleSoon(); }
+  function autosave() { if (!store.writable) return; clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 500); if (engine) engine.nudge(); else if (emptyWatch) emptySoon(); }
   addEventListener('pagehide', saveNow);
   document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(hoverTimer); queue = null; stopSound(); dynStop(); saveNow(); } });
   addEventListener('blur', () => { clearTimeout(hoverTimer); if (player?.hover || playWait?.hover) stopSound(); });
@@ -3054,7 +2966,7 @@ ${p.form}`,
   function tookOver(result) {
     // A read that failed on this visit, now or earlier, keeps the visit from saving for good, even when this last read
     // worked: the tab would show the real board, take every change and keep none. So it starts over as a new visit
-    // that has the board. It does the same when the other tab started again from the samples while this one still
+    // that has the board. It does the same when the other tab started again on an empty board while this one still
     // shows the old board.
     if (acct || store.paused || (result === 'empty' && shown !== 'empty')) { location.reload(); return; } // an account's board starts its engine on a fresh visit
     $('toast').hidden = true;
@@ -3066,35 +2978,27 @@ ${p.form}`,
     }
     afterRestore(result).then(() => { gen.attach(); greet(); });
   }
-  // "Start again from samples" really starts again. Sounds still being made, on the board or in the trash, are
+  // "Start with an empty board" really starts again. Sounds still being made, on the board or in the trash, are
   // cancelled first; the cancel is sent so that it outlives the page, and is not waited for.
   async function forget() { clearTimeout(saveTimer); gen.cancel([...assets, ...trash]); return await store.clear(); }
-  // "Start with an empty board" is the same reset, and the visit after it opens with nothing on the board: no
-  // stand-in sounds, the categories as they come. The word for that crosses the reload in this tab only. Sounds
-  // of the user's own (made here, or brought in) go for good, trash included, so that is asked first.
+  // The visit after it finds nothing saved and opens on an empty board, as a first visit does. Sounds of the user's
+  // own (made here, or brought in) go for good, trash included, so that is asked first.
   const own = (a) => a.imported || [...a.versions, ...a.drafts].some((v) => v.engine === 'nkido');
   async function startBlank() {
     if (acct) { newBlank(); return; } // an account's board is not deleted: this computer moves to a new one (I)
     const n = [...assets, ...trash].filter(own).length;
     if (n && !confirm(t('confirmBlank', n))) return;
-    if (await forget()) { try { sessionStorage.setItem('asset-blank', '1'); } catch { /* the samples come back instead */ } }
+    await forget();
     location.reload();
   }
-  // Read once by the tab that has the board, whatever it found there: over a saved board the word means nothing.
-  function takeBlank() { try { const on = !!sessionStorage.getItem('asset-blank'); sessionStorage.removeItem('asset-blank'); return on; } catch { return false; } }
   const unnamed = () => typeof game === 'object' && LANGS.every((l) => game[l] === TEXT[l].blankGame);
-  function openBlank() {
-    assets.length = 0; demo = false; stage = 'expand'; brief = '';
-    game = Object.fromEntries(LANGS.map((l) => [l, TEXT[l].blankGame]));
-    autosave();
-  }
 
   /* ---------- board sync (sync.js): one board in step between the computers of an account ---------- */
   // docs/ASSET_SYNC_SPEC.md E5, G, H, I. Nothing here runs for a visit without an account in the pointer until the host
   // says an account is signed in, its token is here and the server answers that boards are on for it.
   const randomHex = (n) => Array.from(crypto.getRandomValues(new Uint8Array(n)), (b) => (b & 15).toString(16)).join('');
   async function sha256hex(u8) { const h = await crypto.subtle.digest('SHA-256', u8); return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, '0')).join(''); }
-  let signedIn = null, booted = false, asked = '', sampleWatch = null, sampleTimer = 0, refetched = false;
+  let signedIn = null, booted = false, asked = '', emptyWatch = null, emptyTimer = 0, refetched = false;
   // The page as records: every sound has its key first (toRecords leaves a sound without one out).
   function syncSnapshot() { for (const a of assets) keyOf(a); for (const a of trash) keyOf(a); syncRefs(); return snapshot(); }
   const VALUES = { game: () => game, brief: () => brief, platform: () => platform, loud: () => loudRange, demo: () => demo, stage: () => stage, idRule: () => idRule, exportOpts: () => exportOpts };
@@ -3134,10 +3038,6 @@ ${p.form}`,
     if (engine) engine.purge(keys);
     else if (record) record.purge = [...new Set([...(record.purge || []), ...keys.map((k) => 'asset/' + k)])];
   }
-  // A sound's record as the server would hold it, and the stand-in sounds' records as this page made them.
-  const recordOf = (a) => BOARD.canon(BOARD.toRecords({ assets: [snapAsset(a, false)] }).get('asset/' + a.key));
-  const sampleRecords = BOARD ? new Map(assets.map((a) => [a.key, recordOf(a)])) : new Map();
-  const untouched = (a) => !!a && String(a.key || '').startsWith('s_') && sampleRecords.get(a.key) === recordOf(a);
   // The assistant's answer taken back where others edit too: only what still holds what the answer wrote (G).
   function revertLater(before) {
     const fieldsOf = (a) => ({ name: a.name, cat: a.cat, description: a.description, when: a.when, music: a.music, loop: a.loop, refs: JSON.stringify(ownRefs(a)) });
@@ -3206,7 +3106,7 @@ ${p.form}`,
   // Before this computer goes to another board, everything is sent (I). A board never on the server waits for nothing.
   async function leaving() {
     if (!record) return true;
-    if (!engine) { if (!record.made && (record.seed === 'sample' ? BOARD.pristine(syncSnapshot()) : true)) return true; toast(t('syncOff'), 5000); return false; }
+    if (!engine) { if (!record.made && (record.seed ? BOARD.pristine(syncSnapshot()) : true)) return true; toast(t('syncOff'), 5000); return false; }
     const r = await engine.flush(5000);
     if (!r.ok) toast(t(r.reason || 'syncBusy'), 5000);
     return r.ok;
@@ -3215,10 +3115,6 @@ ${p.form}`,
     if (!(await leaving())) return;
     const board = SYNC.newBoard();
     goTo(acct.who, SYNC.dbName(acct.who, board), SYNC.record({ who: acct.who, board, made: false, make: { first: false, home: false }, seed: 'blank' }));
-  }
-  async function newSample() {
-    if (!(await leaving())) return;
-    goTo(acct.who, SYNC.sampleName(acct.who), SYNC.record({ who: acct.who, board: SYNC.newBoard(), made: false, make: { first: false, home: false }, seed: 'sample' }));
   }
   async function openBoard(id) {
     if (!(await leaving())) return;
@@ -3280,9 +3176,9 @@ ${p.form}`,
     const r = await SYNC.list(gen.call);
     if (r.status !== 200 || !r.data || !Array.isArray(r.data.boards)) return; // boards are off: this page stays as it is
     const boards = r.data.boards, home = r.data.home || (boards[0] && boards[0].id) || null;
-    const sample = BOARD.pristine(syncSnapshot());
-    if (sample && !home) { sampleWatch = { who }; sampleTimer = setTimeout(sampleLook, 30000); return; }
-    if (sample) { openHome(who, home); return; }
+    const untouched = BOARD.pristine(syncSnapshot());
+    if (untouched && !home) { emptyWatch = { who }; emptyTimer = setTimeout(emptyLook, 30000); return; }
+    if (untouched) { openHome(who, home); return; }
     bindHere(who, home);
   }
   // The board here becomes the account's: its first board (home), or, when the account has boards already, a board
@@ -3299,19 +3195,19 @@ ${p.form}`,
     try { sessionStorage.setItem('asset-sync.kept', '1'); } catch { /* said on no visit */ }
     openHome(who, home);
   }
-  // The sample board stays here until it is worked on (then it becomes the account's first board) or the account
+  // The untouched board stays here until it is worked on (then it becomes the account's first board) or the account
   // gets a board somewhere else (then that one opens).
-  function sampleSoon() { clearTimeout(sampleTimer); sampleTimer = setTimeout(sampleLook, 1500); }
-  async function sampleLook() {
-    const w = sampleWatch;
+  function emptySoon() { clearTimeout(emptyTimer); emptyTimer = setTimeout(emptyLook, 1500); }
+  async function emptyLook() {
+    const w = emptyWatch;
     if (!w) return;
-    if (!quiet()) { sampleTimer = setTimeout(sampleLook, 1500); return; }
-    if (!BOARD.pristine(syncSnapshot())) { sampleWatch = null; bindHere(w.who, null); return; }
+    if (!quiet()) { emptyTimer = setTimeout(emptyLook, 1500); return; }
+    if (!BOARD.pristine(syncSnapshot())) { emptyWatch = null; bindHere(w.who, null); return; }
     const r = await SYNC.list(gen.call);
-    if (sampleWatch !== w) return;
+    if (emptyWatch !== w) return;
     const home = r.status === 200 && r.data && Array.isArray(r.data.boards) ? r.data.home || (r.data.boards[0] && r.data.boards[0].id) : null;
-    if (home && BOARD.pristine(syncSnapshot()) && quiet()) { sampleWatch = null; openHome(w.who, home); return; }
-    sampleTimer = setTimeout(sampleLook, 30000);
+    if (home && BOARD.pristine(syncSnapshot()) && quiet()) { emptyWatch = null; openHome(w.who, home); return; }
+    emptyTimer = setTimeout(emptyLook, 30000);
   }
   // This account's database could not be read: a new one is bound to the same board and receives it again.
   async function receiveAgain(who) {
@@ -3404,8 +3300,7 @@ ${p.form}`,
     if (acct) {
       record = syncRead || (await store.get('sync')) || null;
       if (!record || record.who !== acct.who) record = null;
-      if (store.writable && result === 'empty' && record && record.seed === 'blank') openBlank();
-    } else if (store.writable && takeBlank() && result === 'empty') openBlank();
+    }
     renderBoard(); liveLoop();
     booted = true; syncToken(); keptSaid();
     gen.attach(); // work a reload interrupted is picked up once the token is here too

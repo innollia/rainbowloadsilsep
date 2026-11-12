@@ -171,8 +171,8 @@ const row = (id, more = {}) => ({ id, name: id, cat: 'ui', status: 'draft', curr
 // A board the way the page saved it before version records: recipes for versions, a Float32 Blob under a.key for a
 // brought-in sound, drafts under review, one sound in the trash and a reference file.
 function v1Board() {
-  const made = window.STUDIO_DATA.ASSETS.filter((a) => a.layers && a.layers.length && !a.loop && !a.music);
-  if (made.length < 4) throw new Error('the sample board has too few short sounds for this fixture');
+  const made = window.LEGACY_SOUNDS.ASSETS.filter((a) => a.layers && a.layers.length && !a.loop && !a.music);
+  if (made.length < 4) throw new Error('the stand-in sounds have too few short ones for this fixture');
   const at = (n) => new Date(1700000000000 + n * 60000);
   const old = (d, more) => ({ ...structuredClone(d), status: 'draft', current: 0, pick: -1, chat: [], versions: [], drafts: [], hasSource: false, ...more });
   const source = Float32Array.from({ length: 2205 }, (_, i) => 0.4 * Math.sin(i / 7));
@@ -202,7 +202,7 @@ def node(script):
 
 def run(body):
     """The modules the way the browser loads them, then `body`, which prints one JSON value."""
-    src = "globalThis.window = globalThis;\n" + "\n".join((ROOT / f).read_text(encoding="utf-8") for f in FILES) + HELPERS
+    src = "globalThis.window = globalThis;\n" + "\n".join((ROOT / f).read_text(encoding="utf-8") for f in FILES) + "\n" + (pathlib.Path(__file__).parent / "js" / "legacy_sounds.js").read_text(encoding="utf-8") + HELPERS
     return node(src + "\n(async () => {\nconst out = {};\n" + body + "\nconsole.log(JSON.stringify(out));\n})().catch((e) => { console.error(e); process.exit(1); });")
 
 
@@ -847,7 +847,7 @@ def test_a_view_only_tab_whose_first_read_failed_stays_unsaved_after_taking_over
 
 def test_filled_renders_legacy_versions_and_leaves_nkido_and_import_versions_as_stored():
     got = run(r"""
-    const demo = window.STUDIO_DATA.ASSETS.find((a) => a.layers && a.layers.length && !a.loop && !a.music);
+    const demo = window.LEGACY_SOUNDS.ASSETS.find((a) => a.layers && a.layers.length && !a.loop && !a.music);
     let renders = 0;
     const spy = { render: (...x) => { renders++; return window.synth.render(...x); }, peaks: window.synth.peaks, measure: window.synth.measure };
     const facts = { peaks: Array.from({ length: 200 }, (_, i) => i / 200), measure: { peak: -3.2, loud: -18.4, seconds: 1.5, rate: 48000, channels: 2, bits: 16 } };
@@ -1015,13 +1015,13 @@ def test_the_page_keeps_what_the_storage_changes_must_not_take_away():
     forget = app[app.index("async function forget() {"):app.index("/* ---------- host page")]
     assert "await store.clear()" in forget and forget.index("clearTimeout(saveTimer)") < forget.index("store.clear()")
     assert forget.index("gen.cancel(") < forget.index("store.clear()")
-    # "start with an empty board" is that reset: what is the user's own is asked about first, the word for the next
-    # visit is left only when the store was emptied, and only the tab that has the board reads it, over nothing saved
+    # "start with an empty board" is that reset: what is the user's own is asked about first. The visit after it finds
+    # nothing saved and the board it opens on is the empty one every first visit gets: no word crosses the reload.
     blank = forget[forget.index("async function startBlank() {"):]
     assert blank.index("confirm(t('confirmBlank', n))") < blank.index("await forget()") < blank.index("location.reload()")
-    assert "if (await forget()) { try { sessionStorage.setItem('asset-blank', '1'); }" in blank
-    assert "if (store.writable && takeBlank() && result === 'empty') openBlank();" in app
-    assert "takeBlank(); await forget(); location.reload();" in app  # "start again from samples" drops a word left over
+    for gone in ("asset-blank", "takeBlank", "openBlank", "ASSETS", "leaveDemo", "sampleBanner", "newSample", "t('restart')"):
+        assert gone not in app, gone
+    assert "const assets = [];" in app and "let game = Object.fromEntries(LANGS.map((l) => [l, TEXT[l].blankGame])), brief = ''" in app
     # a generated sound always shows its tracks: with no stems the master is the one track, and one track can be turned
     assert "const hasTracks = (v) => v.engine === 'nkido' || (v.sound ? v.sound.stems.length : (v.stems || []).length) > 1;" in app
     assert "const multi = hasTracks(v)" in app and "stemsTouched = (a, v) => openAsset === a && hasTracks(v) &&" in app

@@ -8,7 +8,7 @@
 - 남의 작업이 조용히 사라지지 않는다: 서버는 모르는 값 위에 쓰지 않고, 덮인 값은 이력에 남고, 삭제는 표식이고, 같은 필드 충돌에서 진 쪽에는 바로 알린다.
 - 서버는 집 PC 한 대(API 프로세스 하나, 작업자 1, SQLite)다. 새 의존성, 웹소켓, SSE는 쓰지 않는다. 알림은 짧은 폴링이다.
 - 소리 바이트는 레코드에 넣지 않고 sha256 주소로 따로 둔다. 레코드는 그것이 가리키는 바이트가 서버에 있은 뒤에만 올라간다.
-- '빈 보드로 처음부터'와 '샘플 단계부터 다시'는 동기화 중인 보드를 지우지 않는다. 누른 기기만 다른 보드로 옮긴다.
+- '빈 보드로 처음부터'는 동기화 중인 보드를 지우지 않는다. 누른 기기만 다른 보드로 옮긴다.
 - 다른 계정의 팀원 참가(초대)는 이번에 만들지 않는다. 권한 판정은 처음부터 '보드 구성원인가'로 하여 초대를 더해도 구조가 바뀌지 않는다.
 - 새 창, 패널, 줄, 단추를 만들지 않는다. 새 화면 요소는 L절의 목록뿐이다.
 
@@ -166,7 +166,7 @@ create index if not exists uses_sha on uses (sha);
 **서버의 내용 검증(모두 `{bad:code}`로 그 연산만 거절)**
 - kind가 표에 없음 `kind`, uid가 1~64자 `[A-Za-z0-9_.:-]`가 아니거나 meta인데 `game`·`rules`가 아님 `uid`, data가 객체가 아니거나 NaN·무한대가 있거나 asset의 `versions`가 배열이 아님 `data`, 크기 초과 `too_large`, UTF-8로 못 쓰는 글자 `text`.
 - asset 쓰기에서 지금 행의 `versions` id 중 하나라도 새 data에 없으면 `versions`(버전 목록은 줄지 않는다).
-- asset의 gone은 지금 행의 `data.trashedAt`이 있거나 uid가 `s_`로 시작할 때(손대지 않은 샘플)만 받는다. 아니면 `trash_first`.
+- asset의 gone은 지금 행의 `data.trashedAt`이 있거나 uid가 `s_`로 시작할 때(이전 페이지가 저장한 대역 소리)만 받는다. 아니면 `trash_first`.
 - 보드의 레코드 수 초과는 `board_full`.
 
 ### D3. `POST /boards/{board}/sync`
@@ -194,26 +194,26 @@ create index if not exists uses_sha on uses (sha);
 
 ### E1. 모듈
 
-- `board.js`(UMD, `window.assetBoard`, Node 시험): `canon(x)`(키 정렬 JSON), `toRecords(snapshot)` → `Map("<kind>/<uid>" → data)`, `fit`, `merge3(kind, base, mine, theirs, mineWins)` → `{data, lost(진 필드 이름들), gone(삭제가 이겼나)}`, `sane(asset)`, `patch(model, kind, uid, data|null)`(살아 있는 객체를 제자리에서 고친다), `fixIds(model, shadow)`, `pristine(snapshot)`, `shasOf(kind, data)`, `remoteKeys(sync)`, `revertFields(before, after, now)`. 에셋 필드 허용 목록은 D2의 목록이다(`loud`는 data.js 샘플 에셋에 있는 필드). 휴지통의 소리에 `trashedAt`이 없으면 `toRecords`가 1을 적는다.
-- `sync.js`(UMD, `window.assetSync`): `create(deps)`. deps = `store`, `call`(gen.js가 내주는 같은 401 처리), `identity()`(gen의 `{kind, who}`), `sync`(store `read()`가 준 `sync` 기록), `snapshot()`, `model()`(패치할 배열과 스칼라 접근자), `quiet()`(다시 그려도 되는가), `redraw(list)`, `lost({what, name, key})`, `onTrash(list)`(남이 휴지통에 넣은 소리), `moved(board)`(`POST /boards`가 다른 보드를 돌려줌), `hidden()`, `sha256`, `now`, 타이머, `upload`(올리기 전용). 엔진: `start, stop, tick, flush(ms), status(), claim(list), push(list), nudge(), wake(), purge(keys), fetch(key), extra(), ready(), done(), peers()`, 게터 `pending`, `record`, `state`. 모듈: `record({who, board, made, make, seed, dev})`(새 `sync` 기록), `dbName, sampleName, newBoard, newDev, scan(indexedDB, who), list(call), open(call, board), pointer.read/write`.
+- `board.js`(UMD, `window.assetBoard`, Node 시험): `canon(x)`(키 정렬 JSON), `toRecords(snapshot)` → `Map("<kind>/<uid>" → data)`, `fit`, `merge3(kind, base, mine, theirs, mineWins)` → `{data, lost(진 필드 이름들), gone(삭제가 이겼나)}`, `sane(asset)`, `patch(model, kind, uid, data|null)`(살아 있는 객체를 제자리에서 고친다), `fixIds(model, shadow)`, `pristine(snapshot)`, `shasOf(kind, data)`, `remoteKeys(sync)`, `revertFields(before, after, now)`. 에셋 필드 허용 목록은 D2의 목록이다(`loud`, `sample`, `layers`는 이전 페이지가 저장한 대역 소리에 있는 필드). 휴지통의 소리에 `trashedAt`이 없으면 `toRecords`가 1을 적는다.
+- `sync.js`(UMD, `window.assetSync`): `create(deps)`. deps = `store`, `call`(gen.js가 내주는 같은 401 처리), `identity()`(gen의 `{kind, who}`), `sync`(store `read()`가 준 `sync` 기록), `snapshot()`, `model()`(패치할 배열과 스칼라 접근자), `quiet()`(다시 그려도 되는가), `redraw(list)`, `lost({what, name, key})`, `onTrash(list)`(남이 휴지통에 넣은 소리), `moved(board)`(`POST /boards`가 다른 보드를 돌려줌), `hidden()`, `sha256`, `now`, 타이머, `upload`(올리기 전용). 엔진: `start, stop, tick, flush(ms), status(), claim(list), push(list), nudge(), wake(), purge(keys), fetch(key), extra(), ready(), done(), peers()`, 게터 `pending`, `record`, `state`. 모듈: `record({who, board, made, make, seed, dev})`(새 `sync` 기록), `dbName, newBoard, newDev, scan(indexedDB, who), list(call), open(call, board), pointer.read/write`.
 - script 순서: `data, synth, importer, godot, refs, measure, store, board, gen, sync, quote, app`.
 
 ### E2. 브라우저 저장
 
 - 계정 없는 보드 DB: localStorage `asset-sync.anon`이 가리키는 이름, 없으면 지금의 `olmuse-asset-board`.
-- 계정 보드 DB: `olmuse-asset-board.<who16>.<보드 id 앞 12자>`. 샘플 보드(아직 서버 보드가 아님): `olmuse-asset-board.<who16>.d<난수 6자>`. 잠금 이름은 DB 이름과 같다. `who16`은 토큰 `sub`의 SHA-256 앞 16 hex(`gen.js`의 who와 같은 값).
+- 계정 보드 DB: `olmuse-asset-board.<who16>.<보드 id 앞 12자>`. 잠금 이름은 DB 이름과 같다. `who16`은 토큰 `sub`의 SHA-256 앞 16 hex(`gen.js`의 who와 같은 값).
 - localStorage `asset-sync` = `{v:1, anon, accts:{<who16>:{db}}}`. 지금 열 DB를 가리키는 포인터일 뿐이다. 읽기·쓰기가 안 되거나 비면 부팅이 `indexedDB.databases()`로 `olmuse-asset-board`와 `olmuse-asset-board.`로 시작하는 DB의 `sync` 키를 읽어 그 계정의 것 중 `sync.at`이 가장 큰 DB를 연다(첫 컴퓨터의 계정 보드는 기본 DB `olmuse-asset-board`에 남는다). 계정 토큰이 처음 온 방문(E5)도 이 목록에서 그 계정 DB를 먼저 찾는다. `databases()`가 없으면 포인터가 그 계정에 적어 둔 `db`를 열고, 그것도 없으면 서버 home을 받는다.
-- `board` 저장소의 키 `sync`(계정 DB에만): `{v:1, who, board, made, make:{first, home}, epoch, cursor, dev, pulled, seed, shadow:{"<kind>/<uid>":{rev, born, dev, at, gone, json}}, purge:[key], at}`. `made`는 `POST /boards`가 성공했는가, `make`는 그 POST에 보낼 값, `purge`는 아직 gone을 못 보낸 영구 삭제 key, `pulled`는 첫 내려받기를 끝냈는가, `seed`는 'blank'|'sample'|null.
+- `board` 저장소의 키 `sync`(계정 DB에만): `{v:1, who, board, made, make:{first, home}, epoch, cursor, dev, pulled, seed, shadow:{"<kind>/<uid>":{rev, born, dev, at, gone, json}}, purge:[key], at}`. `made`는 `POST /boards`가 성공했는가, `make`는 그 POST에 보낼 값, `purge`는 아직 gone을 못 보낸 영구 삭제 key, `pulled`는 첫 내려받기를 끝냈는가, `seed`는 'blank'|null('sample'도 'blank'처럼 다룬다).
 - **`sync` 키는 보드 레코드와 같은 트랜잭션에 쓴다**(`writeBoard`가 `deps.extra()`의 키를 함께 put). 따로 쓰이면 shadow만 앞선 상태가 '내가 되돌렸다'로 읽힌다.
 - 보낼 큐는 두지 않는다. 보낼 것은 매번 `toRecords(snapshot())`과 shadow의 차이로 다시 계산한다.
 
 ### E3. 한 바퀴(`tick`)
 
 1. 돌 조건: 토큰이 `acct`, 토큰의 who가 `sync.who`와 같음, `store.writable`, 복원이 `failed`가 아님, 보드 레코드가 있음. 아니면 아무것도 보내지 않는다(빈 화면이 '전부 삭제'로 올라가지 않는다).
-2. `made`가 거짓이면 `POST /boards`를 먼저 한다(E5의 규칙대로 `first`, `home`). 단 `seed`가 'sample'이고 보드가 `pristine`이면 아무것도 하지 않는다(손대지 않은 샘플은 서버 보드가 되지 않는다).
-3. **받은 뒤 보낸다.** 보낼 것이 있어도 먼저 `ops:[]`로 받을 것을 다 받고(`more`가 거짓이 될 때까지) 병합한 뒤 차이를 계산한다. 이미 있는 보드에 합류한 DB(`made`, shadow 비어 있음)의 첫 받기가 끝나면 서버에 없는 로컬 레코드는 버린다(합류하는 빈·샘플 화면이 서버 보드에 섞여 올라가지 않는다).
+2. `made`가 거짓이면 `POST /boards`를 먼저 한다(E5의 규칙대로 `first`, `home`). 단 `seed`가 있고 보드가 `pristine`이면 아무것도 하지 않는다(손대지 않은 빈 보드는 서버 보드가 되지 않는다).
+3. **받은 뒤 보낸다.** 보낼 것이 있어도 먼저 `ops:[]`로 받을 것을 다 받고(`more`가 거짓이 될 때까지) 병합한 뒤 차이를 계산한다. 이미 있는 보드에 합류한 DB(`made`, shadow 비어 있음)의 첫 받기가 끝나면 서버에 없는 로컬 레코드는 버린다(합류하는 빈 화면이 서버 보드에 섞여 올라가지 않는다).
 4. `cur = toRecords(snapshot())`. `toRecords`가 `paired`와 `fit`을 이미 적용한 값을 내므로 shadow(보낸 값)와 같은 모양으로 비교한다(`fit`이 뺀 프롬프트 때문에 같은 레코드가 매 바퀴 dirty가 되지 않는다). dirty = shadow와 `canon`이 다른 것 + shadow에서 살아 있는데 `cur`에 없는 것.
-   - 사라진 asset은 gone이 아니라 `trashedAt = now`로 고쳐 다시 넣고 휴지통에 되살린다. asset의 gone은 `sync.purge(keys)`(휴지통의 영구 삭제·비우기, 손대지 않은 샘플 치우기)가 표시한 것만 보낸다.
+   - 사라진 asset은 gone이 아니라 `trashedAt = now`로 고쳐 다시 넣고 휴지통에 되살린다. asset의 gone은 `sync.purge(keys)`(휴지통의 영구 삭제·비우기)가 표시한 것만 보낸다.
    - 사라진 cat, ref, dyn은 gone으로 보낸다.
    - 글 입력칸이 잡혀 있으면(`quiet()` 거짓) 직전 바퀴와 값이 같은 레코드만 보낸다.
 5. dirty 레코드의 `shasOf` 중 서버에 있다고 모르는 것은 F절대로 먼저 올리고, 덜 올라간 레코드는 이번 바퀴에서 뺀다.
@@ -244,21 +244,21 @@ create index if not exists uses_sha on uses (sha);
 - `store.js`: `create({name, extra, remote, fetch, pending})`. `name`이 DB와 잠금 이름이다(기본 `olmuse-asset-board`). `extra()`는 보드와 한 트랜잭션에 쓸 키들. `read()`가 같은 트랜잭션에서 `sync`를 읽고 `remote(sync)`(= `board.remoteKeys`: shadow의 버전·시안·레퍼런스가 쓰는 키)를 `mend`의 `present`에 합친다. 서버에 있는 소리는 로컬에 바이트가 없어도 떼지 않는다. `bytes(key)`가 로컬에 없으면 `fetch(key)`로 받아 `saveBlob`한다(`bytes(key, {local:true})`는 받지 않는다). `read()`가 돌려주는 `info.sync`가 그 기록이다. `pending`이 참인 동안 쓰기와 입력을 막는다(`guard`에 토스트 `syncJoin`). 엔진 자신의 저장은 `saveBoard({sync:true})`로 그때도 쓴다. 엔진의 `pending`은 `made && !pulled`이다(아직 서버에 없는 새 보드는 막지 않는다). `extra`나 `remote`를 주면 계정 DB이고 계정 DB에서는 `prune`을 하지 않는다(가득 참 토스트는 그대로). 인자를 주지 않으면 지금과 한 글자도 다르게 움직이지 않는다.
 - `gen.js`: `call`을 내준다(날 바이트 본문과 GET 바이트 응답 포함). `work.dev`를 쓴다. `deps.dev`가 있으면(동기화 모드) `mine(w)`는 `w.dev === deps.dev`일 때만 참이고 `dev`가 없는 기록은 남의 것이다. `deps.dev`가 없으면 지금 그대로다. 계정 DB에 묶는 순간(E5) 그 DB의 `dev` 없는 `work`에 자기 `dev`를 적는다(같은 계정의 두 기기가 같은 요청을 둘 다 다시 보내거나 취소하지 않게). `deps.ready()`가 있으면 `attach`·`reattach`·넘겨받기는 그것이 풀린 뒤에만 돈다: 이번 방문의 첫 받기(`more` 거짓까지)가 끝난 뒤다(넘겨받기로 `work.dev`가 바뀐 소리를 옛 기기가 부팅 직후 취소·되돌리지 않게). `deps.claim(group)`이 있으면 POST 전에 기다린다(H절, 거절이면 `{ok:false, reason:'claim'}`). 넘겨받기(H절)는 `deps.handover = {info(), take(list)}`(`info`는 `engine.peers()`, `take`는 `engine.push`)로 하고 토큰이 온 뒤 `HANDOVER_MS`(60초)마다 돈다. `stamp(list)`는 `dev` 없는 `work`에 자기 `dev`를 적는다(계정 DB에 묶을 때 부른다). `call(method, path, body, {raw, bytes})`.
 - `app.js`: 접근자(`model()`)와 연결만 둔다. 병합·펴기 로직은 `board.js`에 둔다. 통째로 갈아 끼우던 지점은 동기화 모드에서 자리 고치기로 바꾼다: 에이전트 되돌리기의 `cats`·`projectRefs` 교체, `openBundle`의 `cats`·`dynamics`·`projectRefs` 교체, `applySnapshot`의 에셋 교체(동기화 중에는 `patch`만 쓴다).
-- 모든 에셋이 `key`를 갖는다(`toRecords`가 `keyOf`를 부른다). 모듈 로드 때 만드는 샘플 에셋은 `key = 's_' + 샘플 id`, 그 첫 legacy 버전 id는 `'sv_' + key`로 고정한다.
+- 모든 에셋이 `key`를 갖는다(`toRecords`가 `keyOf`를 부른다).
 - 새 동적 소리 id는 `dyn_<난수 6자>`. 레퍼런스 파일을 올릴 때 `sha256`, `bytes`를 레코드에 적는다.
 
 ### E5. 부팅, 첫 연결, 계정 전환, 로그아웃
 
 부팅: 호스트가 주는 `signed`와 localStorage의 마지막 who로 DB를 고르고 store를 만든다(없으면 계정 없는 보드). 토큰이 오면 엔진을 붙인다. 토큰의 who가 연 DB의 `sync.who`와 다르면 포인터를 고치고 프레임을 새로고침한다. 새로고침이 10초 안에 3번이면 멈추고 계정 없는 보드로 둔다(sessionStorage 횟수).
 
-'손대지 않은 샘플'(`pristine`) = demo이고, 휴지통·레퍼런스·동적 소리가 없고, 모든 에셋이 sample이며 버전이 legacy뿐이고 work가 없다. 손대지 않은 샘플 보드는 서버에 올리지 않는다.
+'손대지 않은 보드'(`pristine`) = 소리·휴지통·레퍼런스·동적 소리가 없다(게임 이름과 분류는 보지 않는다). 이전 페이지가 저장한 대역 소리 보드(demo이고, 모든 에셋이 sample이거나 `s_` key이며 버전이 legacy뿐이고 work가 없다)도 손대지 않은 보드다. 손대지 않은 보드는 서버에 올리지 않는다.
 
 토큰(`acct`)이 처음 왔을 때, 이 계정의 DB가 없으면 `GET /boards`:
 
 | 이 브라우저에 열린 보드 | 서버(이 계정) | 동작 |
 |---|---|---|
-| 손대지 않은 샘플 | 보드 없음 | 그대로 로컬. 손대지 않은 동안 30초마다 `GET /boards`를 다시 보고, 보드가 생겼으면 다음 줄처럼 옮긴다(`quiet()`일 때). 샘플이 아니게 되는 순간 그 DB를 계정에 묶고 `POST /boards {first:true}`. 다른 보드가 돌아오면 넷째 줄 |
-| 손대지 않은 샘플 | 보드 있음 | home DB를 만들어 포인터를 옮기고 새로고침. `pulled`가 될 때까지 `pending`. 샘플은 올리지 않는다 |
+| 손대지 않은 보드 | 보드 없음 | 그대로 로컬. 손대지 않은 동안 30초마다 `GET /boards`를 다시 보고, 보드가 생겼으면 다음 줄처럼 옮긴다(`quiet()`일 때). 손대는 순간 그 DB를 계정에 묶고 `POST /boards {first:true}`. 다른 보드가 돌아오면 넷째 줄 |
+| 손대지 않은 보드 | 보드 있음 | home DB를 만들어 포인터를 옮기고 새로고침. `pulled`가 될 때까지 `pending`. 손대지 않은 보드는 올리지 않는다 |
 | 실제 작업 | 보드 없음 | 열린 DB를 그 자리에서 계정에 묶고(`sync` 기록) `POST /boards {first:true}`. 그것이 home이 된다. `asset-sync.anon`을 새 이름으로 바꿔 계정 없는 보드는 새로 시작한다 |
 | 실제 작업 | 보드 있음(또는 `first`가 다른 보드를 돌려줌) | 합치지 않는다. 열린 DB를 자기 보드 id 그대로 **별도 보드**로 묶어(`sync.made`는 거짓으로 두고 다음 `POST /boards`는 `{first:false, home:false}`) 올리기 전용 엔진(받기·patch 없음, 모두 base 0으로 보내고 바이트를 올림)에 맡기고, 화면은 home DB로 옮긴다(새로고침). 토스트 `localKept`. 올리기 전용 엔진은 그 DB의 `sync.made && 보낼 것 0`이 될 때까지 같은 페이지에서 돈다. 닫혀도 다음 부팅이 `databases()`에서 다 못 올린 계정 DB를 찾아 잇는다 |
 | 이 계정 DB의 복원이 `failed` | 보드 있음 | 새 이름의 DB를 같은 보드에 묶고 새로고침해 서버에서 다시 받는다 |
@@ -308,7 +308,7 @@ create index if not exists uses_sha on uses (sha);
 - **`sane(asset)`(병합 뒤 항상):** `cur`가 버전에 없으면 가장 새 버전. 시안이 없는데 review면 버전 있으면 draft, 없으면 pending. 시안이 있는데 review·working이 아니면 review. 버전이 있는데 pending이면 draft.
 - **`fixIds`(화면 id 겹침):** 휴지통 밖 소리끼리 `a.id`가 같으면 `born`이 작은 쪽(아직 서버에 없는 것은 무한대, 같으면 key 순)이 그 id를 갖고 나머지는 `makeId`로 다시 짓는다. 모든 기기가 같은 결과를 낸다. `more`가 거짓일 때만 돈다.
 - **에이전트 되돌리기(동기화 모드):** 클로저가 답 이전 값과 답이 쓴 값을 필드 단위로 쥐고, `revertFields`가 지금도 답이 쓴 값 그대로인 필드만 되돌린다. 그 사이 남이 바꾼 필드, 남이 더한 분류·레퍼런스, `work`가 있는 소리는 그대로다. 남의 변경이 들어와도 토스트를 걷지 않는다. 계정 없는 보드는 지금 클로저 그대로다.
-- **휴지통(동기화 모드):** `toTrash`는 시안을 버리지 않고 그 소리의 버전으로 옮긴다. `clearBoard`는 손대지 않은 샘플 소리만 `sync.purge`로 지우고 나머지는 모두 휴지통으로 보낸다. 손대지 않은 샘플 소리 = `s_` key이고 레코드가 모듈 로드 때의 그 샘플 레코드와 `canon`이 같다(버전만 legacy인 것으로는 부족하다: 다른 기기가 이름만 바꾼 샘플이 지워지지 않게). 계정 없는 보드에서는 둘 다 지금 그대로다.
+- **휴지통(동기화 모드):** `toTrash`는 시안을 버리지 않고 그 소리의 버전으로 옮긴다. `clearBoard`는 모두 휴지통으로 보낸다. 계정 없는 보드에서는 둘 다 지금 그대로다.
 - **cat·ref·dyn의 삭제(gone) 병합:** base가 있고 한쪽이 삭제, 다른 쪽이 편집이면 먼저 도착한 쪽이 이긴다(편집이 먼저면 삭제한 쪽에 되살아나고 `syncLost`, 삭제가 먼저면 편집한 쪽에서 사라지고 `syncGone`). base가 없는 쪽(그 레코드를 처음 만드는 기기)의 값은 서버의 gone을 이긴다(지운 분류 id를 다시 만드는 경우). 같은 결과를 모든 기기가 낸다.
 - **묶음 열기(동기화 모드):** 휴지통 밖 소리가 있는 보드에서는 열지 않고 토스트 `bundleNeedsBlank`. 빈 보드에서는 지금처럼 연다(`openBundle`의 교체는 레코드별 연산으로 올라간다).
 
@@ -321,14 +321,13 @@ create index if not exists uses_sha on uses (sha);
 - **남이 휴지통에 넣으면:** 만든 기기가 그 변경을 받는 순간 자기 작업을 취소한다(환불은 기존 규칙).
 - **보드를 옮길 때:** 이 기기의 작업은 취소하지 않는다. 다른 기기가 넘겨받거나, 같은 보드로 돌아오면 dev가 같아 이어진다.
 
-## I. '빈 보드로 처음부터'와 '샘플 단계부터 다시'
+## I. '빈 보드로 처음부터'
 
-기존 단추(게임 정보 창의 `#startBlank`와 restart, 안내 창의 `#tutorialBlank`)와 함수(`startBlank`, `takeBlank`, `openBlank`, `forget`)를 그대로 쓰고 동기화 분기만 더한다.
+단추는 게임 정보 창의 `#startBlank` 하나다. 함수 `startBlank`, `forget`에 동기화 분기를 더한다. 저장된 것이 없는 방문은 언제나 빈 보드(소리 없음, 기본 분류, 이름 '새 게임')로 열린다.
 
 - **계정 없는 보드:** 지금 그대로다(`confirmBlank`, `forget`, 새로고침).
-- **동기화 중인 보드(공통):** `forget()`, `store.clear()`, `gen.cancel([...assets, ...trash])`를 부르지 않는다. `confirmBlank`를 띄우지 않는다(지우는 것이 없다). 보드를 옮기기(이 둘과 목록의 '열기') 전에 보낼 것(막힘 제외)을 내보내며 5초까지 기다린다. 다 보냈으면 옮기고, 남았으면 옮기지 않고 토스트 `syncBusy`(연결 끊김이면 `syncOff`). 보내지 않은 변경을 가진 DB를 두고 떠나는 길이 없다. 손대지 않은 샘플 DB는 기다리지 않는다.
-- **빈 보드로 처음부터:** 새 보드 id를 만들고 그 DB에 `sync {board, made:false, seed:'blank'}`를 쓰고 포인터를 옮긴 뒤 새로고침한다. 복원이 empty이고 `sync.seed`가 'blank'이면 `openBlank()`(동기화 모드는 `sessionStorage['asset-blank']`·`takeBlank()`를 쓰지 않는다). 첫 tick이 `POST /boards {home:false}`. home은 바뀌지 않으므로 그 뒤 처음 붙는 기기와 팀원은 원래 보드를 연다. 이미 열려 있는 다른 기기의 화면은 바뀌지 않는다. 안내 창의 `#tutorialBlank`도 같다.
-- **샘플 단계부터 다시:** 새 샘플 DB(`…d<난수>`, `seed:'sample'`)로 포인터를 옮기고 새로고침한다. 샘플 보드는 서버에 올리지 않고 home을 바꾸지 않는다. 실제 작업이 생기면 `POST /boards {home:false}`로 새 보드가 된다.
+- **동기화 중인 보드(공통):** `forget()`, `store.clear()`, `gen.cancel([...assets, ...trash])`를 부르지 않는다. `confirmBlank`를 띄우지 않는다(지우는 것이 없다). 보드를 옮기기(이 둘과 목록의 '열기') 전에 보낼 것(막힘 제외)을 내보내며 5초까지 기다린다. 다 보냈으면 옮기고, 남았으면 옮기지 않고 토스트 `syncBusy`(연결 끊김이면 `syncOff`). 보내지 않은 변경을 가진 DB를 두고 떠나는 길이 없다. 손대지 않은 빈 보드 DB는 기다리지 않는다.
+- **빈 보드로 처음부터:** 새 보드 id를 만들고 그 DB에 `sync {board, made:false, seed:'blank'}`를 쓰고 포인터를 옮긴 뒤 새로고침한다. 복원이 empty이므로 빈 보드가 열린다. 손대지 않은 동안(`pristine`)은 올리지 않고, 손대고 난 첫 tick이 `POST /boards {home:false}`. home은 바뀌지 않으므로 그 뒤 처음 붙는 기기와 팀원은 원래 보드를 연다. 이미 열려 있는 다른 기기의 화면은 바뀌지 않는다.
 - **home이 바뀌는 길:** 계정의 첫 보드와 목록의 '열기'뿐이다. 열면 `POST /boards/{id}/open`으로 home도 그 보드가 된다. 다른 기기의 화면은 바뀌지 않는다.
 
 ## J. 계정 없는 사용, 오프라인, 재시작, 보안, 운영
@@ -353,9 +352,9 @@ create index if not exists uses_sha on uses (sha);
 - **`tests/test_asset_board_js.py`(C1, Node):** `toRecords → patch` 왕복이 같은 스냅샷을 만들고 객체 동일성이 유지됨, 허용 목록 밖 필드가 있으면 실패, `fit`의 결정성, `merge3`의 G절 표 줄마다와 `mineWins`, `sane`, `fixIds`가 기기 둘에서 같은 결과, `revertFields`, `pristine`, Date인 `at`, `shasOf`.
 - **`tests/test_asset_store_js.py`(C2 추가):** 이름 인자로 DB와 잠금이 갈림, `extra`가 보드와 한 트랜잭션(쓰기 실패 때 둘 다 없음), `remote` 키는 `mend`가 떼지 않음, 없는 키를 `fetch`로 받아 저장, `pending` 동안 쓰기·입력 없음, 계정 DB에서 `prune` 없음. 인자 없는 기존 시험은 고치지 않고 통과.
 - **`tests/test_asset_gen_js.py`(C3 추가):** `work.dev`가 다른 기록은 폴링·취소·되돌리기에서 빠짐, `claim` 거절이면 POST 없음, `claim`이 없으면 요청 순서가 지금 그대로, 넘겨받기 조건(접속 중인 만든 기기는 넘겨받지 않음, `up` 유예, 진 기기는 취소 없음).
-- **`tests/test_asset_sync_js.py`(C4, Node, 주입한 call·가짜 IndexedDB):** 받은 뒤 보내기, 응답 유실 뒤 같은 필드 재편집(내 새 값이 남음), 저장 전 종료 뒤 재방문, n번째 요청 떨어뜨리기, 바이트가 올라가기 전에는 레코드가 나가지 않음, `need` 뒤 다시 올림, 사라진 asset이 휴지통으로 돌아옴, `purge`만 gone을 보냄, 연산 순서와 나누기에서 gone이 마지막, 수리는 `more` 거짓일 때만, epoch 변경, 첫 내려받기 전 쓰기 없음, 보드 레코드 없이 `sync`만 있으면 아무것도 안 보냄, 글 입력 중 보류, 되울림은 알림 없음, 진 변경 알림, `upgrade`·`sync_off` 처리, 올리기 전용 엔진, 포인터가 지워졌을 때 `databases()`로 다시 찾기(기본 DB `olmuse-asset-board`에 남은 계정 보드 포함), `fit`이 줄인 레코드가 다음 바퀴에 dirty가 아님, `bad:'versions'` 뒤 버전이 돌아오고 다른 필드 편집이 남음, 다른 `bad`는 값을 되돌리지 않고 다시 보내지 않음, 손대지 않은 `seed:'sample'` DB는 POST하지 않음, 보낼 것이 남으면 보드를 옮기지 않음, 첫 받기 전 `gen.attach` 없음, `dev` 없는 `work`는 남의 것. 고장 주입 모의실험(응답 유실, 요청 유실, 마지막 원자 저장에서 다시 시작)을 무작위로 3000회 돌려 두 기기와 서버가 같고 수렴 뒤 보낼 것이 0. 같은 파일에 엔진 둘을 메모리 가짜 서버 하나에 붙여 아래 X 장면 중 라이브러리만으로 되는 것(1~11, 13, 14, 16~18, 20, 21, 23)을 도는 시험이 있다. 화면이 있어야 하는 12·15·19·22·24와 11의 POST·시안 도착은 X가 맡는다.
+- **`tests/test_asset_sync_js.py`(C4, Node, 주입한 call·가짜 IndexedDB):** 받은 뒤 보내기, 응답 유실 뒤 같은 필드 재편집(내 새 값이 남음), 저장 전 종료 뒤 재방문, n번째 요청 떨어뜨리기, 바이트가 올라가기 전에는 레코드가 나가지 않음, `need` 뒤 다시 올림, 사라진 asset이 휴지통으로 돌아옴, `purge`만 gone을 보냄, 연산 순서와 나누기에서 gone이 마지막, 수리는 `more` 거짓일 때만, epoch 변경, 첫 내려받기 전 쓰기 없음, 보드 레코드 없이 `sync`만 있으면 아무것도 안 보냄, 글 입력 중 보류, 되울림은 알림 없음, 진 변경 알림, `upgrade`·`sync_off` 처리, 올리기 전용 엔진, 포인터가 지워졌을 때 `databases()`로 다시 찾기(기본 DB `olmuse-asset-board`에 남은 계정 보드 포함), `fit`이 줄인 레코드가 다음 바퀴에 dirty가 아님, `bad:'versions'` 뒤 버전이 돌아오고 다른 필드 편집이 남음, 다른 `bad`는 값을 되돌리지 않고 다시 보내지 않음, 손대지 않은 `seed` DB(빈 보드, 이전 페이지의 대역 소리 보드)는 POST하지 않음, 보낼 것이 남으면 보드를 옮기지 않음, 첫 받기 전 `gen.attach` 없음, `dev` 없는 `work`는 남의 것. 고장 주입 모의실험(응답 유실, 요청 유실, 마지막 원자 저장에서 다시 시작)을 무작위로 3000회 돌려 두 기기와 서버가 같고 수렴 뒤 보낼 것이 0. 같은 파일에 엔진 둘을 메모리 가짜 서버 하나에 붙여 아래 X 장면 중 라이브러리만으로 되는 것(1~11, 13, 14, 16~18, 20, 21, 23)을 도는 시험이 있다. 화면이 있어야 하는 12·15·19·24와 11의 POST·시안 도착은 X가 맡는다.
 - **`tests/test_asset_sync_two.py` + `tests/js/sync_two.js`(X):** 파이썬이 `OLMUSE_GEN_FAKE=1`·`OLMUSE_BOARD_SYNC=1`인 실제 API를 임시 DB·빈 포트의 uvicorn으로 띄우고(`tests/e2e_asset_import.py` 방식) 토큰을 서명해 Node에 넘긴다. Node가 실제 `store.js`·`board.js`·`gen.js`·`sync.js`를 가짜 IndexedDB 위에 기기 A·B(필요하면 C)로 올리고 전역 `fetch`로 붙는다. `tick`은 스크립트가 손으로 돌린다. 공개 서비스의 포트와 DB는 쓰지 않는다. 장면:
-  1. A가 실제 보드를 올리고 B(손대지 않은 샘플)가 합류. 합류가 `head`를 올리지 않음.
+  1. A가 실제 보드를 올리고 B(손대지 않은 빈 보드)가 합류. 합류가 `head`를 올리지 않음.
   2. 새 기기 둘이 동시에 첫 보드를 만들려 함 → 보드 하나.
   3. 서로 다른 필드 동시 편집 → 둘 다 남음.
   4. 같은 필드 동시 편집 → 먼저 도착이 남고 진 쪽 알림.
@@ -370,13 +369,13 @@ create index if not exists uses_sha on uses (sha);
   13. 올리는 중 API 재시작 뒤 이어 하기.
   14. 한쪽이 오프라인으로 50번 고친 뒤 다시 붙기.
   15. 에이전트 되돌리기 사이 팀원의 편집이 남음.
-  16. 빈 보드로 처음부터 → B의 보드 그대로, 목록에 둘, 새 기기 C는 원래 보드(home)를 엶. 오프라인 A가 누르면 옮기지 않음.
-  17. 샘플 단계부터 다시 → 서버 그대로, home 그대로.
+  16. 빈 보드로 처음부터 → 소리를 올리면 새 보드. B의 보드 그대로, 목록에 둘, 새 기기 C는 원래 보드(home)를 엶. 오프라인 A가 누르면 옮기지 않음.
+  17. 빈 보드로 처음부터 뒤 아무것도 올리지 않음 → 서버 그대로, home 그대로.
   18. 실제 작업이 있는 기기가 보드가 있는 계정에 들어옴 → home을 열고 로컬 보드는 별도 보드로 다 올라감.
   19. 소리가 있는 보드에서 묶음 열기가 막힘.
   20. DB를 옛 파일로 되돌림(epoch).
   21. `v`가 낡은 클라이언트.
-  22. B가 샘플 이름만 바꾼 뒤 A가 폴더를 가져옴(`clearBoard`) → 그 샘플은 지워지지 않고 휴지통.
+  22. A가 폴더를 가져옴 → 그 소리가 보드에 더해지고 B에도 보임.
   23. A가 분류를 지우고 B가 같은 분류 이름을 바꿈(두 순서) → 두 기기 같은 결과.
   24. A의 생성 작업을 B가 넘겨받은 뒤 A가 다시 열림 → A가 취소·되돌리기를 하지 않음.
   - 모든 장면의 끝: 두 기기의 `canon(toRecords)`와 서버 레코드가 같고, 수렴 뒤 보낼 것이 0이고, 서버 `head`가 기대한 수다.
@@ -399,7 +398,7 @@ create index if not exists uses_sha on uses (sha);
    - `bundleNeedsBlank`: '묶음은 빈 보드에서 열어요' / 'Open a bundle on an empty board'
    - `boardLimit`: '보드를 더 만들 수 없어요' / 'No more boards can be made'
    - `syncBusy`: '아직 보내는 중이에요. 다 보낸 뒤에 옮길 수 있어요' / 'Still sending. You can switch once it is done'
-3. **기존 단추의 뜻 변화(새 요소 아님).** '빈 보드로 처음부터'(게임 정보 창, 안내 창)와 '샘플 단계부터 다시'(게임 정보 창)는 동기화 모드에서 새 보드로 이 기기만 옮기고 확인 창을 띄우지 않는다. 다른 기기와 팀원이 처음 여는 보드(home)는 바뀌지 않는다. 보낼 것이 남아 있으면 옮기지 않는다(I절).
+3. **기존 단추의 뜻 변화(새 요소 아님).** '빈 보드로 처음부터'(게임 정보 창)는 동기화 모드에서 새 보드로 이 기기만 옮기고 확인 창을 띄우지 않는다. 다른 기기와 팀원이 처음 여는 보드(home)는 바뀌지 않는다. 보낼 것이 남아 있으면 옮기지 않는다(I절).
 
 ## M. 기한 때문에 뺀 것과 그 대가
 
@@ -420,10 +419,10 @@ create index if not exists uses_sha on uses (sha);
 - 계정 사이 디스크 공평. 대가: `OLMUSE_BOARD_ACCOUNTS`가 비면 허용된 모든 계정이 `ALL_BYTES`와 `FREE_MIN`을 나눠 쓰고, 계정 몇이 `ACCOUNT_BYTES`씩 채우면 나머지 계정의 새 소리가 503으로 올라가지 않는다(글 동기화는 이어진다). 그래서 운영은 허용 목록으로 켠다.
 - `POST /boards`의 존재 숨기기. 대가: 남의 보드 id를 알면 '있다'(404)와 '없다'(만들어짐)를 가를 수 있다. id가 128비트 난수라 추측으로는 닿지 않고, 읽기·쓰기 권한은 주지 않는다.
 - 서버에서 파일이 사라진 바이트를 가진 기기가 없을 때의 복구. 대가: 그 버전은 소리 없이 남는다(`asset-blobs` 증분 백업에서 운영 도구로 되돌린다).
-- 보내지 않은 변경을 남긴 채 보드 옮기기. 대가: 연결이 끊긴 동안이나 큰 소리를 올리는 동안에는 '빈 보드로 처음부터'·'샘플 단계부터 다시'·'열기'가 `syncBusy`/`syncOff`로 막힌다.
+- 보내지 않은 변경을 남긴 채 보드 옮기기. 대가: 연결이 끊긴 동안이나 큰 소리를 올리는 동안에는 '빈 보드로 처음부터'·'열기'가 `syncBusy`/`syncOff`로 막힌다.
 - 열린 대화상자 다시 그리기. 대가: 닫았다 열어야 최신이고, 그 대화상자에서 통째 필드를 고치면 base가 맞지 않아 진 쪽 알림이 뜬다.
 
-기한이 더 모자라면 이 순서로 뗀다(앞의 것부터): 넘겨받기(대가: 만든 기기가 떠나면 결과는 1시간 뒤 환불되고 그 기기가 돌아올 때 되돌려진다) → 4 MB 미리 받기(대가: 처음 듣는 소리마다 받는 시간) → 보드 목록의 상대 시각(대가: '새 게임' 여럿을 소리 개수로만 가른다). 최소로 남는 것: sync 라우트, 조각 올리기와 늦게 받기, 서버 안 복사, `work.dev`와 선점, 보드 목록과 상태 글, 빈 보드·샘플의 동기화 분기.
+기한이 더 모자라면 이 순서로 뗀다(앞의 것부터): 넘겨받기(대가: 만든 기기가 떠나면 결과는 1시간 뒤 환불되고 그 기기가 돌아올 때 되돌려진다) → 4 MB 미리 받기(대가: 처음 듣는 소리마다 받는 시간) → 보드 목록의 상대 시각(대가: '새 게임' 여럿을 소리 개수로만 가른다). 최소로 남는 것: sync 라우트, 조각 올리기와 늦게 받기, 서버 안 복사, `work.dev`와 선점, 보드 목록과 상태 글, 빈 보드의 동기화 분기.
 
 ## N. 작업 패키지
 
@@ -438,7 +437,7 @@ create index if not exists uses_sha on uses (sha);
 | C3 | 설계 | `studio_frontend/asset_studio/gen.js`, `tests/test_asset_gen_js.py` | 없음 | `python -m pytest -q tests/test_asset_gen_js.py tests/test_asset_quote_js.py` 통과. 기존 시험을 고치지 않음 |
 | C4 | 설계 | `studio_frontend/asset_studio/sync.js`, `tests/test_asset_sync_js.py` | C1, C2·C3의 인터페이스(이 문서 E절) | `python -m pytest -q tests/test_asset_sync_js.py` 통과 |
 | H | 설계 | `studio_frontend/app.js`(호스트: `asset:ai`에 `signed`. 값은 `app.py`가 이미 넘기는 `signed_in=bool(email)`이라 `app.py`는 고치지 않는다), `tests/test_asset_token.py` | 없음 | 그 시험 통과. `asset:ai` 전송이 `location.origin`을 쓰는 것을 grep으로 확인 |
-| U | 설계 | `studio_frontend/asset_studio/app.js`, `index.html`, `style.css`. 내용: DB 고르기와 E5의 흐름, 엔진 붙이기와 조용할 때 그리기, `model()` 접근자, 통째 교체 지점의 동기화 분기, `toTrash`·`clearBoard`·묶음 열기·에이전트 되돌리기의 동기화 분기, I절의 단추 분기, 샘플 key·dyn id, 보드 목록, 문구 | C1~C4, H, S2 | 기존 JS 시험 전부와 `tests/e2e_asset_import.py` 통과 |
+| U | 설계 | `studio_frontend/asset_studio/app.js`, `index.html`, `style.css`. 내용: DB 고르기와 E5의 흐름, 엔진 붙이기와 조용할 때 그리기, `model()` 접근자, 통째 교체 지점의 동기화 분기, `toTrash`·`clearBoard`·묶음 열기·에이전트 되돌리기의 동기화 분기, I절의 단추 분기, dyn id, 보드 목록, 문구 | C1~C4, H, S2 | 기존 JS 시험 전부와 `tests/e2e_asset_import.py` 통과 |
 | X | 설계 | `tests/test_asset_sync_two.py`, `tests/js/sync_two.js`, `tests/e2e_asset_sync.py` | U | `python -m pytest -q tests/test_asset_sync_two.py` 통과(K절 장면 전부). 브라우저 확인 한 번 |
 | O | 설계 | `tools/board_admin.py`, `tests/test_board_admin.py`, `server_ops.py`, `tools/backup_data.py`(바이트 폴더 증분 복사), `run_api.ps1`(`OLMUSE_BOARD_SYNC`, `OLMUSE_BOARD_ACCOUNTS` 전달), `pages/privacy.py`, `docs/ASSET_BACKEND_SPEC.md`(전제의 '보드는 브라우저에만' 줄을 이 문서로 잇기) | S1 | `python -m pytest -q tests/test_board_admin.py` 통과(보드를 지우면 행과 파일이 없어지고 다른 보드가 쓰는 sha는 남음, 이력 rev로 되살리기). 방침 문구는 사용자 승인 뒤 |
 
@@ -453,5 +452,4 @@ create index if not exists uses_sha on uses (sha);
 **확인되지 않은 것**
 - 터널을 지난 2초 폴링의 실제 지연과, 이 터널로 큰 소리를 1 MB 조각으로 올리는 속도.
 - `serve`가 작업 스레드에서 돌려준 `FileResponse`가 그대로 흐르는지.
-- `data.js`의 `ASSETS`에 D2의 허용 목록에 없는 필드가 있는지(C1의 허용 목록 시험이 잡는다).
 - 다시 붙은 Streamlit에서 에셋 iframe이 새로 실리는지.

@@ -10,7 +10,7 @@
 //   sane(asset data)         status and cur made to agree with the versions and drafts (in place, returned)
 //   patch(model, kind, uid, data|null)   the live objects of the page changed in place to hold data
 //   fixIds(model, shadow)    sounds that share a shown id get new ones, the same way on every computer
-//   pristine(snapshot)       the untouched sample board, which never goes to the server
+//   pristine(snapshot)       an untouched board, which never goes to the server
 //   shasOf(kind, data)       the bytes a record points at, in upload order: [{ sha, key, size, rank, job, stem }]
 //   remoteKeys(sync)         audio keys the records already on the server use (mend keeps them without local bytes)
 //   revertFields(before, after, now) -> { field: value before } for the fields still holding what after wrote
@@ -313,13 +313,14 @@
     }
     return changed;
   }
-  // The sample board nobody has worked on: a demo with nothing in the trash, no references, no dynamic sounds, and
-  // only the page's own stand-in sounds (samples, and the empty slots that come with them: key s_<id>) with their
-  // first rendered versions and no job.
+  // A board nobody has worked on: no sounds, nothing in the trash, no references, no dynamic sounds. A board saved by
+  // an earlier page that still holds only that page's untouched stand-in sounds (demo; key s_<id>, their first
+  // rendered versions, no job) is one too, so it is not sent up as a board of the account.
   function pristine(s) {
     const x = s || {};
-    return !!x.demo && !(x.trash || []).length && !(x.projectRefs || []).length && !(x.dynamics || []).length
-      && (x.assets || []).every((a) => a && (a.sample || String(a.key || '').startsWith('s_')) && (a.versions || []).every(isLegacy) && !(a.drafts || []).length && !a.work);
+    if ((x.trash || []).length || (x.projectRefs || []).length || (x.dynamics || []).length) return false;
+    const list = x.assets || [];
+    return !list.length || (!!x.demo && list.every((a) => a && (a.sample || String(a.key || '').startsWith('s_')) && (a.versions || []).every(isLegacy) && !(a.drafts || []).length && !a.work));
   }
 
   /* ---------- bytes ---------- */
