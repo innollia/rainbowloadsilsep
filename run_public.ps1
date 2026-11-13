@@ -55,6 +55,8 @@ if (-not $ServerOnly) {
 }
 # Scripts and styles carry a content hash so a browser never pairs a new page with an old cached script.
 python (Join-Path $PSScriptRoot 'tools\stamp_assets.py')
+# A slow first visit shows a loading line instead of a black page (Streamlit's own index.html, again after upgrades).
+python (Join-Path $PSScriptRoot 'tools\streamlit_loading.py')
 # A copy of the SQLite files before each start; the app makes one a day while it runs (server_ops.start_daily_backup).
 python (Join-Path $PSScriptRoot 'tools\backup_data.py')
 # The app writes its own rotating log in .studio-data\logs\olmuse.log; this file only keeps the console of the last start.
