@@ -1977,7 +1977,7 @@ ${p.form}`,
     { key: 'add', at: () => document.querySelector('#board .group[data-cat] h2 .addSound'), done: () => !!tourA() },
     { key: 'name', at: () => document.querySelector('.tile .renameIn') || tileOf(tourA()), done: () => !document.querySelector('.tile .renameIn') || openAsset === tourA() },
     { key: 'open', at: () => tileOf(tourA()), done: () => !!openAsset && openAsset === tourA() },
-    { key: 'make', at: () => document.querySelector('.detailDock textarea') || $('makeOne'), done: () => { const a = tourA(); return !!a && (a.status !== 'pending' || a.drafts.length > 0); }, ai: true },
+    { key: 'make', at: () => document.querySelector('.detailDock textarea') || $('makeOne'), beside: () => document.querySelector('.dSide'), done: () => { const a = tourA(); return !!a && (a.status !== 'pending' || a.drafts.length > 0); }, ai: true },
     { key: 'wait', at: () => document.querySelector('#detailView .dWave'), done: () => { const a = tourA(); return !!a && hasSound(a) && a.status !== 'working'; }, skip: () => tour.noAi },
     { key: 'listen', at: () => $('dPlay'), done: () => tour.heard, skip: () => tour.noAi },
     { key: 'approve', at: () => document.querySelector('#detailView .ab .keep') || document.querySelector('#detailView .dApprove'), done: () => tourA()?.status === 'approved', skip: () => tour.noAi },
@@ -2030,13 +2030,17 @@ ${p.form}`,
     const at = visibleEl(s.at());
     if (tour.mark !== at) { tour.mark?.classList.remove('tourMark'); tour.mark = at; }
     at?.classList.add('tourMark');
-    placeTour(at);
+    placeTour(at, at && s.beside ? visibleEl(s.beside()) : null);
   }
-  // Below what it points at when there is room, else above, else beside it; kept on the screen.
-  function placeTour(at) {
+  // Below what it points at when there is room, else above, else beside it; kept on the screen. With `panel` (the
+  // request box in the sound's side panel, whose draft count sits right above it) it goes left of that panel, level
+  // with the bottom of what it points at, so it covers neither.
+  function placeTour(at, panel = null) {
     const w = tourBox.offsetWidth || 300, h = tourBox.offsetHeight || 120, gap = 12, pad = 16;
     let x = innerWidth - w - pad, y = 72;
-    if (at) {
+    const p = panel?.getBoundingClientRect();
+    if (at && p && p.left - gap - w >= pad) { x = p.left - gap - w; y = at.getBoundingClientRect().bottom - h; }
+    else if (at) {
       const q = at.getBoundingClientRect();
       x = q.left + q.width / 2 - w / 2;
       if (q.bottom + gap + h <= innerHeight - pad) y = q.bottom + gap;

@@ -75,6 +75,14 @@ def main():
 
             text = at(page, 4)
             check("note 4 asks for the words, at the request box", points_at(page, ".detailDock textarea") and "AI" in text, text)
+            # The note covers neither the request box nor the draft count above it, on smaller screens too.
+            clear = "() => { const r = (x) => x.getBoundingClientRect(), b = r(document.querySelector('#tour'));"                     " return ['.detailDock', '.dTools'].every((s) => { const q = r(document.querySelector(s));"                     " return b.right <= q.left || b.left >= q.right || b.bottom <= q.top || b.top >= q.bottom; })"                     " && b.left >= 0 && b.top >= 0 && b.right <= innerWidth && b.bottom <= innerHeight; }"
+            for w, h in ((1440, 900), (1366, 768), (1280, 720)):
+                page.set_viewport_size({"width": w, "height": h})
+                page.wait_for_timeout(300)
+                page.screenshot(path=str(shots / f"ai-04-{w}x{h}.png"))
+                check(f"note 4 covers neither the request box nor the draft count at {w}x{h}", page.evaluate(clear))
+            page.set_viewport_size({"width": 1440, "height": 900})
             page.fill(".detailDock textarea", "가볍게 톡 튀는 점프 소리")
             page.keyboard.press("Enter")
 
