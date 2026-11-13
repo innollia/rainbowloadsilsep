@@ -173,12 +173,15 @@ def main():
         page.goto(url)
         hand(page, api)
 
-        # First visit: an empty board of the user's own, and the tutorial opens and offers Import; the header does too.
-        page.wait_for_selector("#dialog[open] #tutorialImport")
+        # First visit: an empty board of the user's own, and the guide opens at its first step (no dialog); the header
+        # offers Import. Esc puts the guide away, and this visitor brings in what they have.
+        page.wait_for_selector("#tour")
         check("first screen is an empty board", page.locator(".tile").count() == 0 and page.inner_text("#gameTitle") == "새 게임", page.inner_text("#gameTitle"))
-        check("first screen offers import and nothing else to start from",
-              page.is_visible("#importBtn") and page.locator("#dialog[open] .dlgRow button").count() == 1 and page.locator("#tutorialBlank").count() == 0)
-        page.click("#tutorialImport")
+        check("first screen opens the guide, not a dialog, and offers import",
+              page.is_visible("#importBtn") and not page.is_visible("#dialog[open]") and page.inner_text("#tour .tourStep") == "1 / 10")
+        page.keyboard.press("Escape")
+        check("Esc puts the guide away", page.is_hidden("#tour"))
+        page.click("#importBtn")
         page.wait_for_selector("#dialog[open] #pickFolder")
 
         # A whole folder of sounds.
@@ -233,7 +236,7 @@ def main():
         g = groups(page)
         check("board survives a reload", page.inner_text("#gameTitle") == "MyGame" and "버튼 누름" in g.get("UI", [])
               and page.locator(".tile.imported").count() == 4 and page.locator(".tile[data-status=draft]").count() == 3, json.dumps(g, ensure_ascii=False))
-        check("reload opens no tutorial again", not page.is_visible("#dialog[open]"))
+        check("reload opens no guide again", not page.is_visible("#dialog[open]") and page.is_hidden("#tour"))
 
         # Drafts in the feel of a brought-in sound: the prompt carries its measurements.
         page.locator(".tile.imported", has_text="Sword swing 01").focus()
@@ -270,7 +273,7 @@ def main():
         fresh = browser.new_page(viewport={"width": 1440, "height": 900})
         fresh.on("pageerror", lambda e: errors.append(str(e)))
         fresh.goto(url)
-        fresh.wait_for_selector("#dialog[open]")
+        fresh.wait_for_selector("#tour")
         fresh.keyboard.press("Escape")
         fresh.set_input_files("#importFiles", str(bundle))
         fresh.wait_for_function("document.querySelectorAll('.tile.imported').length === 4", timeout=15000)
@@ -292,7 +295,7 @@ def main():
         odd_page = browser.new_page(viewport={"width": 1440, "height": 900})
         odd_page.on("pageerror", lambda e: errors.append(str(e)))
         odd_page.goto(url)
-        odd_page.wait_for_selector("#dialog[open]")
+        odd_page.wait_for_selector("#tour")
         odd_page.keyboard.press("Escape")
         odd_page.set_input_files("#importFiles", [str(odd / n) for n in ("photo.jpg", "broken.wav", "huge.wav", "good.wav", "explorer.zip")])
         odd_page.wait_for_function("document.querySelectorAll('.tile.imported').length === 2", timeout=15000)
@@ -305,7 +308,7 @@ def main():
         hot_page = browser.new_page(viewport={"width": 1440, "height": 900})
         hot_page.on("pageerror", lambda e: errors.append(str(e)))
         hot_page.goto(url)
-        hot_page.wait_for_selector("#dialog[open]")
+        hot_page.wait_for_selector("#tour")
         hot_page.keyboard.press("Escape")
         hot_page.set_input_files("#importFiles", str(hot))
         hot_page.wait_for_selector(".tile.imported[data-issues]", timeout=15000)
@@ -341,7 +344,7 @@ def main():
         first.on("pageerror", lambda e: errors.append(str(e)))
         first.on("dialog", lambda d: (asked.append(d.message), d.accept()))
         first.goto(url)
-        first.wait_for_selector("#dialog[open] #tutorialImport")
+        first.wait_for_selector("#tour")
         first.keyboard.press("Escape")
         check("the first screen is an empty board without asking", first.locator(".tile").count() == 0 and first.inner_text("#gameTitle") == "새 게임" and len(asked) == 1, asked)
         first.set_input_files("#importFolder", str(game))

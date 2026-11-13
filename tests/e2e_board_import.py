@@ -103,7 +103,7 @@ def main():
             local = browser.new_page(viewport={"width": 1440, "height": 900})
             local.on("pageerror", lambda e: errors.append("local: " + str(e)))
             local.goto(f"{origin}/asset_studio/index.html?lang=ko")
-            local.wait_for_selector("#dialog[open]")
+            local.wait_for_selector("#tour")  # the guide of a first visit, put away
             local.keyboard.press("Escape")
             local.set_input_files("#importFolder", str(folder))
             try:

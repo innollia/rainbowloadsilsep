@@ -237,13 +237,21 @@ ${p.form}`,
       bundleNeedsBlank: 'Open a bundle on an empty board', boardLimit: 'No more boards can be made', syncBusy: 'Still sending. You can switch once it is done',
       boardsHead: 'Boards', boardOpen: 'Open', boardSounds: (n) => `${n} sound${n === 1 ? '' : 's'}`, boardSynced: 'Synced',
       boardSending: (n, a, b) => `Sending · ${n} change${n === 1 ? '' : 's'} · ${a}/${b} sounds`, boardOffline: 'Offline · changes are kept on this computer',
-      tutorialTitle: 'How to make game sounds',
-      steps: [
-        ['Bring in what you have', 'Already have sounds, a list of the sounds the game needs, or a bundle exported here? Import puts them on the board.'],
-        ['Get a spec', 'From Spec in the top-right menu, copy the prompt, send it to the AI agent working on your game, and paste back the spec it returns.'],
-        ['Revise', 'Clicking a tile selects it and plays it. Pick several and write what to change. Raise the draft count to compare several options. Press and hold to open it large.'],
-        ['Export', 'Approved sounds are bundled with the license notice. The AI finishes spec checks before it hands over a sound.'],
-      ],
+      tourNext: 'Next', tourDone: 'Done', tourClose: 'Close the guide', tourStep: (i, n) => `${i} / ${n}`,
+      tour: {
+        add: 'Press + to put an empty sound tile in this group.',
+        name: 'Type a name and press Enter. Like: Jump',
+        open: 'Double-click the tile (or press and hold it) to open it.',
+        make: 'Write what it should sound like and press Enter, like: a light, bouncy jump. The AI makes it. Or just press Make it.',
+        makeOff: 'The AI is off right now, so sounds cannot be made here. Have a look at the rest instead.',
+        wait: 'The AI is making it. Just a moment.',
+        listen: 'Done! Press ▶ to listen.',
+        keep: 'Like it? Press ✓ to keep it. If not, ✕ throws it away and you can ask again.',
+        approve: 'Like it? Press Approve. If not, write what to change on the right.',
+        back: 'Press ← to go back to the board.',
+        export: 'Approved sounds go out from here, as files for your game.',
+        more: 'One more thing: already have sounds, or a list of them? Import puts them on the board. Spec in the menu has a prompt that gets a sound list from the AI working on your game.',
+      },
     },
     ko: {
       docTitle: '게임 소리 에셋',
@@ -391,13 +399,21 @@ ${p.form}`,
       bundleNeedsBlank: '묶음은 빈 보드에서 열라고, 바보야~', boardLimit: '보드를 더는 못 만들어~', syncBusy: '아직 보내는 중이잖아~ 다 보내고 나서 옮겨~',
       boardsHead: '보드', boardOpen: '열기', boardSounds: (n) => `소리 ${n}개`, boardSynced: '동기화됨',
       boardSending: (n, a, b) => `보내는 중 · 변경 ${n} · 소리 ${a}/${b}`, boardOffline: '연결 끊김 · 변경은 이 컴퓨터에 있음',
-      tutorialTitle: '게임 소리 만드는 법',
-      steps: [
-        ['가진 것 가져오기', '만들어 둔 소리나 게임에 필요한 소리 목록, 여기서 내보낸 묶음 있으면 가져오기로 보드에 올려 봐~'],
-        ['명세 받기', '오른쪽 위 메뉴의 명세에서 프롬프트 복사해서 게임 작업하는 AI 에이전트한테 보내고, 돌아온 명세를 붙여 넣어 봐~'],
-        ['고치기', '타일 누르면 선택되고 소리가 나~ 여러 개 고르고 바꿀 내용 적어 봐. 시안 개수 늘리면 여러 안 비교해서 고를 수 있고, 길게 누르면 크게 열려♡'],
-        ['내보내기', '승인한 소리를 저작권 고지랑 같이 묶어 줄게~ 규격 검사는 AI가 소리 내놓기 전에 다 끝내 두거든.'],
-      ],
+      tourNext: '다음', tourDone: '끝!', tourClose: '안내 닫기', tourStep: (i, n) => `${i} / ${n}`,
+      tour: {
+        add: '여기 +를 눌러서 빈 소리 칸을 하나 만들어 봐~',
+        name: '이름 적고 Enter~ 예: 점프',
+        open: '이 칸을 두 번 누르거나 꾹 눌러서 열어 봐~',
+        make: '어떤 소리인지 적고 Enter~ 예: 가볍게 톡 튀는 점프 소리. AI가 만들어 줄게♡ 그냥 만들기 눌러도 돼~',
+        makeOff: '지금은 AI가 꺼져 있어서 여기선 소리를 못 만들어~ 나머지만 보고 가자.',
+        wait: 'AI가 만드는 중이야~ 조금만 기다려 줘♡',
+        listen: '다 됐어~ ▶ 눌러서 들어 봐!',
+        keep: '맘에 들면 ✓로 채택~ 별로면 ✕로 버리고 다시 시켜 봐.',
+        approve: '맘에 들면 승인~ 아니면 오른쪽에 고칠 점을 적어 줘.',
+        back: '← 눌러서 보드로 돌아가자~',
+        export: '승인한 소리는 여기서 게임에 넣을 파일로 내보내~',
+        more: '덤으로~ 만들어 둔 소리나 소리 목록 있으면 가져오기로 올려. 메뉴의 명세에선 게임 작업하는 AI한테 소리 목록 받아 오는 프롬프트를 복사할 수 있어♡',
+      },
     },
   };
   const t = (key, ...args) => { const v = TEXT[lang][key] ?? TEXT.en[key]; return typeof v === 'function' ? v(...args) : v; };
@@ -701,6 +717,7 @@ ${p.form}`,
     t.addEventListener('pointerenter', () => hoverStart(a));
     t.addEventListener('pointerleave', hoverEnd);
     t.addEventListener('click', (e) => clickTile(a, e));
+    t.addEventListener('dblclick', () => { if (pickable(a)) openDetail(a); });
     t.addEventListener('pointerdown', (e) => hold(a, t, e));
     t.addEventListener('contextmenu', (e) => { e.preventDefault(); tileMenu(a, e.clientX, e.clientY); });
     t.addEventListener('focus', () => { focused = a.id; syncDock(); });
@@ -877,7 +894,7 @@ ${p.form}`,
   // One sound at a time, for people without an agent writing a spec: an empty slot named in place.
   function addSound(cat) {
     const name = t('newSound'), a = blank({ id: makeId(name, cat), name, cat, music: kindOf(cat) === 'music', loop: kindOf(cat) !== 'sfx' });
-    assets.push(a);
+    assets.push(a); if (tour.on && !tourA()) tour.a = a;
     filter = { cat: filter.cat && under(cat, filter.cat) ? filter.cat : null, status: null, imported: false }; renderBoard();
     const tile = tileOf(a); tile?.scrollIntoView({ block: 'nearest' }); renameTile(a, true);
   }
@@ -1937,7 +1954,7 @@ ${p.form}`,
   menu.onclick = (e) => {
     const b = e.target.closest('[data-act]'); if (!b) return;
     toggleMenu(false);
-    ({ settings: settingsDialog, spec: () => specDialog(), game: gameDialog, help: tutorial, logout: signOut, refs: () => refDialog({ type: 'project' }) })[b.dataset.act]();
+    ({ settings: settingsDialog, spec: () => specDialog(), game: gameDialog, help: startTour, logout: signOut, refs: () => refDialog({ type: 'project' }) })[b.dataset.act]();
   };
   addEventListener('click', (e) => { if (!menu.hidden && !e.target.closest('.menuWrap')) toggleMenu(false); });
   menu.addEventListener('keydown', (e) => {
@@ -1948,14 +1965,93 @@ ${p.form}`,
 
   // The host page owns the account: what is not saved yet is saved first, then the host signs out.
   async function signOut() { stopSound(); queue = null; await saveNow(); parent.postMessage({ type: 'asset:logout' }, location.origin); }
-  function tutorial() {
-    openDialog(t('tutorialTitle')); reopen = tutorial;
-    const list = el('ol', 'steps');
-    for (const [what, how] of t('steps')) { const li = el('li'); li.append(el('b', '', what), el('span', '', how)); list.append(li); }
-    const row = el('div', 'dlgRow'), b = el('button', 'primary', t('importShort')); b.id = 'tutorialImport';
-    b.onclick = () => { dlg.close(); importDialog(); };
-    row.append(b); dlg.append(list, row); dlg.showModal();
+  // The guide: one small note at a time, beside the control it is about, from an empty board to a made, approved
+  // sound and where it goes out. A step moves on when it is done on the page; a step with nothing to press has Next.
+  // Esc or the close button ends it, and How to use in the menu starts it again. It hides while a dialog is up.
+  const tourBox = el('div'); tourBox.id = 'tour'; tourBox.setAttribute('role', 'dialog'); tourBox.hidden = true; document.body.append(tourBox);
+  const tour = { on: false, i: 0, a: null, heard: false, noAi: false, nexted: -1, drawn: '', mark: null };
+  const tourA = () => (tour.a && assets.includes(tour.a) ? tour.a : null);
+  const visibleEl = (x) => { if (!x) return null; const q = x.getBoundingClientRect(); return q.width || q.height ? x : null; };
+  // Each step: what it says, what it points at, and when it is done. skip: passed over (no AI here).
+  const TOUR = [
+    { key: 'add', at: () => document.querySelector('#board .group[data-cat] h2 .addSound'), done: () => !!tourA() },
+    { key: 'name', at: () => document.querySelector('.tile .renameIn') || tileOf(tourA()), done: () => !document.querySelector('.tile .renameIn') || openAsset === tourA() },
+    { key: 'open', at: () => tileOf(tourA()), done: () => !!openAsset && openAsset === tourA() },
+    { key: 'make', at: () => document.querySelector('.detailDock textarea') || $('makeOne'), done: () => { const a = tourA(); return !!a && (a.status !== 'pending' || a.drafts.length > 0); }, ai: true },
+    { key: 'wait', at: () => document.querySelector('#detailView .dWave'), done: () => { const a = tourA(); return !!a && hasSound(a) && a.status !== 'working'; }, skip: () => tour.noAi },
+    { key: 'listen', at: () => $('dPlay'), done: () => tour.heard, skip: () => tour.noAi },
+    { key: 'approve', at: () => document.querySelector('#detailView .ab .keep') || document.querySelector('#detailView .dApprove'), done: () => tourA()?.status === 'approved', skip: () => tour.noAi },
+    { key: 'back', at: () => $('boardBack'), done: () => !openAsset },
+    { key: 'export', at: () => $('exportBtn'), next: true },
+    { key: 'more', at: () => $('importBtn'), next: true, last: true },
+  ];
+  function startTour() {
+    if (dlg.open) dlg.close();
+    Object.assign(tour, { on: true, i: 0, a: null, heard: false, noAi: false, nexted: -1, drawn: '' });
+    if (openAsset) closeDetail();
+    tourTick();
+    requestAnimationFrame(tourLoop);
   }
+  function endTour() { tour.on = false; tourBox.hidden = true; tour.mark?.classList.remove('tourMark'); tour.mark = null; }
+  function tourLoop() { if (!tour.on) return; tourTick(); requestAnimationFrame(tourLoop); }
+  function tourTick() {
+    if (!tour.on) return;
+    const a = tourA();
+    if (a && player && player.asset === a) tour.heard = true;
+    // The sound went (deleted) or came back empty (thrown away, or its making failed): back to the step that makes it.
+    if (tour.i > 0 && !a) tour.i = 0;
+    else if (a && tour.i > 3 && !tour.noAi && a.status === 'pending' && !a.drafts.length && openAsset === a) { tour.i = 3; tour.heard = false; tour.nexted = -1; }
+    while (tour.i < TOUR.length - 1) {
+      const s = TOUR[tour.i];
+      if (s.skip?.() || tour.nexted === tour.i || (!s.next && s.done())) tour.i++; else break;
+    }
+    const s = TOUR[tour.i];
+    if (dlg.open) { tourBox.hidden = true; return; }
+    // Making a sound needs the AI: when the room cannot take a request, the step says so and has Next instead.
+    const why = s.ai ? cannot() : '', off = !!why && why !== 'wait';
+    // Drafts waiting for a pick are kept with ✓ on the sound; one made sound is approved.
+    const key = s.key === 'approve' && document.querySelector('#detailView .ab .keep') ? 'keep' : s.key;
+    const words = !off ? t('tour')[key] : why === 'aiOff' || why === 'noLink' ? t('tour').makeOff : genText(why);
+    const sig = `${lang}|${tour.i}|${words}`;
+    if (tour.drawn !== sig) {
+      tour.drawn = sig; tourBox.textContent = '';
+      const top = el('div', 'tourTop');
+      top.append(el('span', 'tourStep', t('tourStep', tour.i + 1, TOUR.length)), iconButton('close', t('tourClose'), endTour, 'ghost iconBtn tourClose'));
+      tourBox.append(top, el('p', 'tourText', words));
+      // Next where nothing on the page moves it on: a step that only shows, listening (it can be skipped), no AI.
+      if (s.next || off || s.key === 'listen') {
+        const row = el('div', 'tourRow'), go = el('button', 'primary', s.last ? t('tourDone') : t('tourNext')); go.id = 'tourNext';
+        go.onclick = () => { if (s.last) { endTour(); return; } if (off) tour.noAi = true; tour.nexted = tour.i; tourTick(); };
+        row.append(go); tourBox.append(row);
+      }
+      tourBox.setAttribute('aria-label', words);
+    }
+    tourBox.hidden = false;
+    const at = visibleEl(s.at());
+    if (tour.mark !== at) { tour.mark?.classList.remove('tourMark'); tour.mark = at; }
+    at?.classList.add('tourMark');
+    placeTour(at);
+  }
+  // Below what it points at when there is room, else above, else beside it; kept on the screen.
+  function placeTour(at) {
+    const w = tourBox.offsetWidth || 300, h = tourBox.offsetHeight || 120, gap = 12, pad = 16;
+    let x = innerWidth - w - pad, y = 72;
+    if (at) {
+      const q = at.getBoundingClientRect();
+      x = q.left + q.width / 2 - w / 2;
+      if (q.bottom + gap + h <= innerHeight - pad) y = q.bottom + gap;
+      else if (q.top - gap - h >= pad) y = q.top - gap - h;
+      else { y = q.top; x = q.left - gap - w >= pad ? q.left - gap - w : q.right + gap; }
+    }
+    tourBox.style.left = Math.round(Math.max(pad, Math.min(x, innerWidth - w - pad))) + 'px';
+    tourBox.style.top = Math.round(Math.max(pad, Math.min(y, innerHeight - h - pad))) + 'px';
+  }
+  // Esc ends the guide, unless it is cancelling something being typed (a name being written).
+  addEventListener('keydown', (e) => {
+    if (!tour.on || tourBox.hidden || e.key !== 'Escape' || dlg.open) return;
+    if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '') && !tourBox.contains(document.activeElement)) return;
+    e.preventDefault(); e.stopPropagation(); endTour();
+  }, true);
 
   /* ---------- bringing existing work in ---------- */
   const { AUDIO, SPEC } = importer;
@@ -2965,15 +3061,15 @@ ${p.form}`,
     if (result === 'empty') takeDir(await store.get('gameDir')); // a folder linked before anything was saved
     shown = result;
   }
-  // The first visit opens the tutorial, also when the saved board could not be opened or the browser keeps nothing.
+  // The first visit opens the guide, also when the saved board could not be opened or the browser keeps nothing.
   // A view-only tab leaves it for the next visit: nothing in it could be pressed there.
   function greet() {
     if (store.readOnly) return;
     let seen = false;
     try { seen = !!localStorage.getItem('asset-tutorial-seen'); localStorage.setItem('asset-tutorial-seen', '1'); } catch { /* shows again next time */ }
-    if (!seen) tutorial();
+    if (!seen) startTour();
   }
-  // A board that could not be opened is said once. While a dialog is up (the tutorial), it waits until that is closed.
+  // A board that could not be opened is said once. While a dialog is up, it waits until that is closed.
   function tellFailed() {
     if (toldFailed) return;
     if (dlg.open) { dlg.addEventListener('close', tellFailed, { once: true }); return; }

@@ -2493,17 +2493,21 @@ def test_a_cut_short_first_unreal_write_is_resumed_by_the_plugin_descriptor_and_
     assert got["foreign"] == ["Could not write to the game folder: Plugins/OlmuseAudio", 0]
 
 
-def test_a_first_visit_opens_on_an_empty_board_and_the_tutorial_and_game_info_offer_no_stand_in_board():
-    """Nothing saved: no sounds, the categories as they come, the game called a new one. The tutorial speaks of the
-    user's own sounds only and offers Import; the game info has the one way to start again, on an empty board."""
+def test_a_first_visit_opens_on_an_empty_board_and_the_guide_and_game_info_offer_no_stand_in_board():
+    """Nothing saved: no sounds, the categories as they come, the game called a new one. How to use starts the guide
+    (no dialog) at its first step, making an empty sound tile; the game info has the one way to start again, on an
+    empty board."""
     got = run_page(PAGE_TOOLS.split("    const MADE")[0] + r"""
     out.board = [tiles().length, $('gameTitle').textContent, !!$('fillBtn'), !!$('approveAll'), $('side').querySelectorAll('button').map((b) => b.title).filter(Boolean)];
     $('menu').fire('click', { target: document.querySelector('#menu [data-act=help]') });
-    out.help = [$('dialog').querySelectorAll('button').filter((b) => b.textContent).map((b) => [b.id, b.textContent]), $('dialog').querySelectorAll('li b').map((b) => b.textContent)];
-    $('dialog').close();
+    const tour = $('tour');
+    out.help = [!!$('dialog').open, tour.hidden, tour.querySelector('.tourStep').textContent, tour.querySelector('.tourText').textContent, !!tour.querySelector('#tourNext')];
+    tour.querySelector('.tourClose').click();
+    out.closed = tour.hidden;
     $('menu').fire('click', { target: document.querySelector('#menu [data-act=game]') });
     out.game = $('dialog').querySelectorAll('button').filter((b) => b.textContent).map((b) => [b.id, b.textContent]);
     """)
     assert got["board"] == [0, "New game", False, False, ["All", "UI", "Combat", "Character", "Ambience", "Music", "Add group"]]
-    assert got["help"] == [[["tutorialImport", "Import"]], ["Bring in what you have", "Get a spec", "Revise", "Export"]]
+    assert got["help"] == [False, False, "1 / 10", "Press + to put an empty sound tile in this group.", False]
+    assert got["closed"] is True
     assert got["game"] == [["startBlank", "Start with an empty board"]]

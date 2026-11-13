@@ -171,7 +171,7 @@ def main():
             # A: a visitor with an untouched empty board signs in; the first sounds put on it make it the account's first board.
             pa.goto(url)
             a = room(pa)
-            a.wait_for_selector("#dialog[open]")
+            a.wait_for_selector("#tour")  # the guide of a first visit, put away
             a.page.keyboard.press("Escape")
             check("the first screen is an empty board", a.locator("#board .tile").count() == 0 and a.inner_text("#gameTitle") == "새 게임", a.inner_text("#gameTitle"))
             check("signed in with an untouched empty board, nothing is made yet", boards()["boards"] == [], boards())

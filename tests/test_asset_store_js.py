@@ -999,10 +999,10 @@ def test_the_page_loads_the_store_and_calls_it_instead_of_its_old_save_code():
 def test_the_page_keeps_what_the_storage_changes_must_not_take_away():
     """What only the page can do, read from app.js: Node has no DOM to press these in."""
     app = (ROOT / "app.js").read_text(encoding="utf-8")
-    # the first visit opens the tutorial unless the tab is view-only: also when the saved board could not be opened
+    # the first visit opens the guide unless the tab is view-only: also when the saved board could not be opened
     greet = app[app.index("function greet() {"):app.index("function tellFailed()")]
     assert "if (store.readOnly) return;" in greet and "store.writable" not in greet and "store.paused" not in greet
-    # loadFailed is said once, after the tutorial if that is up
+    # loadFailed is said once, after a dialog if one is up
     told = app[app.index("function tellFailed() {"):app.index("function tookOver(result)")]
     assert told.count("toast(t('loadFailed')") == 1 and app.count("toast(t('loadFailed')") == 1
     assert "if (toldFailed) return;" in told and "dlg.addEventListener('close', tellFailed, { once: true })" in told
