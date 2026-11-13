@@ -2012,7 +2012,7 @@ ${p.form}`,
     let total = 0;
     for (const e of entries.filter((x) => !importer.junk(x.path))) {
       const zipped = /\.zip$/i.test(e.path), size = e.size || 0;
-      if (!zipped && !AUDIO.test(e.path) && !/\.json$/i.test(e.path)) { if (!/\.(md|txt|gd|tscn|tres|cfg|py|uplugin)$/i.test(e.path)) sk.type++; continue; }
+      if (!zipped && !AUDIO.test(e.path) && !/\.(json|akkado)$/i.test(e.path)) { if (!/\.(md|txt|gd|tscn|tres|cfg|py|uplugin)$/i.test(e.path)) sk.type++; continue; }
       if (size > (zipped ? LIMITS.total : LIMITS.file) || total + size > LIMITS.total) { sk.big++; continue; }
       total += size;
       if (!zipped) { found.push(e); continue; }
@@ -2021,13 +2021,16 @@ ${p.form}`,
         sk.big += inside.skipped.filter((x) => x.why === 'big').length; sk.bad += inside.skipped.filter((x) => x.why === 'bad').length;
         for (const z of inside) {
           if (importer.junk(z.path)) continue;
-          if (AUDIO.test(z.path) || /\.json$/i.test(z.path)) found.push({ path: z.path, size: z.size, bytes: async () => z.bytes });
+          if (AUDIO.test(z.path) || /\.(json|akkado)$/i.test(z.path)) found.push({ path: z.path, size: z.size, bytes: async () => z.bytes });
           else if (!/\.(md|txt|gd|tscn|tres|cfg|py|uplugin)$/i.test(z.path)) sk.type++;
         }
       } catch { sk.bad++; }
     }
-    const spec = found.find((e) => base(e.path) === SPEC) || found.find((e) => /\.json$/i.test(e.path));
-    if (spec) {
+    // The spec: the named file first, then any .json (shallowest first) whose assets is a list. A folder may hold other
+    // .json files (a report, a config) beside it.
+    const depth = (e) => e.path.split('/').length;
+    const jsons = found.filter((e) => /\.json$/i.test(e.path)).sort((p, q) => (base(q.path) === SPEC) - (base(p.path) === SPEC) || depth(p) - depth(q));
+    for (const spec of jsons) {
       let parsed = null;
       try { parsed = JSON.parse(new TextDecoder().decode(await spec.bytes())); } catch { /* not a bundle */ }
       if (parsed && Array.isArray(parsed.assets)) return openBundle(parsed, found, sk);
@@ -2060,6 +2063,19 @@ ${p.form}`,
     report(added.length ? t('importedN', added.length) : t('nothingToImport'), sk);
     if (added.length) { importDialog(added); askJev(added); }
   }
+  // An Akkado patch named <id>.akkado in the bundle makes that sound's version an nkido one with the patch as its
+  // source, so it can be revised. Its header lines `// bpm: N` give the tempo.
+  const NKIDO_SOURCE = { name: 'nkido (Akkado, Cedar)', license: 'MIT', holder: 'Moritz Laass', use: 'Sound synthesis engine' };
+  async function patchOf(files, id) {
+    const f = files.find((e) => /\.akkado$/i.test(e.path) && stem(e.path) === id);
+    if (!f) return null;
+    try { return new TextDecoder().decode(await f.bytes()).replace(/\r\n/g, '\n'); } catch { return null; }
+  }
+  function withPatch(v, source) {
+    if (!source || source.length > 20000) return v;
+    const bpm = source.match(/\/\/\s*bpm\s*:\s*([0-9.]+)/);
+    return { ...v, engine: 'nkido', source, bpm: bpm ? +bpm[1] : null, sources: [NKIDO_SOURCE] };
+  }
   // A bundle this screen exported: the spec says what each sound is, the audio files are the sounds.
   async function openBundle(spec, files, sk = tally()) {
     // An account's board is not replaced by a bundle while it holds sounds: it opens on an empty board (G).
@@ -2085,7 +2101,7 @@ ${p.form}`,
         imported: x.origin === 'imported', file: x.source_file || '', license: x.license || '', holder: x.holder || '', prompt: x.prompt || '' });
       a.refs = backRefs(x.references).map((r) => ({ ...r, from: 'asset' }));
       if (audio) {
-        try { a.versions = [await importVersion(await audio.bytes(), a.imported ? 'importedNote' : 'fromBundle', a)]; a.current = 0; a.status = x.status === 'approved' || !x.status ? 'approved' : 'draft'; }
+        try { a.versions = [withPatch(await importVersion(await audio.bytes(), a.imported ? 'importedNote' : 'fromBundle', a), await patchOf(files, x.id))]; a.current = 0; a.status = x.status === 'approved' || !x.status ? 'approved' : 'draft'; }
         catch { sk.bad++; }
       }
       assets.push(a);

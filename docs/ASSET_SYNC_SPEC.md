@@ -340,6 +340,7 @@ create index if not exists uses_sha on uses (sha);
 - **같은 브라우저의 둘째 탭:** 지금처럼 읽기 전용이고 갱신되지 않는다. 엔진은 잠금을 쥔 탭에서만 돈다.
 - **보안:** 보드 글은 지금처럼 텍스트로만 화면에 넣는다. 다른 계정의 글이 들어오는 초대를 넣기 전에 `app.js`가 보드 글을 `innerHTML`로 넣는 곳을 점검한다.
 - **운영 도구 `tools/board_admin.py`:** 돌고 있는 API 옆에서 쓴다(잠금 파일을 잡지 않고 시작 횟수를 올리지 않는 admin 모드, 쓰기는 SQLite 잠금으로 줄을 선다). 계정 이메일(+pepper: `STRUDEL_CREDITS_PEPPER`, 없으면 `~/.all-tomorrow/strudel-credits.pepper`)로 계정 키를 계산해 보드 목록, 레코드 이력 보기, 레코드 하나를 이력의 rev로 되살리기, gone 되살리기, 보드 지우기(행과 그 보드만 쓰는 바이트 파일), 계정의 보드 전부 지우기. 다른 보드가 쓰는 sha는 남긴다. 지운 바이트 파일은 백업 폴더의 `asset-blobs`에서도 지운다(`--backup`). 날짜별 DB 백업의 행은 그 백업이 지워질 때(14일) 사라진다.
+- **폴더 올리기 `tools/board_import.py`:** 묶음으로 열 수 있는 폴더(명세 json, `<id>.wav`, 있으면 `<id>.akkado`)를 계정 보드에 올린다. 레코드는 `tools/board_import.js`가 페이지의 measure.js·store.js·board.js로 만든다. 기본은 새 보드다. `--into BOARD`는 같은 목록으로 만든 기존 보드의 소리 칸마다 새 버전을 더해 현재 버전·승인으로 만든다(휴지통·만드는 중인 칸은 그대로, 같은 소리는 다시 넣지 않음). 화면 확인은 `tests/e2e_board_import.py`.
 - **백업:** DB는 기존 하루 백업에 들어간다(한 파일이 실패해도 나머지는 복사한다). `asset-blobs`는 하루 백업(`server_ops.start_daily_backup`)과 `tools/backup_data.py`가 `<백업 폴더>/asset-blobs`(`OLMUSE_BACKUP_DIR`, 없으면 `.studio-data/backups`)로 없는 파일만 복사한다(sha 이름이라 증분, `part/`는 빼고). 로컬 실행의 `.studio-data/local/asset-blobs`는 백업하지 않는다.
 - **개인정보처리방침:** `pages/privacy.py`의 '작업물은 브라우저에 저장'·서버 보관 항목·삭제 방법 문장을 고치기 전에는 `OLMUSE_BOARD_ACCOUNTS`로 허용한 계정에만 켠다.
 
