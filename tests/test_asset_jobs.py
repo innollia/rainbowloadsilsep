@@ -677,9 +677,65 @@ def test_owners_take_turns_and_every_draft_1_comes_before_any_draft_2(bench):
     b = bench()
     b.send(a, items=[{"ref": f"k{i}", "kind": "sfx", "name": f"s{i}", "seconds": 0.2} for i in range(2)], drafts=2)
     b.jobs.drain()
-    option = lambda p: p.split("Option ")[1].split(";")[0]  # noqa: E731
+    option = lambda p: "{} of {}".format(p.split("You write option ")[1].split(":")[0], p.split("This request has ")[1].split(" ")[0])  # noqa: E731
     assert [(ag.request_of(p)["item"]["name"], option(p)) for p in b.model.prompts] == [
         ("s0", "1 of 2"), ("s1", "1 of 2"), ("s0", "2 of 2"), ("s1", "2 of 2")]
+
+
+SAME = {"source": "// one-shot\nsine(220) * 0.3 |> out(@)", "seconds": 0.2, "bpm": 0}  # every option renders alike
+
+
+def test_drafts_that_come_out_apart_are_kept_as_they_are(bench):
+    b = bench()
+    a = b.who()
+    ids = b.send(a, drafts=3)
+    b.jobs.drain()
+    assert len(b.model.prompts) == 3 and not any("practically the same piece" in p for p in b.model.prompts)
+    assert [b.row(i)["status"] for i in ids] == ["done"] * 3 and len(b.ledger.named("charge")) == 3
+
+
+def test_a_draft_that_comes_out_as_the_same_piece_is_made_once_more_at_no_charge(bench):
+    b = bench(script=[SAME, SAME, SAME])  # the remake comes out alike as well: it is kept, never made a third time
+    a = b.who()
+    ids = b.send(a, drafts=2)
+    b.jobs.drain()
+    assert len(b.model.prompts) == 3
+    again = b.model.prompts[2]
+    assert "practically the same piece" in again and "You write option 2" in again
+    assert "```\n" + SAME["source"].replace("```", "'''") + "\n```" in again and "seconds; most energy in" in again
+    assert "practically the same piece" not in b.model.prompts[1]
+    assert [b.row(i)["status"] for i in ids] == ["done", "done"]
+    assert len(b.ledger.named("charge")) == 2 and b.ledger.named("refund") == [] and b.ledger.credits() == 18
+    assert b.jobs.count("d:" + a.owner) == 2 and b.jobs.count("d:members") == 2  # the remake is not a draft
+    assert b.row(ids[1])["usd"] == pytest.approx(0.004) and b.jobs.count("usd:all") == 6000  # but its call is in the dollars
+    b.jobs.sound(a, ids[1])
+    assert b.view(a, ids[1])["result"]["remade"] is True and "remade" not in json.loads(b.row(ids[0])["view"])["more"]
+
+
+def test_no_remake_without_the_dollars_or_the_time_for_it(bench):
+    b = bench(script=[SAME, SAME], limits=aj.Limits(daily_usd=0.04))  # room for a draft's estimate, not for two
+    ids = b.send(b.who(), drafts=2)
+    b.jobs.drain()
+    assert len(b.model.prompts) == 2 and [b.row(i)["status"] for i in ids] == ["done", "done"]
+    assert b.jobs.count("usd:all") == 4000
+
+    b = bench()
+    late = lambda prompt: b.later(aj.JOB_SECONDS - aj.REMAKE_LEFT + 1) or SAME  # noqa: E731
+    ids = b.send(b.who(), drafts=2)
+    b.model.script = [SAME, late]
+    b.jobs.drain()
+    assert len(b.model.prompts) == 2 and [b.row(i)["status"] for i in ids] == ["done", "done"]
+
+
+def test_a_remake_that_fails_leaves_the_first_draft_as_the_result(bench):
+    b = bench(script=[SAME, SAME, {"source": ""}, {"source": ""}, {"source": ""}])
+    a = b.who()
+    ids = b.send(a, drafts=2)
+    b.jobs.drain()
+    assert len(b.model.prompts) == 5 and [b.row(i)["status"] for i in ids] == ["done", "done"]
+    assert b.ledger.named("refund") == [] and b.row(ids[1])["usd"] == pytest.approx(0.008)
+    b.jobs.sound(a, ids[1])
+    assert "remade" not in b.view(a, ids[1])["result"]
 
 
 def test_a_busy_owner_waits_behind_one_with_less_running(bench):
@@ -1512,7 +1568,7 @@ def test_the_sessions_of_one_address_take_turns(bench):
     b.send(one, rid="a1", items=named("a", 2), drafts=2, free=True)
     b.send(two, rid="b1", items=named("b", 1), drafts=2, free=True)
     b.jobs.drain()
-    option = lambda p: ag.request_of(p)["item"]["name"] + p.split("Option ")[1].split(" of")[0]  # noqa: E731
+    option = lambda p: ag.request_of(p)["item"]["name"] + p.split("You write option ")[1].split(":")[0]  # noqa: E731
     assert [option(p) for p in b.model.prompts] == ["a01", "b01", "a11", "b02", "a02", "a12"]
     assert b.jobs.lane_active == {} and set(b.jobs.lane_served) <= {(PW.owner, aj.lane_of(one)), (PW.owner, aj.lane_of(two))}
     b.jobs.sweep()

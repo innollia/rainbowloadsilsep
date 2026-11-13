@@ -54,7 +54,7 @@ import tempfile
 import threading
 import time
 import traceback
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
 from pathlib import Path
 
 import asset_generate as ag
@@ -96,6 +96,7 @@ BREAKER_STRIKES, BREAKER_SECONDS = 3, 60
 SWEEP_EVERY = 60
 PICK_RETRY = 1.0             # seconds a worker rests after the store refused a pick (a full disk, a locked file)
 ACTIVE_RETRY = 30            # retry_after of too_many_active: about one draft's time
+REMAKE_LEFT = 90             # seconds of its JOB_SECONDS a draft needs left to be made again (_apart)
 
 # ---------- how long things stay ----------
 UNFETCHED_TTL = 3600         # a result nobody received is refunded and deleted this long after it finished
@@ -1216,14 +1217,80 @@ class GenJobs:
             self._close(job, "cancelled")
             return
         task = json.loads(job["input"])
-        outcome = ag.run(ag.Job(id=job["id"], project=task["project"], item=task["item"], examples=task["examples"],
-                                k=job["k"], n=job["n"], lang=task.get("lang"), deadline=job["started"] + JOB_SECONDS),
-                         self.cc_deps if job["cls"] == "cc" else self.deps, lambda **told: self._report(job["id"], **told))
+        deps = self.cc_deps if job["cls"] == "cc" else self.deps
+        work = ag.Job(id=job["id"], project=task["project"], item=task["item"], examples=task["examples"],
+                      k=job["k"], n=job["n"], lang=task.get("lang"), deadline=job["started"] + JOB_SECONDS)
+        outcome = ag.run(work, deps, lambda **told: self._report(job["id"], **told))
+        if outcome.status == "done" and job["n"] > 1:
+            outcome = self._apart(job, work, outcome, deps)
         if outcome.status != "done":
             self._close(job, outcome.status, outcome.error)
         elif not self._keep(job, outcome, task.get("lang")):
             # The update lost to a cancel or to the sweeper. A cancel still has to be ended; the sweeper's end stands.
             self._close(job, "cancelled")
+
+    def _twin(self, job: dict, mine: dict):
+        """The finished draft of the same sound (same request, same item) this one is practically the same piece
+        as, the closest one: {id, source, print, likeness}, or None."""
+        with self.store.lock:
+            rows = self.store.all("select id, view from gen where batch=? and ord=? and id<>? and status='done'",
+                                  (job["batch"], job["ord"], job["id"]))
+        found = None
+        for row in rows:
+            try:
+                other = ag.print_of((self.renders / row["id"] / "master.wav").read_bytes())
+            except (OSError, RuntimeError, ValueError):
+                continue  # deleted or unreadable: nothing to compare with
+            close = ag.likeness(mine, other)
+            if close >= ag.SAME_PIECE and (found is None or close > found["likeness"]):
+                more = json.loads(row["view"] or "{}").get("more") or {}
+                found = {"id": row["id"], "source": more.get("source") or "", "print": other, "likeness": close}
+        return found
+
+    def _remake_room(self, job: dict) -> bool:
+        """Whether today's dollars hold one more draft's estimate, and if so it is added to them and to the row's
+        own estimate (what _right_dollars sets right at the end). The listed accounts spend no dollars."""
+        if job["cls"] == "cc":
+            return True
+        day = self._day(job["started"])
+        with self.store.lock, self.store.tx() as db:
+            if self.store.count(day, "usd:all") + self.est > self.limits.usd_all or (
+                    job["cls"] == "pw" and self.store.count(day, "usd:pw") + self.est > self.limits.usd_pw):
+                return False
+            if not db.execute("update gen set est=est+? where id=? and status='running'", (self.est, job["id"])).rowcount:
+                return False
+            self.store.add(day, "usd:all", self.est)
+            if job["cls"] == "pw":
+                self.store.add(day, "usd:pw", self.est)
+        return True
+
+    def _apart(self, job: dict, work, outcome, deps):
+        """A finished draft that came out as practically the same piece as a finished draft of the same sound
+        (likeness of their prints at or over SAME_PIECE) is made once more, told what that one is and to be a piece
+        of its own. The remake is the result whatever it sounds like; when it fails, is cancelled or cannot start
+        (too little time left, today's dollars spent), the first one is. It is the same draft: no credit, no draft
+        count, only its model calls in the dollars. Drafts that finish at the same moment may both miss the other."""
+        try:
+            twin = self._twin(job, ag.print_of(outcome.wav))
+        except Exception as exc:  # measuring is a nicety here: the draft stands
+            log.warning("asset job %s: the drafts could not be compared: %s", job["id"], type(exc).__name__)
+            return outcome
+        if twin is None or deps.clock() > job["started"] + JOB_SECONDS - REMAKE_LEFT or not self._remake_room(job):
+            return outcome
+        log.info("asset job %s is practically the same piece as %s (%.3f); made once more", job["id"], twin["id"], twin["likeness"])
+        spent = outcome.usd
+        told = lambda **fields: self._report(job["id"], usd=spent + fields["usd"]) if fields.get("usd") is not None else None  # noqa: E731
+        try:
+            again = ag.run(replace(work, away={"source": twin["source"], "print": twin["print"]}), deps, told)
+        except Exception as exc:
+            log.error("asset job %s: the remake raised %s; the first draft is the result", job["id"], type(exc).__name__)
+            return outcome
+        if again.status != "done":
+            outcome.usd = spent + again.usd
+            return outcome
+        again.usd += spent
+        again.result["remade"] = True
+        return again
 
     def _stopped(self, job_id: str) -> bool:
         """Whether the job should stop: its cancel flag is up, or it is not running any more."""
@@ -1372,7 +1439,8 @@ class GenJobs:
             result["stems_lowered_db"] = got["stems_lowered_db"]
         more = {"engine": "nkido", "model": got.get("model"), "prompt": got.get("prompt"), "source": got.get("source"),
                 "bpm": got.get("bpm"), "labels": [label for label, _ in outcome.stems], "measure": got.get("measure"),
-                "issues": got.get("issues"), "repairs": got.get("repairs"), "sources": ag.sources_for(lang)}
+                "issues": got.get("issues"), "repairs": got.get("repairs"), "sources": ag.sources_for(lang),
+                **({"remade": True} if got.get("remade") else {})}
         view = json.dumps({"lang": lang, "result": result, "more": more}, ensure_ascii=False)
         size, now = len(outcome.wav) + sum(s["bytes"] for s in stems), self.clock()
         with self.wake:
