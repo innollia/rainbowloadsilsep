@@ -19,12 +19,16 @@ if ($said -match '^[0-9]{1,5}$' -and [int]$said -ge 1 -and [int]$said -le 65535)
 # on the owner's subscription without credits, and its settings, come from the same two places in the same way.
 $boardFile = Join-Path $HOME '.all-tomorrow\olmuse-board.env'
 foreach ($name in 'OLMUSE_BOARD_SYNC', 'OLMUSE_BOARD_ACCOUNTS', 'OLMUSE_GEN_CLAUDE_ACCOUNTS', 'OLMUSE_GEN_CLAUDE_DAILY',
-                  'OLMUSE_GEN_CLAUDE_MODEL', 'OLMUSE_GEN_CLAUDE_SLOTS', 'OLMUSE_GEN_CLAUDE_EXE') {
+                  'OLMUSE_GEN_CLAUDE_MODEL', 'OLMUSE_GEN_CLAUDE_SLOTS', 'OLMUSE_GEN_CLAUDE_EXE', 'OLMUSE_GEN_CLAUDE_CONFIG') {
   if (-not "$([Environment]::GetEnvironmentVariable($name))".Trim() -and (Test-Path $boardFile)) {
     $line = Get-Content $boardFile | Where-Object { $_ -match "^\s*(export\s+)?$name\s*=" } | Select-Object -First 1
     if ($line) { [Environment]::SetEnvironmentVariable($name, $line.Split('=', 2)[1].Trim().Trim('"', "'")) }
   }
 }
+# OLMUSE_GEN_CLAUDE_CONFIG: a sign-in folder of the API's own for the CLI (its CLAUDE_CONFIG_DIR). The desktop app
+# rewrites ~/.claude/.credentials.json, and the CLI then says it is signed out; a folder nothing else uses keeps it in.
+$own = "$([Environment]::GetEnvironmentVariable('OLMUSE_GEN_CLAUDE_CONFIG'))".Trim()
+if ($own) { New-Item -ItemType Directory -Force $own | Out-Null; $env:CLAUDE_CONFIG_DIR = $own }
 $stranger = 0  # the pid of a program on the port that is not this API, once it was written down
 # Seconds before the next start. Longer while starts keep ending at once: see the end of the loop.
 $rest = 2
