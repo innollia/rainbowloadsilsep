@@ -82,7 +82,7 @@ def main():
                 const out = {};
                 for (const id of ids) {
                   const t = document.querySelector(`#board .tile[data-id='${id}']`);
-                  out[id] = !!t && t.dataset.status === 'approved' && !!t.querySelector('canvas');
+                  out[id] = !!t && t.dataset.status === 'draft' && !!t.querySelector('canvas');
                 }
                 return out;
             }""", want)
@@ -121,7 +121,7 @@ def main():
                 local.wait_for_selector(".codeView", timeout=10000)
                 check("the dropped folder keeps the Akkado patch as the source", first.strip() in local.inner_text(".codeView"), local.inner_text(".codeView")[:200])
             # --into: a board made from the same list with no sounds yet is open on a page of the account; filling it
-            # puts every sound on that page without a reload, approved.
+            # puts every sound on that page without a reload, waiting for approval.
             api2 = SyncApi(tmp / "api2", origin, email="fill@test.example")
             try:
                 bare = dict(made, records=[[k, u, dict(d, versions=[], cur=None, status="pending")] if k == "asset" else [k, u, d] for k, u, d in made["records"]], blobs=[])
@@ -140,11 +140,11 @@ def main():
                 written2, bad3, skipped = board_import.fill(api2.boards, api2.sub, board2, made)
                 check("filling writes every sound", not bad2 and not bad3 and written2 == len(want) and not skipped, [bad3[:2], skipped[:2]])
                 try:
-                    fr.wait_for_function("(n) => document.querySelectorAll(\"#board .tile[data-status='approved'] canvas\").length >= n", arg=len(want), timeout=60000)
+                    fr.wait_for_function("(n) => document.querySelectorAll(\"#board .tile[data-status='draft'] canvas\").length >= n", arg=len(want), timeout=60000)
                 except Exception:
                     pass
-                check("the open page shows the filled sounds without a reload", fr.locator("#board .tile[data-status='approved'] canvas").count() == len(want),
-                      fr.locator("#board .tile[data-status='approved']").count())
+                check("the open page shows the filled sounds without a reload", fr.locator("#board .tile[data-status='draft'] canvas").count() == len(want),
+                      fr.locator("#board .tile[data-status='draft']").count())
                 again = board_import.fill(api2.boards, api2.sub, board2, made)
                 check("filling twice adds nothing", again[0] == 0 and len(again[2]) == len(want), again[:2])
                 ctx.close()

@@ -79,7 +79,7 @@ function main(folder) {
         sources: source ? [NKIDO] : assetStore.sourcesFor(a), measure: m, issues: [], peaks: assetStore.peaksOf(sound.chans),
         key: `ver:${id}`, stems: [], rate: sound.rate, channels: sound.chans.length, bits: sound.bits ?? null, bytes: u8.length, sha256: sha,
       }];
-      a.status = x.status === 'approved' || !x.status ? 'approved' : 'draft';
+      a.status = 'draft'; // what this tool puts on a board waits for a person's approval
       blobs.set(sha, { sha, path: file, size: u8.length });
     }
     assets.push(a);

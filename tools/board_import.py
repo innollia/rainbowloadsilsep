@@ -10,8 +10,8 @@ into the board's records with the page's own measure.js, store.js and board.js, 
 would have made; this file uploads the sound bytes and writes the records the way a browser's sync does.
 
 --into BOARD fills a board the account already has (one made from the same list of sounds): a sound whose id is on
-it, outside the bin and not being made, gets the folder's sound as a new version that becomes its current one and is
-approved; its earlier versions and its own fields stay. A sound the board does not have is added. Categories the
+it, outside the bin and not being made, gets the folder's sound as a new version that becomes its current one and
+waits for approval (status draft, also for added sounds); its earlier versions and its own fields stay. A sound the board does not have is added. Categories the
 added sounds need are added; the board's game, rules, references and other sounds are left as they are.
 
 Without --into the board is new and the account is its owner. --home makes it the board the account's devices open next; without it
@@ -129,7 +129,7 @@ def fill(store: ab.BoardStore, owner: str, board: str, made: dict) -> tuple[int,
         if any(v.get("sha256") == mine["sha256"] for v in theirs.get("versions") or []):
             skipped.append(f"{data['id']}: it already has this sound")
             continue
-        new = dict(theirs, versions=[*(theirs.get("versions") or []), mine], cur=mine["id"], status="approved")
+        new = dict(theirs, versions=[*(theirs.get("versions") or []), mine], cur=mine["id"], status="draft")
         ops.append({"kind": "asset", "uid": their_uid, "base": rev, "data": new})
     for kind, uid, data in made["records"]:
         if kind == "cat" and uid in need and uid not in cats:

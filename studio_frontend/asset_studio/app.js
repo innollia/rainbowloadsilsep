@@ -141,7 +141,7 @@ ${p.files}`,
       roles: { bed: 'All the time', scatter: 'Now and then', stem: 'Music part' }, fadeFrom: 'Starts at', fadeTo: 'Loudest at', gap: 'Every', gapUnit: 's', tempo: 'Tempo (BPM)',
       layerPlays: 'Plays', layerVol: 'Volume', layerWhen: 'When', followParam: (n) => `Follows ${n}`, layerSolo: 'Hear only this', layerMute: 'Mute',
       dynNoSounds: 'Make or import some sounds first; layers are made of them.', dynHelp: 'Move a value to hear the sound change. The game moves the same value.',
-      logout: 'Sign out', specField: { name: 'name', category: 'category', length: 'length', loop: 'loop', when: 'when', description: 'description' }, openAsset: 'Open', rename: 'Rename', unapprove: 'Cancel approval', menu: 'Menu', settings: 'Settings', language: 'Language', gameInfo: 'Game info', stagesLabel: 'Progress', total: (n) => `${n} in all`, approvedOf: (a, n) => `${a} of ${n} approved`, help: 'How to use', spec: 'Spec', export: 'Export',
+      logout: 'Sign out', specField: { name: 'name', category: 'category', length: 'length', loop: 'loop', when: 'when', description: 'description' }, openAsset: 'Open', rename: 'Rename', unapprove: 'Cancel approval', unapproveMany: (n) => `Cancel approval of ${n}`, approveMany: (n) => `Approve ${n}`, menu: 'Menu', settings: 'Settings', language: 'Language', gameInfo: 'Game info', stagesLabel: 'Progress', total: (n) => `${n} in all`, approvedOf: (a, n) => `${a} of ${n} approved`, help: 'How to use', spec: 'Spec', export: 'Export',
       backToMusic: 'To music studio', category: 'Category', board: 'Asset board', playAll: 'Play all', stopAll: 'Stop playing all', hoverPlay: 'Play on hover',
       acceptAll: 'Keep all', rejectAll: 'Discard all', selectAll: 'Select all', deselect: 'Deselect', approve: 'Approve', approved: 'Approved', clear: 'Clear',
       ask: 'Edit request', send: 'Send',
@@ -303,7 +303,7 @@ ${p.files}`,
       roles: { bed: '계속', scatter: '가끔', stem: '음악 파트' }, fadeFrom: '들리기 시작', fadeTo: '가장 크게', gap: '간격', gapUnit: '초', tempo: '빠르기(BPM)',
       layerPlays: '재생', layerVol: '음량', layerWhen: '언제', followParam: (n) => `${n}에 따라`, layerSolo: '이것만 듣기', layerMute: '끄기',
       dynNoSounds: '소리부터 만들거나 가져오라고. 레이어는 그 소리로 만드는 거잖아, 허접~', dynHelp: '값 막대를 움직이면 소리가 바뀌는 게 들려. 게임도 같은 값을 바꿔서 이 소리를 움직여~',
-      logout: '로그아웃', specField: { name: '이름', category: '분류', length: '길이', loop: '반복', when: '재생 시점', description: '설명' }, openAsset: '열기', rename: '이름 바꾸기', unapprove: '승인 취소', menu: '메뉴', settings: '설정', language: '언어', gameInfo: '게임 정보', stagesLabel: '진행 상황', total: (n) => `전체 ${n}`, approvedOf: (a, n) => `${n}개 중 ${a}개 승인`, help: '사용법', spec: '명세', export: '내보내기',
+      logout: '로그아웃', specField: { name: '이름', category: '분류', length: '길이', loop: '반복', when: '재생 시점', description: '설명' }, openAsset: '열기', rename: '이름 바꾸기', unapprove: '승인 취소', unapproveMany: (n) => `${n}개 승인 취소`, approveMany: (n) => `${n}개 승인`, menu: '메뉴', settings: '설정', language: '언어', gameInfo: '게임 정보', stagesLabel: '진행 상황', total: (n) => `전체 ${n}`, approvedOf: (a, n) => `${n}개 중 ${a}개 승인`, help: '사용법', spec: '명세', export: '내보내기',
       backToMusic: '음악 작업실로', category: '분류', board: '에셋 보드', playAll: '전체 재생', stopAll: '전체 재생 정지', hoverPlay: '마우스 오버 시 재생',
       acceptAll: '전체 채택', rejectAll: '전체 버림', selectAll: '전체 선택', deselect: '선택 해제', approve: '승인', approved: '승인됨', clear: '해제',
       ask: '수정 요청', send: '보내기',
@@ -1019,8 +1019,15 @@ ${p.form}`,
     const many = targetsOf(a);
     item(t('openAsset'), 'Enter', () => openDetail(a), !pickable(a));
     item(t('rename'), 'F2', () => renameTile(a));
-    if (a.status === 'approved') item(t('unapprove'), 'A', () => { a.status = 'draft'; renderBoard(); });
-    else item(t('approve'), 'A', () => { approve(a); renderBoard(); }, !canApprove);
+    // With several tiles selected, approve and cancel approval act on all of them (the clicked tile decides which).
+    const okFor = (x) => x.status === 'draft' || x.status === 'flagged';
+    if (a.status === 'approved') {
+      const them = many.filter((x) => x.status === 'approved');
+      item(them.length > 1 ? t('unapproveMany', them.length) : t('unapprove'), 'A', () => { them.forEach((x) => { x.status = 'draft'; }); renderBoard(); });
+    } else {
+      const them = many.filter(okFor);
+      item(them.length > 1 ? t('approveMany', them.length) : t('approve'), 'A', () => { them.forEach(approve); renderBoard(); }, !canApprove);
+    }
     const mv = el('button', 'hasSub'), ico = el('span', 'subIco');
     mv.setAttribute('role', 'menuitem'); mv.setAttribute('aria-haspopup', 'menu'); mv.setAttribute('aria-expanded', 'false');
     setIcon(ico, 'folder'); mv.append(ico, el('span', 'grow', t('moveTo')), el('span', 'chev', '›'));
@@ -1172,7 +1179,7 @@ ${p.form}`,
     else if (e.key === 'Enter' && pickable(a)) openDetail(a);
     else if (e.key.toLowerCase() === 'a' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); ready(visible()).forEach((x) => selected.add(x.id)); refreshSelection(); }
     else if (e.key.toLowerCase() === 'x' && pickable(a)) toggle(a);
-    else if (e.key.toLowerCase() === 'a' && a) setStatus(a, 'approved');
+    else if (e.key.toLowerCase() === 'a' && a) { const to = a.status === 'approved' ? 'draft' : 'approved'; targetsOf(a).filter((x) => x !== a && x.status !== to).forEach((x) => setStatus(x, 'approved')); setStatus(a, 'approved'); }
     else if (e.key === 'F2' && a) { e.preventDefault(); renameTile(a); }
     else if (e.key === 'Delete' && a) { e.preventDefault(); removeAssets(targetsOf(a)); }
     else if (e.key.toLowerCase() === 'r' && a) setStatus(a, 'flagged');
