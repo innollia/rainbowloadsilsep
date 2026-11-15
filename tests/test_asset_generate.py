@@ -205,9 +205,9 @@ def test_every_option_knows_the_whole_plan_and_its_own_idea():
         assert len(set(ag.IDEAS[kind])) == 4 and "plainest" in ag.IDEAS[kind][0]
     two = outside(ag.ask_text(PROJECT, [], item(), 2, 2))
     assert "- option 3" not in two and "This request has 2 options" in two
-    # A revision's options are ways of making the asked change.
+    # A revision is an edit in place: its options get no plan that would have them change more than was asked.
     revise = outside(ag.ask_text(PROJECT, [], item(mode="revise", base={"source": "sine(1) |> out(@)"}, change="x"), 3, 3))
-    assert "different ways of making the change" in revise and f"You write option 3: {ag.WAYS[2]}." in revise
+    assert "This request has" not in revise and "copy every other line exactly" in revise
     assert "This request has" not in ag.ask_text(PROJECT, [], item(), 1, 1)
 
 
@@ -251,7 +251,8 @@ def test_a_revision_shows_the_patch_and_asks_for_only_the_change():
     prompt = ag.ask_text(PROJECT, [], thing)
     rest = outside(prompt)
     assert "The patch to change:\n```\nold = sine(440)\nold |> out(@)\n```" in rest
-    assert "Change only what that needs. Return the whole patch." in rest and "make it shorter" not in rest
+    assert "Change only what that needs and copy every other line exactly" in rest and ag.STEPS_RULE in rest
+    assert "make it shorter" not in rest
     block = ag.request_of(prompt)
     assert block["item"]["change"] == "make it shorter please" and block["item"]["base"] == {"seconds": 1.0, "bpm": None}
     # A sound with no patch (older or imported) sends its measurements instead.
@@ -1192,3 +1193,12 @@ def test_a_draft_through_the_claude_cli_provider_is_free(tmp_path):
                    call_usd=0.03)
     out = ag.run(ag.Job(id="j1", project=PROJECT, item=item()), deps)
     assert (out.status, out.usd, out.result["source"]) == ("done", 0.0, GOOD["source"])
+
+
+def test_a_revision_that_retimes_a_pattern_is_named():
+    base = 'n"a2 ~ e2 ~ [f2 a2] ~" as v |> out(@)\nv"[~ 1] ~ 1 ~" as d |> out(@)'
+    assert ag.top_steps("a2 ~ e2 ~ [f2 a2] ~") == 6 and ag.top_steps("<a b> [c d]*2 e") == 3
+    assert ag.retimed(base, base.replace("1 ~", "~ ~")) == []          # a hit taken out, the steps kept
+    found = ag.retimed(base, base.replace("[f2 a2] ~", "[f2 a2]"))     # a step dropped: every note moves
+    assert len(found) == 1 and "pattern 1 went from 6 to 5 steps" in found[0]
+    assert ag.retimed(base, base + '\nn"c3 ~" as w |> out(@)') == []   # a new part is not a re-timing

@@ -1221,7 +1221,7 @@ class GenJobs:
         work = ag.Job(id=job["id"], project=task["project"], item=task["item"], examples=task["examples"],
                       k=job["k"], n=job["n"], lang=task.get("lang"), deadline=job["started"] + JOB_SECONDS)
         outcome = ag.run(work, deps, lambda **told: self._report(job["id"], **told))
-        if outcome.status == "done" and job["n"] > 1:
+        if outcome.status == "done" and job["n"] > 1 and work.item.get("base") is None:  # a change's drafts may match
             outcome = self._apart(job, work, outcome, deps)
         if outcome.status != "done":
             self._close(job, outcome.status, outcome.error)
