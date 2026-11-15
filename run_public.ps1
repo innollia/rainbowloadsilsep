@@ -23,6 +23,10 @@ $pool = Join-Path $HOME '.all-tomorrow\key-pool.env'
 $line = Get-Content $pool | Where-Object { $_ -match '^(export\s+)?STUDIO_PASSWORD=' } | Select-Object -First 1
 if (-not $line) { throw 'STUDIO_PASSWORD is missing from key-pool.env' }
 $env:STUDIO_PASSWORD = $line.Split('=', 2)[1].Trim()
+# OpenRouter (the default model, DeepSeek): the owner's own key. The pool's plain OPENROUTER_API_KEY expired, and every
+# request then went to the Haiku backup. The app and the API both read OPENROUTER_API_KEY from the environment first.
+$orLine = Get-Content $pool | Where-Object { $_ -match '^(export\s+)?OPENROUTER__BELLASIL2085=' } | Select-Object -First 1
+if ($orLine) { $env:OPENROUTER_API_KEY = $orLine.Split('=', 2)[1].Trim().Trim('"', "'") }
 $env:STRUDEL_CREDITS_URL = 'https://6wasuz6jowaayhoedd4h3vmthe0alpoq.lambda-url.ap-northeast-2.on.aws'  # 장부. 토큰은 ~/.all-tomorrow/strudel-credits.token
 $env:STRUDEL_DAILY_CALLS = '200'
 $env:OLMUSE_SKILL_ROUTER = '1'  # 상황에 맞는 음악 조각만 넣는다 (skill_router.py)
