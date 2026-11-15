@@ -98,6 +98,9 @@ def main():
                 source = next(r[2]["versions"][0]["source"] for r in made["records"] if r[0] == "asset" and r[2]["id"] == sid)
                 first = next(line for line in source.splitlines() if line.strip())
                 check("a patched sound shows its Akkado patch in the code tab", first.strip() in code, code[:200])
+                desc = next(r[2].get("description", "") for r in made["records"] if r[0] == "asset" and r[2]["id"] == sid)
+                brief = room.inner_text(".dBrief") if room.locator(".dBrief").count() else ""
+                check("the sound page shows the spec's description", bool(desc) and desc in brief, brief[:200])
             # The same folder dropped on the page by hand (no account): the spec is found among other .json files and
             # the Akkado patches come along as the versions' source.
             local = browser.new_page(viewport={"width": 1440, "height": 900})

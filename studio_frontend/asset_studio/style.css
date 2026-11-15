@@ -400,3 +400,6 @@ dialog textarea { width:100%; min-height:190px; background:var(--raised); border
 .creditRow .licIn { width:160px; flex:none; }
 .creditsText { max-height:220px; overflow:auto; margin-top:8px; }
 #detailView .dWave.dEmpty { display:grid; place-items:center; min-height:120px; }
+.dBrief { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; margin:-6px 0 14px; font-size:.875rem; line-height:1.45; }
+.dBrief dt { color:var(--text3); }
+.dBrief dd { margin:0; color:var(--text2, inherit); }

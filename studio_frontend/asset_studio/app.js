@@ -698,6 +698,7 @@ ${p.form}`,
     // The rules the sound breaks, by id (nothing on screen reads this; a check from outside the page can).
     if (hasSound(a)) t.dataset.issues = issues(a).map((r) => r.id).join(' ');
     t.setAttribute('role', 'button'); t.setAttribute('aria-label', `${nm(a)}, ${statusText(a.status)}`);
+    if (a.when || a.description) t.title = [nm(a), a.when && `${tr('specField').when}: ${a.when}`, a.description].filter(Boolean).join('\n');
     t.style.setProperty('--c', color(a.cat));
     if (a.music) t.classList.add('wide');
     if (selected.has(a.id)) t.classList.add('selected');
@@ -1573,7 +1574,10 @@ ${p.form}`,
     head.append(play, title, approveButton(a));
     const wave = el('div', 'dWave'), canvas = el('canvas'), time = el('span', 'dTime', seconds(m.seconds)); time.id = 'dTime'; time.dataset.len = m.seconds; wave.append(canvas, time);
     wave.onclick = (e) => { const r = wave.getBoundingClientRect(); window.setTimeout(renderPlayButton); playFrom((e.clientX - r.left) / r.width * m.seconds); };
-    main.append(head, wave);
+    // What the sound is for, so it can be judged by ear against it: the spec's when and description.
+    const brief = el('dl', 'dBrief');
+    for (const [k, text] of [['when', a.when], ['description', a.description]]) if (text) brief.append(el('dt', '', t('specField')[k]), el('dd', '', text));
+    main.append(head, ...(brief.childElementCount ? [brief] : []), wave);
     if (a.status === 'review') {
       const row = el('div', 'tile'); row.style.cssText = 'height:auto;background:none;overflow:visible;margin-top:8px';
       const ab = reviewRow(a, renderDetail); ab.style.position = 'static';
