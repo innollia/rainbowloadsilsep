@@ -655,6 +655,27 @@ class Claude:
         return self._call(measured_prompt(wav, prompt), LISTEN_SCHEMA)
 
 
+class OwnClaude:
+    """A listed account's engine (OLMUSE_GEN_CLAUDE_ACCOUNTS): this PC's Claude CLI on the owner's subscription, through
+    a call with ask(prompt, schema, name) (asset_generate.ClaudeCall). No audio input, so listening is measured."""
+
+    name = "Claude"
+    hears = False
+
+    def __init__(self, call):
+        self.call = call
+        self.last_usage: dict = {"free": True}
+
+    def _call(self, prompt: str, schema: dict) -> dict:
+        return self.call.ask(prompt, plain_schema(schema), "reply")
+
+    def edit(self, prompt: str) -> dict:
+        return self._call(prompt, EDIT_SCHEMA)
+
+    def listen(self, wav: bytes, prompt: str) -> dict:
+        return self._call(measured_prompt(wav, prompt), LISTEN_SCHEMA)
+
+
 # OpenRouter endpoints a model may run on. The default model is served by hosts in several countries (China
 # among them); only endpoints marked as running in the US are allowed, so the privacy policy can say "US".
 US_ENDPOINTS = {"deepseek/deepseek-v4.1-flash": ["wafer/us", "inference-net/us", "baseten/us", "fireworks/us"]}
@@ -1326,6 +1347,7 @@ class Jobs:
                  account_limit: int | None = None, teacher_limit: int | None = None, session_limit: int | None = None,
                  store: JobStore | None = None, operator_usd: float | None = None):
         self.model = model
+        self.own = None  # a function that returns an OwnClaude: the engine of jobs whose request has own=True
         self.operator_usd = operator_usd
         self.ledger = ledger
         self.daily_limit = daily_limit
@@ -1455,6 +1477,8 @@ class Jobs:
     def _ask(self, job: Job, call, *args):
         """One model call. A signed-in user pays before it runs and gets it back if the model fails."""
         email, ref, cost = job.request.get("account"), None, 0
+        if job.request.get("own") and self.own:
+            email = ""  # the subscription pays, not credits
         if email and not self.ledger:
             raise Stop("failed", job.text("no_ledger"))  # a signed-in user's calls are paid; never run them free
         if self.ledger and email:
@@ -1544,7 +1568,10 @@ class Jobs:
     def _loop(self, job: Job):
         req = job.request
         pick = getattr(self.model, "backed", None) or getattr(self.model, "engine", None)
-        model = pick(req["model"], req["effort"]) if pick else Backed(self.model)
+        if req.get("own") and self.own:
+            model = Backed(self.own())  # a listed account: its own Claude, no backups
+        else:
+            model = pick(req["model"], req["effort"]) if pick else Backed(self.model)
         p = Progress(job)
         while True:
             found = self._next_candidate(job, model, p)

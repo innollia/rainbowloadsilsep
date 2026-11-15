@@ -102,3 +102,12 @@ def test_daily_limit_fails_without_a_call():
 def test_prompt_carries_words_and_language():
     p = aa.prompt_for(STATE, "make it softer", "ko")
     assert "make it softer" in p and "Korean" in p
+
+
+def test_listed_account_runs_on_its_own_claude_without_credits():
+    eng = FakeEngine({"reply": "ok", "questions": [], "actions": []})
+    own = aa.OwnClaude(lambda: eng)
+    agents = aa.Agents()
+    agents.start("o9", {"n": "9", "text": "hi", "state": STATE, "lang": "ko", "account": "a@b.c"}, own, FakeJobs(), None)
+    v = wait(agents, "o9")
+    assert v["status"] == "done" and v["reply"] == "ok" and "credits" not in v and "upgraded" not in v

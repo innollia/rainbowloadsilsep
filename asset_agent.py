@@ -103,6 +103,16 @@ def ask(engine, prompt: str) -> dict:
     return engine._call(prompt, SCHEMA)
 
 
+class OwnClaude:
+    """model for Agents.start: a listed account's agent on asset_generate.ClaudeCli (the owner's subscription)."""
+
+    def __init__(self, cli):
+        self.cli = cli
+
+    def engine(self, model: str = "", effort: str = "", system=None):
+        return self.cli()
+
+
 class Agents:
     """One running call per owner; the page polls the answer through the render args."""
 
@@ -151,9 +161,10 @@ class Agents:
         email, cost, ref = request.get("account", ""), 0, None
         view = {"n": n, "status": "done"}
         try:
-            if email and not ledger:
+            free = isinstance(model, OwnClaude)  # the subscription pays, not credits
+            if email and not ledger and not free:
                 raise ValueError(msg(lang, "no_ledger"))  # a signed-in user's calls are paid; never run them free
-            if ledger and email:
+            if ledger and email and not free:
                 cost = call_cost(request.get("model", ""), request.get("effort", ""))
                 ref = f"agent:{owner[-12:]}:{secrets.token_hex(4)}:{int(time.time())}"
                 ok, credits = ledger.charge(email, cost, ref)

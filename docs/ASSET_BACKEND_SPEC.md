@@ -299,6 +299,7 @@
   - 호출의 시간 제한은 작업이 주는 `timeout`(120초와 작업의 남은 시간 중 작은 쪽)이고, 넘으면 프로세스 트리를 끝낸다. 동시 호출은 `OLMUSE_GEN_CLAUDE_SLOTS`(기본 2)까지이고, 빈자리를 그 시간 안에 못 얻으면 `claudecli_conn`. 집기도 명단 계정의 실행 중 시안이 이 수에 차면 명단 계정을 건너뛰고 다른 계정을 집는다.
   - `last_usage`는 늘 `{"free": true}`라 달러 계수에 들지 않는다.
 - **꺼짐과 복구:** 실행 파일이 없거나 로그아웃이면 `ok`가 거짓이 된다. 그동안 명단 계정의 생성 요청은 503 `no_model`, `/quote`의 `reason`도 `no_model`이고 명단 계정의 대기 작업은 `failed: no_model`이 된다. 로그에 `ALERT the Claude CLI is missing or signed out ...`을 한 번 쓴다. 작업자를 띄울 때와 청소기가 돌 때마다 `claude auth status --json`(호출 비용 없음)으로 `loggedIn`이 참이고 `authMethod`가 키가 아닌지 보고, 돌아와 있으면 재시작 없이 다시 받는다.
+- **작업실 대화도 같은 줄:** 명단 계정이면 에셋 작업실 에이전트(asset_agent)와 음악 작업실 작업(Jobs, 요청의 `own`)도 같은 CLI와 로그인 폴더로 답하고, 크레딧을 받지 않으며 백업 모델로 넘어가지 않는다. CLI가 로그아웃이면 원래 유료 경로로 간다. 설정은 Streamlit도 olmuse-board.env에서 읽는다(app.py `board_env`).
 - **로그인 폴더:** `OLMUSE_GEN_CLAUDE_CONFIG`(olmuse-board.env)가 있으면 run_api.ps1이 그 폴더를 CLI의 `CLAUDE_CONFIG_DIR`로 준다. 데스크톱 앱이 `~/.claude/.credentials.json`을 `expiresAt` 0으로 다시 써서 기본 폴더의 CLI가 로그아웃으로 나오기 때문이다. 다시 로그인할 때는 같은 `CLAUDE_CONFIG_DIR`로 `claude auth login`을 한다.
 - **차단기:** D절의 모델 차단기와 같은 규칙을 따로 센다. 이 줄의 거절 3번이면 명단 계정만 60초 쉬고 `ALERT the Claude CLI refused ...`를 쓴다. 유료 모델의 차단기와 서로 막지 않는다. 사용 한도에 걸리면 3초 뒤 한 번 다시 하고 그래도 같으면 `failed: no_model`이며, 이어지면 차단기가 60초씩 쉬게 한다. 한도가 풀릴 때까지 명단 계정의 시안은 이렇게 실패한다.
 - **속도:** 짧은 sfx 시안 하나가 CLI 시작과 sonnet의 답을 합쳐 약 6초(호출 하나 5.6초, 렌더와 측정 포함 6.2초, `tools/claude_cli_trial.py`)이고, 고치기가 들면 호출마다 그만큼 더 든다. 긴 음악이나 앰비언스는 더 걸린다. 동시 호출 상한 때문에 명단 계정 전체가 한 번에 2개씩 나아간다.

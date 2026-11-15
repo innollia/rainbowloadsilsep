@@ -142,6 +142,44 @@ def agents():
     return Agents(jobs().store, ledger())
 
 
+def board_env(name):
+    """A setting of the asset API's lanes: this process's environment, else ~/.all-tomorrow/olmuse-board.env."""
+    if (value := os.environ.get(name, "").strip()):
+        return value
+    pairs = (line.removeprefix("export ").split("=", 1) for line in local_file("olmuse-board.env").splitlines()
+             if "=" in line and not line.lstrip().startswith("#"))
+    return next((v.strip().strip("'\"") for k, v in pairs if k.strip() == name), "")
+
+
+@st.cache_resource
+def own_claude():
+    """The listed accounts' (OLMUSE_GEN_CLAUDE_ACCOUNTS) agent: this PC's Claude CLI on the owner's subscription, in its
+    own sign-in folder (OLMUSE_GEN_CLAUDE_CONFIG), without credits. Also sets jobs().own, the music studio's engine for
+    them. (emails, agent model) or (frozenset(), None) when unset."""
+    emails = frozenset(e.strip().lower() for e in board_env("OLMUSE_GEN_CLAUDE_ACCOUNTS").split(",") if e.strip())
+    if not emails:
+        return frozenset(), None
+    import asset_generate
+    import studio_backend
+    from asset_agent import SYSTEM, OwnClaude
+    environ = dict(os.environ)
+    if (config := board_env("OLMUSE_GEN_CLAUDE_CONFIG")):
+        environ["CLAUDE_CONFIG_DIR"] = config
+
+    def cli(system):
+        return asset_generate.ClaudeCli(command=[board_env("OLMUSE_GEN_CLAUDE_EXE") or "claude"],
+                                        model=board_env("OLMUSE_GEN_CLAUDE_MODEL"), system=system, environ=environ)
+    studio = cli(studio_backend.SYSTEM)
+    jobs().own = lambda: studio_backend.OwnClaude(studio())
+    return emails, OwnClaude(cli(SYSTEM))
+
+
+def is_own(email):
+    """Whether a signed-in email is a listed account whose own Claude is answering now."""
+    listed, own = own_claude()
+    return bool(email) and email.lower() in listed and own is not None and own.cli.ok
+
+
 @st.cache_resource
 def ledger_state():
     """(ledger, problem). The Lambda ledger when configured; the local file only when STRUDEL_LOCAL_LEDGER=1.
@@ -403,6 +441,7 @@ def handle(action, payload, manager, choices):
         req["model"] = req["model"] or (choices or {}).get("model", "")
         if email:
             req["account"] = email
+            req["own"] = is_own(email)  # a listed account: its own Claude, no credits
         manager.submit(owner, req)
     elif action == "account":
         # {quiet: true} is the asset room after sounds finished: the balance alone, and a ledger failure says nothing.
@@ -466,6 +505,10 @@ def handle(action, payload, manager, choices):
                "state": p.get("state") if isinstance(p.get("state"), dict) else {}, "lang": lang,
                "model": p.get("model") if p.get("model") in known else (choices or {}).get("model", ""),
                "effort": str(p.get("effort") or (choices or {}).get("effort", ""))[:20], "account": email or ""}
+        if is_own(email):
+            # A listed account (the owner's co-authors): its own Claude subscription answers, no credits, no backups.
+            agents().start(owner, req, own_claude()[1], manager, None)
+            return
         if email and ledger() is None:
             agents().fail(owner, p.get("n"), T["no_ledger"])
             return
